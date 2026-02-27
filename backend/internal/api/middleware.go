@@ -14,17 +14,28 @@ type contextKey string
 
 const UserContextKey contextKey = "user"
 
-// AuthMiddleware validates JWT tokens from cookies or Authorization header
-func AuthMiddleware(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
+// RequireAuth validates JWT tokens from cookies or Authorization header, or checks for a valid X-API-Key.
+func RequireAuth(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Check API Key
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey != "" {
+			var user db.AuthConfig
+			if err := db.DB.Where("api_key = ?", apiKey).First(&user).Error; err == nil {
+				ctx := context.WithValue(r.Context(), UserContextKey, user.Username)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
 		var tokenStr string
 
-		// 1. Try to get token from cookie (for Web UI)
+		// 2. Try to get token from cookie (for Web UI)
 		if cookie, err := r.Cookie("jwt"); err == nil {
 			tokenStr = cookie.Value
 		}
 
-		// 2. Try to get from Authorization header (Bearer)
+		// 3. Try to get from Authorization header (Bearer)
 		if tokenStr == "" {
 			authHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authHeader, "Bearer ") {
@@ -33,7 +44,7 @@ func AuthMiddleware(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc 
 		}
 
 		if tokenStr == "" {
-			http.Error(w, "Unauthorized: missing token", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized: missing credentials", http.StatusUnauthorized)
 			return
 		}
 
@@ -42,7 +53,7 @@ func AuthMiddleware(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc 
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized: invalid credentials", http.StatusUnauthorized)
 			return
 		}
 
@@ -54,25 +65,5 @@ func AuthMiddleware(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc 
 		}
 
 		http.Error(w, "Unauthorized: invalid claims", http.StatusUnauthorized)
-	}
-}
-
-// APIKeyMiddleware validates programmatic API keys
-func APIKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey := r.Header.Get("X-API-Key")
-		if apiKey == "" {
-			http.Error(w, "Unauthorized: missing API key", http.StatusUnauthorized)
-			return
-		}
-
-		var user db.AuthConfig
-		if err := db.DB.Where("api_key = ?", apiKey).First(&user).Error; err != nil {
-			http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), UserContextKey, user.Username)
-		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
