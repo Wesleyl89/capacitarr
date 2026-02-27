@@ -3,6 +3,6 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "release": "commit-and-tag-version"
+        "release": "git cliff --bump -o CHANGELOG.md && npm version $(git cliff --bumped-version) --no-git-tag-version && git add CHANGELOG.md package.json && git commit -m \"chore(release): prepare for release\" && git tag $(git cliff --bumped-version)"
     }
 }
