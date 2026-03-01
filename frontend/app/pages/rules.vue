@@ -279,6 +279,7 @@
           <div>
             <UiCardTitle>Custom Rules</UiCardTitle>
             <UiCardDescription class="mt-1">
+              Rules take effect on the next engine run, not immediately.
               When multiple rules match an item, their effects multiply together.
               "Always keep" is an absolute override and cannot be outweighed by any other rule.
             </UiCardDescription>
