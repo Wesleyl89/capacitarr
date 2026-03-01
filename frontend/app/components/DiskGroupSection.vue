@@ -54,7 +54,7 @@
           <!-- Usage fill bar (on top of zones) -->
           <div
             data-slot="progress-bar-fill"
-            :data-status="usagePercent >= (group.thresholdPct || 85) ? 'danger' : usagePercent >= (group.targetPct || 75) ? 'warning' : 'ok'"
+            :data-status="diskUsageStatus(rawUsagePct, group.targetPct, group.thresholdPct)"
             class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
             :style="{ width: usagePercent + '%', backgroundColor: barFillColor }"
           />
@@ -109,7 +109,13 @@
 
 <script setup lang="ts">
 import { HardDriveIcon } from 'lucide-vue-next'
-import { formatBytes } from '~/utils/format'
+import {
+  formatBytes,
+  diskUsageStatus,
+  diskStatusBgClass,
+  diskStatusTextClass,
+  diskStatusFillColor,
+} from '~/utils/format'
 
 interface DiskGroup {
   id: number
@@ -132,37 +138,25 @@ defineEmits<{
   (e: 'updated'): void
 }>()
 
-const usagePercent = computed(() => {
+/** Raw (unrounded) usage percentage — used for color zone comparisons. */
+const rawUsagePct = computed(() => {
   if (props.group.totalBytes === 0) return 0
-  return Math.round((props.group.usedBytes / props.group.totalBytes) * 100)
+  return (props.group.usedBytes / props.group.totalBytes) * 100
 })
 
-const statusBgColor = computed(() => {
-  const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'bg-red-500'
-  if (pct >= (props.group.targetPct || 75)) return 'bg-amber-500'
-  return 'bg-green-500'
-})
+/** Rounded display percentage. */
+const usagePercent = computed(() => Math.round(rawUsagePct.value))
 
-const statusTextColor = computed(() => {
-  const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'text-red-500'
-  if (pct >= (props.group.targetPct || 75)) return 'text-amber-500'
-  return 'text-green-500'
-})
+const statusBgColor = computed(() =>
+  diskStatusBgClass(rawUsagePct.value, props.group.targetPct, props.group.thresholdPct),
+)
 
-const barColor = computed(() => {
-  const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'bg-red-500'
-  if (pct >= (props.group.targetPct || 75)) return 'bg-amber-500'
-  return 'bg-green-500'
-})
+const statusTextColor = computed(() =>
+  diskStatusTextClass(rawUsagePct.value, props.group.targetPct, props.group.thresholdPct),
+)
 
-/** Inline fill color for the progress bar (bypasses Tailwind alpha issues) */
-const barFillColor = computed(() => {
-  const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return '#ef4444'
-  if (pct >= (props.group.targetPct || 75)) return '#eab308'
-  return '#22c55e'
-})
+/** Inline fill color for the progress bar (bypasses Tailwind alpha issues). */
+const barFillColor = computed(() =>
+  diskStatusFillColor(rawUsagePct.value, props.group.targetPct, props.group.thresholdPct),
+)
 </script>

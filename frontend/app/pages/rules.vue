@@ -33,7 +33,7 @@
             <div class="flex items-center gap-3">
               <div
                 class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                  :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'bg-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'bg-amber-500' : 'bg-green-500'"
+                  :class="diskStatusBgClass(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)"
               >
                 <component :is="HardDriveIcon" class="w-4.5 h-4.5 text-white" />
               </div>
@@ -46,7 +46,7 @@
                 </span>
               </div>
             </div>
-            <span class="text-2xl font-bold tabular-nums" :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'text-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'text-amber-500' : 'text-green-500'">
+            <span class="text-2xl font-bold tabular-nums" :class="diskStatusTextClass(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)">
                 {{ Math.round(diskUsagePct(dg)) }}%
             </span>
           </div>
@@ -73,9 +73,9 @@
               <!-- Usage fill bar -->
               <div
                 data-slot="progress-bar-fill"
-                :data-status="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'danger' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'warning' : 'ok'"
+                :data-status="diskUsageStatus(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)"
                 class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
-                :style="{ width: Math.min(diskUsagePct(dg), 100) + '%', backgroundColor: diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? '#ef4444' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? '#eab308' : '#22c55e' }"
+                :style="{ width: Math.min(diskUsagePct(dg), 100) + '%', backgroundColor: diskStatusFillColor(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) }"
               />
             </div>
 
@@ -571,7 +571,13 @@
 
 <script setup lang="ts">
 import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon, SearchIcon, ShieldCheckIcon, FilterIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon } from 'lucide-vue-next'
-import { formatBytes } from '~/utils/format'
+import {
+  formatBytes,
+  diskUsageStatus,
+  diskStatusBgClass,
+  diskStatusTextClass,
+  diskStatusFillColor,
+} from '~/utils/format'
 
 const api = useApi()
 const config = useRuntimeConfig()
