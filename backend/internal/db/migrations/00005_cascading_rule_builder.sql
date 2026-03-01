@@ -1,3 +1,4 @@
+-- +goose Up
 -- Migration 00005: Refactor protection_rules for cascading rule builder
 -- Adds integration_id FK and effect column, migrates existing type+intensity data
 
@@ -20,3 +21,8 @@ END;
 
 -- Note: type and intensity columns are kept for backward compatibility during transition.
 -- They can be dropped in a future migration once the new system is stable.
+
+-- +goose Down
+-- SQLite does not support DROP COLUMN directly, so we cannot reverse ALTER TABLE ADD COLUMN.
+-- For a full rollback, the table would need to be recreated without the new columns.
+-- This is acceptable as the columns are additive and non-breaking.
