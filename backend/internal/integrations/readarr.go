@@ -1,0 +1,156 @@
+package integrations
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// ReadarrClient implements Integration for Readarr v1 API (books/audiobooks).
+// Follows the same API pattern as Sonarr/Radarr/Lidarr.
+type ReadarrClient struct {
+	URL    string
+	APIKey string
+}
+
+func NewReadarrClient(url, apiKey string) *ReadarrClient {
+	return &ReadarrClient{
+		URL:    strings.TrimRight(url, "/"),
+		APIKey: apiKey,
+	}
+}
+
+func (r *ReadarrClient) doRequest(endpoint string) ([]byte, error) {
+	return DoAPIRequest(r.URL+endpoint, "X-Api-Key", r.APIKey)
+}
+
+func (r *ReadarrClient) TestConnection() error {
+	_, err := r.doRequest("/api/v1/system/status")
+	return err
+}
+
+// readarrDiskSpace maps the Readarr diskspace API response
+type readarrDiskSpace struct {
+	Path       string `json:"path"`
+	TotalSpace int64  `json:"totalSpace"`
+	FreeSpace  int64  `json:"freeSpace"`
+}
+
+// GetDiskSpace returns disk space info from Readarr
+func (r *ReadarrClient) GetDiskSpace() ([]DiskSpace, error) {
+	body, err := r.doRequest("/api/v1/diskspace")
+	if err != nil {
+		return nil, err
+	}
+	var disks []readarrDiskSpace
+	if err := json.Unmarshal(body, &disks); err != nil {
+		return nil, fmt.Errorf("failed to parse Readarr diskspace: %w", err)
+	}
+	var result []DiskSpace
+	for _, d := range disks {
+		result = append(result, DiskSpace{
+			Path:       d.Path,
+			TotalBytes: d.TotalSpace,
+			FreeBytes:  d.FreeSpace,
+		})
+	}
+	return result, nil
+}
+
+// GetRootFolders returns root folder paths configured in Readarr
+func (r *ReadarrClient) GetRootFolders() ([]string, error) {
+	body, err := r.doRequest("/api/v1/rootfolder")
+	if err != nil {
+		return nil, err
+	}
+	var folders []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(body, &folders); err != nil {
+		return nil, fmt.Errorf("failed to parse Readarr root folders: %w", err)
+	}
+	var paths []string
+	for _, f := range folders {
+		paths = append(paths, f.Path)
+	}
+	return paths, nil
+}
+
+// readarrBook maps a Readarr book response
+type readarrBook struct {
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	AuthorID  int    `json:"authorId"`
+	Author    struct {
+		AuthorName string `json:"authorName"`
+	} `json:"author"`
+	SizeOnDisk int64  `json:"sizeOnDisk"`
+	Added      string `json:"added"`
+	Monitored  bool   `json:"monitored"`
+	Path       string `json:"path"`
+}
+
+// GetMediaItems returns all books as MediaItems for scoring
+func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
+	body, err := r.doRequest("/api/v1/book")
+	if err != nil {
+		return nil, err
+	}
+	var books []readarrBook
+	if err := json.Unmarshal(body, &books); err != nil {
+		return nil, fmt.Errorf("failed to parse Readarr books: %w", err)
+	}
+
+	var items []MediaItem
+	for _, b := range books {
+		if b.SizeOnDisk == 0 {
+			continue
+		}
+
+		var addedAt *time.Time
+		if b.Added != "" {
+			t, err := time.Parse(time.RFC3339, b.Added)
+			if err == nil {
+				addedAt = &t
+			}
+		}
+
+		items = append(items, MediaItem{
+			ExternalID: fmt.Sprintf("%d", b.ID),
+			Title:      b.Title,
+			Type:       MediaTypeBook,
+			SizeBytes:  b.SizeOnDisk,
+			AddedAt:    addedAt,
+			Monitored:  b.Monitored,
+			Path:       b.Path,
+		})
+	}
+	return items, nil
+}
+
+// DeleteMediaItem removes a book from Readarr and optionally deletes files
+func (r *ReadarrClient) DeleteMediaItem(item MediaItem) error {
+	endpoint := fmt.Sprintf("/api/v1/book/%s?deleteFiles=true&addImportExclusion=false", item.ExternalID)
+	req, err := http.NewRequest("DELETE", r.URL+endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", r.APIKey)
+
+	resp, err := sharedHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key")
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	return nil
+}

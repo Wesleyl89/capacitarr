@@ -83,4 +83,11 @@ const (
 	MediaTypeSeason  MediaType = "season"
 	MediaTypeEpisode MediaType = "episode"
 	MediaTypeArtist  MediaType = "artist"
+	MediaTypeBook    MediaType = "book"
+)
+
+const (
+	IntegrationTypeReadarr  IntegrationType = "readarr"
+	IntegrationTypeJellyfin IntegrationType = "jellyfin"
+	IntegrationTypeEmby     IntegrationType = "emby"
 )
