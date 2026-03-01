@@ -276,7 +276,13 @@
     >
       <UiCardHeader>
         <div class="flex items-center justify-between">
-          <UiCardTitle>Custom Rules</UiCardTitle>
+          <div>
+            <UiCardTitle>Custom Rules</UiCardTitle>
+            <UiCardDescription class="mt-1">
+              When multiple rules match an item, their effects multiply together.
+              "Always keep" is an absolute override and cannot be outweighed by any other rule.
+            </UiCardDescription>
+          </div>
           <UiButton size="sm" @click="showAddRule = !showAddRule">
             <component :is="PlusIcon" class="w-3.5 h-3.5" />
             Add Rule
@@ -284,44 +290,16 @@
         </div>
       </UiCardHeader>
       <UiCardContent>
-        <!-- Add Rule Form -->
-        <div v-if="showAddRule" class="mb-4 p-4 rounded-lg border border-border bg-muted space-y-3">
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <UiSelect v-model="newRule.type">
-              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem value="protect">Protect</UiSelectItem>
-                <UiSelectItem value="target">Target</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-            <UiSelect v-model="newRule.field">
-              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem v-for="f in ruleFields" :key="f.field" :value="f.field">{{ f.label }}</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-            <UiSelect v-model="newRule.operator">
-              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem v-for="op in selectedFieldOperators" :key="op" :value="op">{{ op }}</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-            <UiInput v-model="newRule.value" placeholder="Value" />
-            <UiSelect v-model="newRule.intensity">
-              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem value="slight">Slight</UiSelectItem>
-                <UiSelectItem value="strong">Strong</UiSelectItem>
-                <UiSelectItem value="absolute">Absolute</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-          </div>
-          <UiButton size="sm" @click="addRule">
-            Save Rule
-          </UiButton>
-        </div>
+        <!-- Add Rule Form — Cascading Rule Builder -->
+        <RuleBuilder
+          v-if="showAddRule"
+          :integrations="allIntegrations"
+          class="mb-4"
+          @save="addRule"
+          @cancel="showAddRule = false"
+        />
 
-        <!-- Rules List -->
+        <!-- Rules List — Natural Language Display -->
         <div v-if="rules.length === 0 && !showAddRule" class="text-center py-6 text-muted-foreground text-sm">
           No rules configured. Media will be ranked purely by preference weights.
         </div>
@@ -331,22 +309,27 @@
             :key="rule.id"
             class="flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-muted/50"
           >
-            <div class="flex items-center gap-2 text-sm">
+            <div class="flex items-center gap-2 text-sm flex-wrap">
+              <!-- Effect badge -->
               <UiBadge
-                :variant="rule.type === 'protect' ? 'default' : 'destructive'"
-                class="capitalize"
+                :class="effectBadgeClass(rule.effect || legacyEffect(rule.type, rule.intensity))"
+                class="shrink-0"
               >
-                {{ rule.type }}
+                {{ effectLabel(rule.effect || legacyEffect(rule.type, rule.intensity)) }}
               </UiBadge>
-              <span class="text-foreground">{{ rule.field }}</span>
-              <span class="text-muted-foreground">{{ rule.operator }}</span>
-              <span class="font-medium">{{ rule.value }}</span>
-              <span class="text-muted-foreground text-xs">({{ rule.intensity }})</span>
+              <!-- Service name -->
+              <span v-if="rule.integrationId" class="text-muted-foreground">
+                {{ integrationName(rule.integrationId) }} ·
+              </span>
+              <!-- Human-readable condition -->
+              <span class="text-foreground">{{ fieldLabel(rule.field) }}</span>
+              <span class="text-muted-foreground">{{ operatorLabel(rule.operator) }}</span>
+              <span class="font-medium">"{{ rule.value }}"</span>
             </div>
             <UiButton
               variant="ghost"
               size="icon-sm"
-              class="text-muted-foreground hover:text-red-500"
+              class="text-muted-foreground hover:text-red-500 shrink-0"
               @click="deleteRule(rule.id)"
             >
               <component :is="XIcon" class="w-4 h-4" />
@@ -611,38 +594,99 @@ function isActivePreset(values: Record<string, number>): boolean {
   )
 }
 
-// Custom Rules
+// ---------------------------------------------------------------------------
+// Custom Rules (Cascading Rule Builder)
+// ---------------------------------------------------------------------------
 const rules = ref<any[]>([])
 const showAddRule = ref(false)
-const newRule = reactive({
-  type: 'protect',
-  field: 'quality',
-  operator: '==',
-  value: '',
-  intensity: 'absolute'
-})
+const allIntegrations = ref<any[]>([])
 
-// Dynamic rule fields fetched from API based on configured integrations
-const ruleFields = ref<Array<{ field: string; label: string; type: string; operators: string[] }>>([])
-const selectedFieldOperators = computed(() => {
-  const selected = ruleFields.value.find(f => f.field === newRule.field)
-  return selected?.operators ?? ['==', '!=', 'contains', '>', '<', '>=', '<=']
-})
+// Operator label mapping for natural-language display
+const operatorLabelMap: Record<string, string> = {
+  '==': 'is',
+  '!=': 'is not',
+  'contains': 'contains',
+  '!contains': 'does not contain',
+  '>': 'more than',
+  '>=': 'at least',
+  '<': 'less than',
+  '<=': 'at most',
+}
 
-async function fetchRuleFields() {
-  try {
-    ruleFields.value = await api('/api/v1/rule-fields') as any[]
-  } catch {
-    // Fallback to base fields if API fails
-    ruleFields.value = [
-      { field: 'title', label: 'Title', type: 'string', operators: ['==', '!=', 'contains'] },
-      { field: 'quality', label: 'Quality Profile', type: 'string', operators: ['==', '!=', 'contains'] },
-      { field: 'tag', label: 'Tag', type: 'string', operators: ['==', '!=', 'contains'] },
-      { field: 'genre', label: 'Genre', type: 'string', operators: ['==', '!=', 'contains'] },
-      { field: 'rating', label: 'Rating', type: 'number', operators: ['==', '!=', '>', '>=', '<', '<='] },
-      { field: 'monitored', label: 'Monitored', type: 'boolean', operators: ['=='] },
-    ]
+// Effect label and badge style helpers
+const effectLabelMap: Record<string, string> = {
+  always_keep: 'Always keep',
+  prefer_keep: 'Prefer to keep',
+  lean_keep: 'Lean toward keeping',
+  lean_remove: 'Lean toward removing',
+  prefer_remove: 'Prefer to remove',
+  always_remove: 'Always remove',
+}
+
+const effectBadgeClassMap: Record<string, string> = {
+  always_keep: 'bg-emerald-500 text-white hover:bg-emerald-500',
+  prefer_keep: 'bg-emerald-400 text-white hover:bg-emerald-400',
+  lean_keep: 'bg-emerald-300 text-emerald-900 hover:bg-emerald-300',
+  lean_remove: 'bg-amber-400 text-amber-900 hover:bg-amber-400',
+  prefer_remove: 'bg-red-400 text-white hover:bg-red-400',
+  always_remove: 'bg-red-500 text-white hover:bg-red-500',
+}
+
+// Field label mapping for human-readable display
+const fieldLabelMap: Record<string, string> = {
+  title: 'Title',
+  quality: 'Quality Profile',
+  tag: 'Tags',
+  genre: 'Genre',
+  rating: 'Rating',
+  sizebytes: 'Size',
+  timeinlibrary: 'Time in Library',
+  monitored: 'Monitored',
+  year: 'Year',
+  language: 'Language',
+  availability: 'Show Status',
+  seasoncount: 'Season Count',
+  episodecount: 'Episode Count',
+  playcount: 'Play Count',
+  requested: 'Is Requested',
+  requestcount: 'Request Count',
+  type: 'Media Type',
+}
+
+function effectLabel(effect: string): string {
+  return effectLabelMap[effect] ?? effect
+}
+
+function effectBadgeClass(effect: string): string {
+  return effectBadgeClassMap[effect] ?? 'bg-muted text-foreground'
+}
+
+function operatorLabel(op: string): string {
+  return operatorLabelMap[op] ?? op
+}
+
+function fieldLabel(field: string): string {
+  return fieldLabelMap[field] ?? field
+}
+
+function integrationName(id: number): string {
+  const svc = allIntegrations.value.find((i: any) => i.id === id)
+  return svc?.name ?? `Integration #${id}`
+}
+
+// Convert legacy type+intensity to new effect (for display of pre-migration rules)
+function legacyEffect(type: string, intensity: string): string {
+  if (type === 'protect') {
+    if (intensity === 'absolute') return 'always_keep'
+    if (intensity === 'strong') return 'prefer_keep'
+    return 'lean_keep'
   }
+  if (type === 'target') {
+    if (intensity === 'absolute') return 'always_remove'
+    if (intensity === 'strong') return 'prefer_remove'
+    return 'lean_remove'
+  }
+  return 'lean_keep'
 }
 
 // Preview
@@ -671,7 +715,7 @@ function selectPreviewItem(entry: any) {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchPreferences(), fetchRules(), fetchPreview(), fetchDiskGroups(), fetchRuleFields()])
+  await Promise.all([fetchPreferences(), fetchRules(), fetchPreview(), fetchDiskGroups(), fetchIntegrations()])
 })
 
 async function fetchDiskGroups() {
@@ -679,6 +723,14 @@ async function fetchDiskGroups() {
     diskGroups.value = await api('/api/v1/disk-groups') as any[]
   } catch (e) {
     console.error('Failed to fetch disk groups', e)
+  }
+}
+
+async function fetchIntegrations() {
+  try {
+    allIntegrations.value = await api('/api/v1/integrations') as any[]
+  } catch (e) {
+    console.error('Failed to fetch integrations', e)
   }
 }
 
@@ -716,33 +768,28 @@ async function fetchRules() {
   }
 }
 
-async function addRule() {
+async function addRule(rule: { integrationId: number; field: string; operator: string; value: string; effect: string }) {
   try {
-    await api('/api/v1/protections', { method: 'POST', body: { ...newRule } })
-    newRule.value = ''
-    newRule.type = 'protect'
-    newRule.field = 'quality'
-    newRule.operator = '=='
-    newRule.intensity = 'absolute'
+    await api('/api/v1/protections', { method: 'POST', body: rule })
     showAddRule.value = false
-    addToast('Protection rule added', 'success')
+    addToast('Rule added', 'success')
     await fetchRules()
     await fetchPreview()
   } catch (e) {
     console.error('Failed to add rule', e)
-    addToast('Failed to add protection rule', 'error')
+    addToast('Failed to add rule', 'error')
   }
 }
 
 async function deleteRule(id: number) {
   try {
     await api(`/api/v1/protections/${id}`, { method: 'DELETE' })
-    addToast('Protection rule removed', 'success')
+    addToast('Rule removed', 'success')
     await fetchRules()
     await fetchPreview()
   } catch (e) {
     console.error('Failed to delete rule', e)
-    addToast('Failed to delete protection rule', 'error')
+    addToast('Failed to delete rule', 'error')
   }
 }
 

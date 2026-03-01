@@ -70,14 +70,17 @@ type PreferenceSet struct {
 	UpdatedAt             time.Time `json:"updatedAt"`
 }
 
-// ProtectionRule stores absolute constraints to prevent media deletion
+// ProtectionRule stores custom rules that influence media scoring via keep/remove effects
 type ProtectionRule struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	Type      string    `gorm:"not null" json:"type"`      // 'protect' or 'target'
-	Field     string    `gorm:"not null" json:"field"`     // e.g. "quality", "added_date", "tag"
-	Operator  string    `gorm:"not null" json:"operator"`  // e.g. "==", "contains", "<"
-	Value     string    `gorm:"not null" json:"value"`     // e.g. "4K", "14", "keeper"
-	Intensity string    `gorm:"not null" json:"intensity"` // 'slight', 'strong', 'absolute'
+	ID            uint      `gorm:"primarykey" json:"id"`
+	IntegrationID *uint     `gorm:"index" json:"integrationId"`        // FK to IntegrationConfig; nil = legacy global rule
+	Field         string    `gorm:"not null" json:"field"`             // e.g. "quality", "tag", "rating"
+	Operator      string    `gorm:"not null" json:"operator"`          // e.g. "==", "contains", ">"
+	Value         string    `gorm:"not null" json:"value"`             // e.g. "4K", "anime", "7.5"
+	Effect        string    `gorm:"not null" json:"effect"`            // e.g. "always_keep", "prefer_remove"
+	// Deprecated — kept for migration compatibility
+	Type      string    `json:"type,omitempty"`
+	Intensity string    `json:"intensity,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

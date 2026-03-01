@@ -20,6 +20,8 @@ func TestStringMatch(t *testing.T) {
 		{"The Matrix", "!=", "Avatar", true},
 		{"The Matrix", "contains", "Matrix", true},
 		{"The Matrix", "contains", "Avatar", false},
+		{"The Matrix", "!contains", "Avatar", true},
+		{"The Matrix", "!contains", "Matrix", false},
 	}
 
 	for _, tc := range tests {
@@ -62,10 +64,11 @@ func TestApplyRules(t *testing.T) {
 	now := time.Now()
 
 	baseItem := integrations.MediaItem{
-		Title:      "The Matrix",
-		ShowStatus: "Ended",
-		Rating:     8.5,
-		AddedAt:    &now,
+		Title:         "The Matrix",
+		ShowStatus:    "Ended",
+		Rating:        8.5,
+		AddedAt:       &now,
+		IntegrationID: 1,
 	}
 
 	tests := []struct {
@@ -83,28 +86,28 @@ func TestApplyRules(t *testing.T) {
 			modifier: 1.0,
 		},
 		{
-			name: "Absolute protect by title",
+			name: "Always keep by title (new effect field)",
 			item: baseItem,
 			rules: []db.ProtectionRule{
-				{Type: "protect", Field: "title", Operator: "==", Value: "the matrix", Intensity: "absolute"},
+				{Field: "title", Operator: "==", Value: "the matrix", Effect: "always_keep"},
 			},
 			isAbs:    true,
 			modifier: 0.0,
 		},
 		{
-			name: "Strong protect by rating",
+			name: "Prefer keep by rating",
 			item: baseItem,
 			rules: []db.ProtectionRule{
-				{Type: "protect", Field: "rating", Operator: ">", Value: "8.0", Intensity: "strong"},
+				{Field: "rating", Operator: ">", Value: "8.0", Effect: "prefer_keep"},
 			},
 			isAbs:    false,
-			modifier: 0.2, // 1.0 * 0.2
+			modifier: 0.2,
 		},
 		{
-			name: "Target absolute by availability",
+			name: "Always remove by availability",
 			item: baseItem,
 			rules: []db.ProtectionRule{
-				{Type: "target", Field: "availability", Operator: "==", Value: "ended", Intensity: "absolute"},
+				{Field: "availability", Operator: "==", Value: "ended", Effect: "always_remove"},
 			},
 			isAbs:    false,
 			modifier: 100.0,
@@ -113,23 +116,173 @@ func TestApplyRules(t *testing.T) {
 			name: "Multiple cascading modifiers",
 			item: baseItem,
 			rules: []db.ProtectionRule{
-				{Type: "protect", Field: "rating", Operator: ">", Value: "8.0", Intensity: "strong"},          // * 0.2
-				{Type: "protect", Field: "title", Operator: "contains", Value: "matrix", Intensity: "slight"}, // * 0.5
+				{Field: "rating", Operator: ">", Value: "8.0", Effect: "prefer_keep"},             // ×0.2
+				{Field: "title", Operator: "contains", Value: "matrix", Effect: "lean_keep"},       // ×0.5
 			},
 			isAbs:    false,
-			modifier: 0.1, // 0.2 * 0.5
+			modifier: 0.1, // 0.2 × 0.5
+		},
+		{
+			name: "Lean keep + lean remove partially cancel",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Field: "rating", Operator: ">", Value: "8.0", Effect: "lean_keep"},                // ×0.5
+				{Field: "availability", Operator: "==", Value: "ended", Effect: "lean_remove"},     // ×1.2
+			},
+			isAbs:    false,
+			modifier: 0.6, // 0.5 × 1.2
+		},
+		{
+			name: "Always keep wins over always remove",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Field: "title", Operator: "==", Value: "the matrix", Effect: "always_keep"},
+				{Field: "availability", Operator: "==", Value: "ended", Effect: "always_remove"},
+			},
+			isAbs:    true,
+			modifier: 0.0,
+		},
+		{
+			name: "Always keep wins over prefer remove",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Field: "title", Operator: "==", Value: "the matrix", Effect: "always_keep"},
+				{Field: "rating", Operator: ">", Value: "5.0", Effect: "prefer_remove"},
+			},
+			isAbs:    true,
+			modifier: 0.0,
+		},
+		{
+			name: "Prefer keep + prefer remove = net protection",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Field: "rating", Operator: ">", Value: "8.0", Effect: "prefer_keep"},              // ×0.2
+				{Field: "availability", Operator: "==", Value: "ended", Effect: "prefer_remove"},   // ×2.0
+			},
+			isAbs:    false,
+			modifier: 0.4, // 0.2 × 2.0
+		},
+		{
+			name: "Stacked prefer remove",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Field: "rating", Operator: ">", Value: "5.0", Effect: "prefer_remove"},            // ×2.0
+				{Field: "availability", Operator: "==", Value: "ended", Effect: "prefer_remove"},   // ×2.0
+			},
+			isAbs:    false,
+			modifier: 4.0, // 2.0 × 2.0
+		},
+		{
+			name: "Legacy type+intensity fallback: absolute protect",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Type: "protect", Field: "title", Operator: "==", Value: "the matrix", Intensity: "absolute"},
+			},
+			isAbs:    true,
+			modifier: 0.0,
+		},
+		{
+			name: "Legacy type+intensity fallback: strong target",
+			item: baseItem,
+			rules: []db.ProtectionRule{
+				{Type: "target", Field: "rating", Operator: ">", Value: "8.0", Intensity: "strong"},
+			},
+			isAbs:    false,
+			modifier: 2.0,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			isAbs, modifier, _ := applyRules(tc.item, tc.rules)
+			isAbs, modifier, _, _ := applyRules(tc.item, tc.rules)
 			if isAbs != tc.isAbs {
 				t.Errorf("Expected absolute protect %v, got %v", tc.isAbs, isAbs)
 			}
 			// Use small delta for float comparison
 			if modifier < tc.modifier-0.01 || modifier > tc.modifier+0.01 {
 				t.Errorf("Expected modifier %v, got %v", tc.modifier, modifier)
+			}
+		})
+	}
+}
+
+func TestApplyRules_IntegrationIDFiltering(t *testing.T) {
+	now := time.Now()
+	integrationID1 := uint(1)
+	integrationID2 := uint(2)
+
+	item := integrations.MediaItem{
+		Title:         "The Matrix",
+		Rating:        8.5,
+		AddedAt:       &now,
+		IntegrationID: 1,
+	}
+
+	tests := []struct {
+		name     string
+		rules    []db.ProtectionRule
+		isAbs    bool
+		modifier float64
+	}{
+		{
+			name: "Rule scoped to matching integration applies",
+			rules: []db.ProtectionRule{
+				{IntegrationID: &integrationID1, Field: "title", Operator: "==", Value: "the matrix", Effect: "always_keep"},
+			},
+			isAbs:    true,
+			modifier: 0.0,
+		},
+		{
+			name: "Rule scoped to different integration is skipped",
+			rules: []db.ProtectionRule{
+				{IntegrationID: &integrationID2, Field: "title", Operator: "==", Value: "the matrix", Effect: "always_keep"},
+			},
+			isAbs:    false,
+			modifier: 1.0,
+		},
+		{
+			name: "Global rule (nil integration_id) applies to all items",
+			rules: []db.ProtectionRule{
+				{IntegrationID: nil, Field: "title", Operator: "==", Value: "the matrix", Effect: "prefer_keep"},
+			},
+			isAbs:    false,
+			modifier: 0.2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			isAbs, modifier, _, _ := applyRules(item, tc.rules)
+			if isAbs != tc.isAbs {
+				t.Errorf("Expected absolute protect %v, got %v", tc.isAbs, isAbs)
+			}
+			if modifier < tc.modifier-0.01 || modifier > tc.modifier+0.01 {
+				t.Errorf("Expected modifier %v, got %v", tc.modifier, modifier)
+			}
+		})
+	}
+}
+
+func TestLegacyEffect(t *testing.T) {
+	tests := []struct {
+		ruleType  string
+		intensity string
+		expected  string
+	}{
+		{"protect", "absolute", "always_keep"},
+		{"protect", "strong", "prefer_keep"},
+		{"protect", "slight", "lean_keep"},
+		{"target", "absolute", "always_remove"},
+		{"target", "strong", "prefer_remove"},
+		{"target", "slight", "lean_remove"},
+		{"", "", "lean_keep"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.ruleType+"_"+tc.intensity, func(t *testing.T) {
+			result := legacyEffect(tc.ruleType, tc.intensity)
+			if result != tc.expected {
+				t.Errorf("Expected %q, got %q", tc.expected, result)
 			}
 		})
 	}

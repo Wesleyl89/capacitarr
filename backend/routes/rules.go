@@ -87,61 +87,121 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 
 	// ---------------------------------------------------------
 	// RULE FIELD OPTIONS (dynamic based on integrations)
+	// Accepts optional ?service_type=sonarr to filter fields.
+	// Without the parameter, returns all fields (backward compat).
 	// ---------------------------------------------------------
 	protected.GET("/rule-fields", func(c echo.Context) error {
-		// Base fields available for all integration types
+		serviceType := c.QueryParam("service_type")
+
+		// Base fields available for all *arr integration types
 		fields := []map[string]interface{}{
-			{"field": "title", "label": "Title", "type": "string", "operators": []string{"==", "!=", "contains"}},
-			{"field": "type", "label": "Media Type", "type": "string", "operators": []string{"==", "!="}},
-			{"field": "quality", "label": "Quality Profile", "type": "string", "operators": []string{"==", "!=", "contains"}},
-			{"field": "tag", "label": "Tag", "type": "string", "operators": []string{"==", "!=", "contains"}},
-			{"field": "genre", "label": "Genre", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "title", "label": "Title", "type": "string", "operators": []string{"==", "!=", "contains", "!contains"}},
+			{"field": "quality", "label": "Quality Profile", "type": "string", "operators": []string{"==", "!="}},
+			{"field": "tag", "label": "Tags", "type": "string", "operators": []string{"contains", "!contains"}},
+			{"field": "genre", "label": "Genre", "type": "string", "operators": []string{"==", "!=", "contains", "!contains"}},
 			{"field": "rating", "label": "Rating", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			{"field": "sizebytes", "label": "Size (bytes)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			{"field": "timeinlibrary", "label": "Time in Library (days)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			{"field": "sizebytes", "label": "Size (bytes)", "type": "number", "operators": []string{">", ">=", "<", "<="}},
+			{"field": "timeinlibrary", "label": "Time in Library (days)", "type": "number", "operators": []string{">", ">=", "<", "<="}},
 			{"field": "monitored", "label": "Monitored", "type": "boolean", "operators": []string{"=="}},
 			{"field": "year", "label": "Year", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			{"field": "language", "label": "Language", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "language", "label": "Language", "type": "string", "operators": []string{"==", "!="}},
 		}
 
-		// Check for Sonarr-specific fields
-		var configs []db.IntegrationConfig
-		database.Where("enabled = ?", true).Find(&configs)
-		hasTV := false
-		hasTautulli := false
-		hasOverseerr := false
-		for _, cfg := range configs {
-			if cfg.Type == "sonarr" {
-				hasTV = true
+		// When service_type is specified, add type-specific fields
+		if serviceType == "sonarr" || serviceType == "" {
+			// Sonarr-specific fields (TV)
+			sonarrFields := []map[string]interface{}{
+				{"field": "availability", "label": "Show Status", "type": "string", "operators": []string{"==", "!="}},
+				{"field": "seasoncount", "label": "Season Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+				{"field": "episodecount", "label": "Episode Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
 			}
-			if cfg.Type == "tautulli" {
-				hasTautulli = true
+
+			if serviceType == "sonarr" {
+				fields = append(fields, sonarrFields...)
+			} else {
+				// No service_type filter: conditionally add based on enabled integrations
+				var configs []db.IntegrationConfig
+				database.Where("enabled = ?", true).Find(&configs)
+				hasTV := false
+				for _, cfg := range configs {
+					if cfg.Type == "sonarr" {
+						hasTV = true
+						break
+					}
+				}
+				if hasTV {
+					fields = append(fields, sonarrFields...)
+				}
 			}
-			if cfg.Type == "overseerr" {
-				hasOverseerr = true
+		}
+
+		// Enrichment fields from Tautulli / Overseerr / media servers
+		// These apply to all *arr services when the enrichment service is enabled
+		if serviceType == "" {
+			// No filter: check which enrichment services are enabled
+			var configs []db.IntegrationConfig
+			database.Where("enabled = ?", true).Find(&configs)
+			hasTautulli := false
+			hasOverseerr := false
+			hasMediaServer := false
+			for _, cfg := range configs {
+				switch cfg.Type {
+				case "tautulli":
+					hasTautulli = true
+				case "overseerr":
+					hasOverseerr = true
+				case "plex", "jellyfin", "emby":
+					hasMediaServer = true
+				}
+			}
+			if hasTautulli || hasMediaServer {
+				fields = append(fields,
+					map[string]interface{}{"field": "playcount", "label": "Play Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+				)
+			}
+			if hasOverseerr {
+				fields = append(fields,
+					map[string]interface{}{"field": "requested", "label": "Is Requested", "type": "boolean", "operators": []string{"=="}},
+					map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+				)
+			}
+		} else {
+			// service_type is specified — enrichment fields always available for *arr services
+			arrTypes := map[string]bool{"sonarr": true, "radarr": true, "lidarr": true, "readarr": true}
+			if arrTypes[serviceType] {
+				var configs []db.IntegrationConfig
+				database.Where("enabled = ?", true).Find(&configs)
+				hasTautulli := false
+				hasOverseerr := false
+				hasMediaServer := false
+				for _, cfg := range configs {
+					switch cfg.Type {
+					case "tautulli":
+						hasTautulli = true
+					case "overseerr":
+						hasOverseerr = true
+					case "plex", "jellyfin", "emby":
+						hasMediaServer = true
+					}
+				}
+				if hasTautulli || hasMediaServer {
+					fields = append(fields,
+						map[string]interface{}{"field": "playcount", "label": "Play Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+					)
+				}
+				if hasOverseerr {
+					fields = append(fields,
+						map[string]interface{}{"field": "requested", "label": "Is Requested", "type": "boolean", "operators": []string{"=="}},
+						map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+					)
+				}
 			}
 		}
 
-		if hasTV {
-			fields = append(fields,
-				map[string]interface{}{"field": "availability", "label": "Show Status", "type": "string", "operators": []string{"==", "!="}},
-				map[string]interface{}{"field": "seasoncount", "label": "Season Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-				map[string]interface{}{"field": "episodecount", "label": "Episode Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			)
-		}
-
-		if hasTautulli {
-			fields = append(fields,
-				map[string]interface{}{"field": "playcount", "label": "Play Count (Tautulli)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			)
-		}
-
-		if hasOverseerr {
-			fields = append(fields,
-				map[string]interface{}{"field": "requested", "label": "Is Requested (Overseerr)", "type": "boolean", "operators": []string{"=="}},
-				map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
-			)
-		}
+		// Media Type field (always available)
+		fields = append(fields,
+			map[string]interface{}{"field": "type", "label": "Media Type", "type": "string", "operators": []string{"==", "!="}},
+		)
 
 		return c.JSON(http.StatusOK, fields)
 	})
@@ -163,8 +223,38 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
 		}
 
-		if newRule.Type == "" || newRule.Field == "" || newRule.Operator == "" || newRule.Value == "" || newRule.Intensity == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Type, Field, Operator, Value, and Intensity are required fields"})
+		// Validate required fields for the new payload shape
+		if newRule.Field == "" || newRule.Operator == "" || newRule.Value == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Field, Operator, and Value are required"})
+		}
+
+		// New payload: require effect field
+		if newRule.Effect != "" {
+			validEffects := map[string]bool{
+				"always_keep": true, "prefer_keep": true, "lean_keep": true,
+				"lean_remove": true, "prefer_remove": true, "always_remove": true,
+			}
+			if !validEffects[newRule.Effect] {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "Effect must be one of: always_keep, prefer_keep, lean_keep, lean_remove, prefer_remove, always_remove"})
+			}
+		} else if newRule.Type != "" && newRule.Intensity != "" {
+			// Legacy payload: type + intensity — auto-populate effect
+			switch {
+			case newRule.Type == "protect" && newRule.Intensity == "absolute":
+				newRule.Effect = "always_keep"
+			case newRule.Type == "protect" && newRule.Intensity == "strong":
+				newRule.Effect = "prefer_keep"
+			case newRule.Type == "protect":
+				newRule.Effect = "lean_keep"
+			case newRule.Type == "target" && newRule.Intensity == "absolute":
+				newRule.Effect = "always_remove"
+			case newRule.Type == "target" && newRule.Intensity == "strong":
+				newRule.Effect = "prefer_remove"
+			case newRule.Type == "target":
+				newRule.Effect = "lean_remove"
+			}
+		} else {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Either 'effect' or both 'type' and 'intensity' are required"})
 		}
 
 		if err := database.Create(&newRule).Error; err != nil {
