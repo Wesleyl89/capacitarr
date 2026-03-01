@@ -2,11 +2,12 @@
   <UiPopover>
     <UiPopoverTrigger as-child>
       <UiButton variant="ghost" size="icon" aria-label="Engine controls" class="relative">
-        <component :is="ZapIcon" class="w-5 h-5" />
-        <!-- Mode indicator dot -->
+        <!-- Mode icon: shield=dry-run, hand=approval, zap=auto -->
+        <component :is="modeIcon" class="w-5 h-5" />
+        <!-- Health status dot -->
         <span
           class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-background"
-          :class="modeDotColor"
+          :class="[statusDotColor, runNowLoading ? 'animate-pulse' : '']"
         />
       </UiButton>
     </UiPopoverTrigger>
@@ -93,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ZapIcon, PlayIcon, LoaderCircleIcon } from 'lucide-vue-next'
+import { ShieldIcon, HandIcon, ZapIcon, PlayIcon, LoaderCircleIcon } from 'lucide-vue-next'
 import { formatRelativeTime } from '~/utils/format'
 
 const {
@@ -110,12 +111,20 @@ const modes = [
   { value: 'auto', label: 'Auto' }
 ]
 
-const modeDotColor = computed(() => {
+// Mode icon — distinct shape per mode, NOT color-coded
+const modeIcon = computed(() => {
   switch (executionMode.value) {
-    case 'auto': return 'bg-red-500'
-    case 'approval': return 'bg-amber-500'
-    default: return 'bg-green-500'
+    case 'auto': return ZapIcon      // ⚡ auto = lightning bolt
+    case 'approval': return HandIcon  // ✋ manual review
+    default: return ShieldIcon        // 🛡️ dry-run = protected/safe
   }
+})
+
+// Health status dot — green=healthy, green+pulse=running, red=error
+const statusDotColor = computed(() => {
+  if (runNowLoading.value) return 'bg-green-500' // pulsing green when running
+  // TODO: detect last run error from workerStats when available
+  return 'bg-green-500' // healthy/idle
 })
 
 const lastRunText = computed(() => {
