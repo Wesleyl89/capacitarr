@@ -79,8 +79,6 @@ import { LockKeyholeIcon, LoaderCircleIcon } from 'lucide-vue-next'
 import { ofetch } from 'ofetch'
 
 const config = useRuntimeConfig()
-const router = useRouter()
-const token = useCookie('jwt')
 
 const state = reactive({
   username: '',
@@ -97,6 +95,7 @@ async function onSubmit() {
   try {
     const response = await ofetch(`${config.public.apiBaseUrl}/api/v1/auth/login`, {
       method: 'POST',
+      credentials: 'include',
       body: {
         username: state.username,
         password: state.password
@@ -104,9 +103,9 @@ async function onSubmit() {
     })
 
     if (response.message === 'success') {
-      if (response.token) {
-        token.value = response.token
-      }
+      // The server sets both an HttpOnly 'jwt' cookie and a non-HttpOnly
+      // 'authenticated' cookie via Set-Cookie headers. No need to set
+      // cookies manually from JS.
       // Full page reload to ensure all components pick up the auth state
       window.location.href = '/'
     } else {

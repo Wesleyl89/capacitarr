@@ -11,8 +11,8 @@
 </template>
 
 <script setup lang="ts">
-const token = useCookie('jwt')
-const isAuthenticated = computed(() => !!token.value)
+const authenticated = useCookie('authenticated')
+const isAuthenticated = computed(() => !!authenticated.value)
 
 // Initialize color mode and theme on client
 if (import.meta.client) {

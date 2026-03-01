@@ -1,21 +1,18 @@
-import { ofetch, type FetchOptions } from 'ofetch'
+import { ofetch } from 'ofetch'
 
 export const useApi = () => {
   const config = useRuntimeConfig()
-  const token = useCookie('jwt')
+  const authenticated = useCookie('authenticated')
 
   const apiFetch = ofetch.create({
     baseURL: config.public.apiBaseUrl as string,
-    onRequest({ options }: { options: FetchOptions }) {
-      if (token.value) {
-        options.headers = new Headers(options.headers)
-        options.headers.set('Authorization', `Bearer ${token.value}`)
-      }
-    },
+    // The HttpOnly 'jwt' cookie is sent automatically by the browser
+    // for same-origin requests — no need to set Authorization header manually.
+    credentials: 'include',
     onResponseError({ response }) {
       if (response.status === 401) {
         const router = useRouter()
-        token.value = null
+        authenticated.value = null
         router.push('/login')
       }
     }

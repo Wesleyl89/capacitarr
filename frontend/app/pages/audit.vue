@@ -1,5 +1,12 @@
 <template>
   <div>
+    <!-- Pull-to-refresh indicator -->
+    <PullToRefreshIndicator
+      :pull-distance="pullDistance"
+      :pull-progress="pullProgress"
+      :is-refreshing="isRefreshing"
+    />
+
     <div data-slot="page-header" class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Audit History</h1>
@@ -116,6 +123,11 @@ import { RefreshCwIcon, LoaderCircleIcon, ClockIcon, ChevronRightIcon } from 'lu
 const api = useApi()
 const { formatTimestamp } = useDisplayPrefs()
 
+// Pull-to-refresh for touch devices
+const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () => {
+  await fetchLogs()
+})
+
 const logs = ref<any[]>([])
 const total = ref(0)
 const pending = ref(false)
@@ -165,7 +177,7 @@ const groupedLogs = computed<AuditGroup[]>(() => {
     if (log.mediaType === 'season' && log.mediaName.includes(' - Season ')) {
       const showName = log.mediaName.split(' - Season ')[0]
       const groupIdx = showMap.get(showName)
-      if (groupIdx !== undefined) {
+      if (groupIdx !== undefined && groups[groupIdx]) {
         groups[groupIdx].seasons.push(log)
         continue
       }

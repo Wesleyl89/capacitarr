@@ -14,6 +14,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 80 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -37,6 +38,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 140 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -62,6 +64,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 200 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -117,6 +120,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 260 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -140,6 +144,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 320 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -165,6 +170,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 350 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -191,6 +197,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 380 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">
@@ -216,6 +223,7 @@
         v-motion
         :initial="{ opacity: 0, y: 12 }"
         :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 440 } }"
+        data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
         <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors">

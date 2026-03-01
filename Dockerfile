@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm run build
 
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
@@ -25,10 +25,15 @@ RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o capacitarr main.go
 FROM alpine:latest
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata sqlite-libs
+RUN apk add --no-cache ca-certificates tzdata sqlite-libs su-exec
 
 COPY --from=backend-builder /app/backend/capacitarr /app/capacitarr
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
+RUN mkdir -p /config
+
+VOLUME /config
 EXPOSE 2187
 
-ENTRYPOINT ["/app/capacitarr"]
+ENTRYPOINT ["/app/entrypoint.sh"]

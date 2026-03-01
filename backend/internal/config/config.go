@@ -40,7 +40,7 @@ func Load() *Config {
 
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "capacitarr.db"
+		dbPath = "/config/capacitarr.db"
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")

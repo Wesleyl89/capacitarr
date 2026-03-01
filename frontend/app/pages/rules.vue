@@ -9,21 +9,20 @@
     </div>
 
     <!-- Disk Thresholds — Editable -->
-    <div
+    <UiCard
       v-if="diskGroups.length > 0"
       v-motion
       :initial="{ opacity: 0, y: 12 }"
       :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
-      class="rounded-xl border border-border bg-card shadow-sm p-6 mb-6"
+      class="mb-6"
     >
-      <div class="mb-4">
-        <h3 class="text-lg font-semibold">Disk Thresholds</h3>
-        <p class="text-sm text-muted-foreground">
+      <UiCardHeader>
+        <UiCardTitle>Disk Thresholds</UiCardTitle>
+        <UiCardDescription>
           Set when cleanup begins (threshold) and when it stops (target) for each disk.
-        </p>
-      </div>
-
-      <div class="space-y-5">
+        </UiCardDescription>
+      </UiCardHeader>
+      <UiCardContent class="space-y-5">
         <div
           v-for="dg in diskGroups"
           :key="dg.id"
@@ -34,7 +33,7 @@
             <div class="flex items-center gap-3">
               <div
                 class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'bg-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'bg-amber-500' : 'bg-primary'"
+                  :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'bg-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'bg-amber-500' : 'bg-green-500'"
               >
                 <component :is="HardDriveIcon" class="w-4.5 h-4.5 text-white" />
               </div>
@@ -47,8 +46,8 @@
                 </span>
               </div>
             </div>
-            <span class="text-2xl font-bold tabular-nums" :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'text-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'text-amber-500' : 'text-primary'">
-              {{ Math.round(diskUsagePct(dg)) }}%
+            <span class="text-2xl font-bold tabular-nums" :class="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'text-red-500' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'text-amber-500' : 'text-green-500'">
+                {{ Math.round(diskUsagePct(dg)) }}%
             </span>
           </div>
 
@@ -58,28 +57,25 @@
             <div class="relative w-full h-3 rounded-full overflow-hidden">
               <!-- Segmented background zones -->
               <div class="absolute inset-0 flex">
-                <!-- Green zone: 0% → target% -->
                 <div
                   class="h-full"
                   :style="{ width: (thresholdEdits[dg.id]?.target ?? dg.targetPct) + '%', backgroundColor: 'oklch(0.648 0.2 160 / 0.2)' }"
                 />
-                <!-- Amber zone: target% → threshold% -->
                 <div
                   class="h-full"
                   :style="{ width: ((thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) - (thresholdEdits[dg.id]?.target ?? dg.targetPct)) + '%', backgroundColor: 'oklch(0.75 0.183 55.934 / 0.2)' }"
                 />
-                <!-- Red zone: threshold% → 100% -->
                 <div
                   class="h-full"
                   :style="{ width: (100 - (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)) + '%', backgroundColor: 'oklch(0.577 0.245 27.325 / 0.2)' }"
                 />
               </div>
-              <!-- Usage fill bar (on top of zones) -->
+              <!-- Usage fill bar -->
               <div
                 data-slot="progress-bar-fill"
                 :data-status="diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'danger' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'warning' : 'ok'"
                 class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
-                :style="{ width: Math.min(diskUsagePct(dg), 100) + '%', backgroundColor: diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? 'oklch(0.637 0.237 25.331)' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? 'oklch(0.769 0.188 70.08)' : 'var(--color-primary)' }"
+                :style="{ width: Math.min(diskUsagePct(dg), 100) + '%', backgroundColor: diskUsagePct(dg) >= (thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) ? '#ef4444' : diskUsagePct(dg) >= (thresholdEdits[dg.id]?.target ?? dg.targetPct) ? '#eab308' : '#22c55e' }"
               />
             </div>
 
@@ -112,39 +108,33 @@
 
           <!-- Editable inputs -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-medium text-muted-foreground mb-1.5">
-                Cleanup Threshold %
-              </label>
+            <div class="space-y-1.5">
+              <UiLabel>Cleanup Threshold %</UiLabel>
               <div class="flex items-center gap-2">
-                <input
-                  :value="thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct"
+                <UiInput
+                  :model-value="String(thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)"
                   type="number"
                   min="1"
                   max="99"
-                  class="w-full px-3 py-2 text-sm rounded-lg border border-input bg-card text-foreground focus:ring-2 focus:ring-red-400/50 focus:border-red-400 outline-none transition-colors"
-                  @input="(e: Event) => updateThresholdEdit(dg.id, 'threshold', Number((e.target as HTMLInputElement).value), dg)"
+                  @update:model-value="(v: string | number) => updateThresholdEdit(dg.id, 'threshold', Number(v), dg)"
                 />
                 <span class="w-2 h-2 rounded-full bg-red-400 shrink-0" />
               </div>
-              <p class="text-[11px] text-muted-foreground mt-1">Begin cleanup when usage exceeds this %</p>
+              <p class="text-[11px] text-muted-foreground">Begin cleanup when usage exceeds this %</p>
             </div>
-            <div>
-              <label class="block text-xs font-medium text-muted-foreground mb-1.5">
-                Cleanup Target %
-              </label>
+            <div class="space-y-1.5">
+              <UiLabel>Cleanup Target %</UiLabel>
               <div class="flex items-center gap-2">
-                <input
-                  :value="thresholdEdits[dg.id]?.target ?? dg.targetPct"
+                <UiInput
+                  :model-value="String(thresholdEdits[dg.id]?.target ?? dg.targetPct)"
                   type="number"
                   min="1"
                   max="99"
-                  class="w-full px-3 py-2 text-sm rounded-lg border border-input bg-card text-foreground focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400 outline-none transition-colors"
-                  @input="(e: Event) => updateThresholdEdit(dg.id, 'target', Number((e.target as HTMLInputElement).value), dg)"
+                  @update:model-value="(v: string | number) => updateThresholdEdit(dg.id, 'target', Number(v), dg)"
                 />
                 <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               </div>
-              <p class="text-[11px] text-muted-foreground mt-1">Stop cleanup when usage drops to this %</p>
+              <p class="text-[11px] text-muted-foreground">Stop cleanup when usage drops to this %</p>
             </div>
           </div>
 
@@ -153,311 +143,305 @@
             {{ thresholdValidation(dg.id, dg) }}
           </p>
 
-          <!-- Per-group feedback -->
-          <p v-if="thresholdEdits[dg.id]?.message" class="text-xs" :class="thresholdEdits[dg.id]?.success ? 'text-emerald-500' : 'text-red-500'">
-            {{ thresholdEdits[dg.id]?.message }}
-          </p>
-
-          <!-- Save button — prominent, full-width -->
-          <button
-            :disabled="!!thresholdValidation(dg.id, dg) || thresholdEdits[dg.id]?.saving"
-            class="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            @click="saveThresholds(dg)"
-          >
-            <component :is="thresholdEdits[dg.id]?.saving ? LoaderCircleIcon : SaveIcon" :class="{ 'animate-spin': thresholdEdits[dg.id]?.saving }" class="w-4 h-4" />
-            {{ thresholdEdits[dg.id]?.saving ? 'Saving...' : 'Save Thresholds' }}
-          </button>
+          <!-- Auto-save status indicator -->
+          <div class="flex items-center gap-2 h-5">
+            <Transition
+              enter-active-class="transition-all duration-300 ease-out"
+              leave-active-class="transition-all duration-300 ease-in"
+              enter-from-class="opacity-0 translate-y-1"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 translate-y-1"
+            >
+              <span v-if="thresholdEdits[dg.id]?.saving" class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <component :is="LoaderCircleIcon" class="w-3.5 h-3.5 animate-spin" />
+                Saving…
+              </span>
+              <span v-else-if="thresholdEdits[dg.id]?.success && thresholdEdits[dg.id]?.message" class="inline-flex items-center gap-1.5 text-xs text-emerald-500">
+                <component :is="CheckIcon" class="w-3.5 h-3.5" />
+                Saved
+              </span>
+              <span v-else-if="thresholdEdits[dg.id]?.message && !thresholdEdits[dg.id]?.success" class="inline-flex items-center gap-1.5 text-xs text-red-500">
+                {{ thresholdEdits[dg.id]?.message }}
+              </span>
+            </Transition>
+          </div>
         </div>
-      </div>
-    </div>
+      </UiCardContent>
+    </UiCard>
 
     <!-- Preference Weights -->
-    <div
+    <UiCard
       v-motion
       :initial="{ opacity: 0, y: 12 }"
       :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
-      class="rounded-xl border border-border bg-card shadow-sm p-6 mb-6"
+      class="mb-6"
     >
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h3 class="text-lg font-semibold">Preference Weights</h3>
-          <p class="text-sm text-muted-foreground">
-            Higher weights increase the attribute's influence on deletion score.
-          </p>
-        </div>
-        <button
-          class="h-8 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-medium shadow-sm transition-colors"
-          @click="savePreferences"
-        >
-          Save Weights
-        </button>
-      </div>
-
-      <!-- Preset Chips -->
-      <div class="flex flex-wrap gap-2 mb-6">
-        <button
-          v-for="preset in presets"
-          :key="preset.name"
-          class="h-7 px-3 rounded-full text-xs font-medium transition-all border"
-          :class="isActivePreset(preset.values)
-            ? 'bg-primary border-primary text-primary-foreground shadow-sm'
-            : 'bg-muted border-input text-foreground hover:border-primary hover:text-primary'"
-          @click="applyPreset(preset.values)"
-        >
-          {{ preset.name }}
-        </button>
-      </div>
-
-      <!-- Two-Column Slider Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-        <div v-for="slider in sliders" :key="slider.key" class="space-y-1.5">
-          <div class="flex justify-between text-sm">
-            <span class="font-medium text-foreground">{{ slider.label }}</span>
-            <span class="text-muted-foreground font-mono tabular-nums">{{ prefs[slider.key as keyof typeof prefs] }} / 10</span>
+      <UiCardHeader>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <UiCardTitle>Preference Weights</UiCardTitle>
+            <UiCardDescription>
+              Higher weights increase the attribute's influence on deletion score.
+            </UiCardDescription>
           </div>
-          <UiSlider
-            :model-value="[Number(prefs[slider.key as keyof typeof prefs])]"
-            :min="0"
-            :max="10"
-            :step="1"
-            class="w-full"
-            @update:model-value="(v: number[]) => { (prefs as any)[slider.key] = v[0] }"
-          />
-          <p class="text-xs text-muted-foreground">{{ slider.description }}</p>
+          <UiButton size="sm" @click="savePreferences">
+            Save Weights
+          </UiButton>
         </div>
-      </div>
-
-      <!-- Execution Mode -->
-      <div class="mt-8 pt-6 border-t border-border">
-        <h4 class="text-sm font-semibold mb-3">Execution Mode</h4>
-        <div class="flex gap-3">
-          <button
-            v-for="mode in executionModes"
-            :key="mode.value"
-            data-slot="execution-mode-card"
-            :data-active="prefs.executionMode === mode.value"
-            class="flex-1 px-4 py-3 rounded-xl border-2 text-left transition-all"
-            :class="prefs.executionMode === mode.value
-              ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
-              : 'border-input hover:border-border'"
-            @click="prefs.executionMode = mode.value; savePreferences()"
+      </UiCardHeader>
+      <UiCardContent>
+        <!-- Preset Chips -->
+        <div class="flex flex-wrap gap-2 mb-6">
+          <UiButton
+            v-for="preset in presets"
+            :key="preset.name"
+            :variant="isActivePreset(preset.values) ? 'default' : 'outline'"
+            size="sm"
+            class="rounded-full h-7 px-3 text-xs"
+            @click="applyPreset(preset.values)"
           >
-            <div class="text-sm font-medium" :class="prefs.executionMode === mode.value ? 'text-primary' : ''">
-              {{ mode.label }}
-            </div>
-            <div class="text-xs text-muted-foreground mt-0.5">{{ mode.description }}</div>
-          </button>
+            {{ preset.name }}
+          </UiButton>
         </div>
-      </div>
 
-      <!-- Tiebreaker -->
-      <div class="mt-6 pt-6 border-t border-border">
-        <h4 class="text-sm font-semibold mb-1">Score Tiebreaker</h4>
-        <p class="text-xs text-muted-foreground mb-3">When items have the same score, how should they be ordered?</p>
-        <select
-          v-model="prefs.tiebreakerMethod"
-          class="h-9 w-full max-w-xs px-3 rounded-lg border border-input bg-card text-sm text-foreground focus:ring-2 focus-visible:ring-ring/50 focus:border-primary outline-none transition-colors"
-          @change="savePreferences"
-        >
-          <option value="size_desc">Largest first (free more space)</option>
-          <option value="size_asc">Smallest first</option>
-          <option value="name_asc">Alphabetical (A → Z)</option>
-          <option value="oldest_first">Oldest in library first</option>
-          <option value="newest_first">Newest in library first</option>
-        </select>
-      </div>
-    </div>
+        <!-- Two-Column Slider Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+          <div v-for="slider in sliders" :key="slider.key" class="space-y-1.5">
+            <div class="flex justify-between text-sm">
+              <span class="font-medium text-foreground">{{ slider.label }}</span>
+              <span class="text-muted-foreground font-mono tabular-nums">{{ prefs[slider.key as keyof typeof prefs] }} / 10</span>
+            </div>
+            <UiSlider
+              :model-value="[Number(prefs[slider.key as keyof typeof prefs])]"
+              :min="0"
+              :max="10"
+              :step="1"
+              class="w-full"
+              @update:model-value="(v: number[] | undefined) => { if (v) (prefs as any)[slider.key] = v[0] }"
+            />
+            <p class="text-xs text-muted-foreground">{{ slider.description }}</p>
+          </div>
+        </div>
+
+        <!-- Execution Mode -->
+        <div class="mt-8 pt-6 border-t border-border">
+          <h4 class="text-sm font-semibold mb-3">Execution Mode</h4>
+          <div class="flex gap-3">
+            <button
+              v-for="mode in executionModes"
+              :key="mode.value"
+              data-slot="execution-mode-card"
+              :data-active="prefs.executionMode === mode.value"
+              class="flex-1 px-4 py-3 rounded-xl border-2 text-left transition-all"
+              :class="prefs.executionMode === mode.value
+                ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                : 'border-border hover:border-border'"
+              @click="prefs.executionMode = mode.value; savePreferences()"
+            >
+              <div class="text-sm font-medium" :class="prefs.executionMode === mode.value ? 'text-primary' : ''">
+                {{ mode.label }}
+              </div>
+              <div class="text-xs text-muted-foreground mt-0.5">{{ mode.description }}</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tiebreaker -->
+        <div class="mt-6 pt-6 border-t border-border">
+          <h4 class="text-sm font-semibold mb-1">Score Tiebreaker</h4>
+          <p class="text-xs text-muted-foreground mb-3">When items have the same score, how should they be ordered?</p>
+          <UiSelect v-model="prefs.tiebreakerMethod" @update:model-value="savePreferences">
+            <UiSelectTrigger class="w-full max-w-xs">
+              <UiSelectValue placeholder="Select tiebreaker" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem value="size_desc">Largest first (free more space)</UiSelectItem>
+              <UiSelectItem value="size_asc">Smallest first</UiSelectItem>
+              <UiSelectItem value="name_asc">Alphabetical (A → Z)</UiSelectItem>
+              <UiSelectItem value="oldest_first">Oldest in library first</UiSelectItem>
+              <UiSelectItem value="newest_first">Newest in library first</UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </div>
+      </UiCardContent>
+    </UiCard>
 
     <!-- Custom Rules -->
-    <div
+    <UiCard
       v-motion
       :initial="{ opacity: 0, y: 12 }"
       :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 100 } }"
-      class="rounded-xl border border-border bg-card shadow-sm p-6 mb-6"
+      class="mb-6"
     >
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold">Custom Rules</h3>
-        <button
-          class="h-8 px-3 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-medium shadow-sm transition-colors inline-flex items-center gap-1.5"
-          @click="showAddRule = !showAddRule"
-        >
-          <component :is="PlusIcon" class="w-3.5 h-3.5" />
-          Add Rule
-        </button>
-      </div>
-
-      <!-- Add Rule Form -->
-      <div v-if="showAddRule" class="mb-4 p-4 rounded-lg border border-input bg-muted space-y-3">
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <select v-model="newRule.type" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option value="protect">Protect</option>
-            <option value="target">Target</option>
-          </select>
-          <select v-model="newRule.field" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option v-for="f in ruleFields" :key="f.field" :value="f.field">{{ f.label }}</option>
-          </select>
-          <select v-model="newRule.operator" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option v-for="op in selectedFieldOperators" :key="op" :value="op">{{ op }}</option>
-          </select>
-          <input v-model="newRule.value" placeholder="Value" class="h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50" />
-          <select v-model="newRule.intensity" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option value="slight">Slight</option>
-            <option value="strong">Strong</option>
-            <option value="absolute">Absolute</option>
-          </select>
+      <UiCardHeader>
+        <div class="flex items-center justify-between">
+          <UiCardTitle>Custom Rules</UiCardTitle>
+          <UiButton size="sm" @click="showAddRule = !showAddRule">
+            <component :is="PlusIcon" class="w-3.5 h-3.5" />
+            Add Rule
+          </UiButton>
         </div>
-        <button
-          class="h-8 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-medium transition-colors"
-          @click="addRule"
-        >
-          Save Rule
-        </button>
-      </div>
-
-      <!-- Rules List -->
-      <div v-if="rules.length === 0 && !showAddRule" class="text-center py-6 text-muted-foreground text-sm">
-        No rules configured. Media will be ranked purely by preference weights.
-      </div>
-      <div v-else class="space-y-2">
-        <div
-          v-for="rule in rules"
-          :key="rule.id"
-          class="flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-muted/50"
-        >
-          <div class="flex items-center gap-2 text-sm">
-            <span
-              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-              :class="rule.type === 'protect'
-                ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                : 'bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400'"
-            >
-              {{ rule.type }}
-            </span>
-            <span class="text-foreground">{{ rule.field }}</span>
-            <span class="text-muted-foreground">{{ rule.operator }}</span>
-            <span class="font-medium">{{ rule.value }}</span>
-            <span class="text-muted-foreground text-xs">({{ rule.intensity }})</span>
+      </UiCardHeader>
+      <UiCardContent>
+        <!-- Add Rule Form -->
+        <div v-if="showAddRule" class="mb-4 p-4 rounded-lg border border-border bg-muted space-y-3">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <UiSelect v-model="newRule.type">
+              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="protect">Protect</UiSelectItem>
+                <UiSelectItem value="target">Target</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="newRule.field">
+              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem v-for="f in ruleFields" :key="f.field" :value="f.field">{{ f.label }}</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="newRule.operator">
+              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem v-for="op in selectedFieldOperators" :key="op" :value="op">{{ op }}</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiInput v-model="newRule.value" placeholder="Value" />
+            <UiSelect v-model="newRule.intensity">
+              <UiSelectTrigger><UiSelectValue /></UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="slight">Slight</UiSelectItem>
+                <UiSelectItem value="strong">Strong</UiSelectItem>
+                <UiSelectItem value="absolute">Absolute</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
           </div>
-          <button
-            class="text-muted-foreground hover:text-red-500 transition-colors"
-            @click="deleteRule(rule.id)"
-          >
-            <component :is="XIcon" class="w-4 h-4" />
-          </button>
+          <UiButton size="sm" @click="addRule">
+            Save Rule
+          </UiButton>
         </div>
-      </div>
-    </div>
+
+        <!-- Rules List -->
+        <div v-if="rules.length === 0 && !showAddRule" class="text-center py-6 text-muted-foreground text-sm">
+          No rules configured. Media will be ranked purely by preference weights.
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="rule in rules"
+            :key="rule.id"
+            class="flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-muted/50"
+          >
+            <div class="flex items-center gap-2 text-sm">
+              <UiBadge
+                :variant="rule.type === 'protect' ? 'default' : 'destructive'"
+                class="capitalize"
+              >
+                {{ rule.type }}
+              </UiBadge>
+              <span class="text-foreground">{{ rule.field }}</span>
+              <span class="text-muted-foreground">{{ rule.operator }}</span>
+              <span class="font-medium">{{ rule.value }}</span>
+              <span class="text-muted-foreground text-xs">({{ rule.intensity }})</span>
+            </div>
+            <UiButton
+              variant="ghost"
+              size="icon-sm"
+              class="text-muted-foreground hover:text-red-500"
+              @click="deleteRule(rule.id)"
+            >
+              <component :is="XIcon" class="w-4 h-4" />
+            </UiButton>
+          </div>
+        </div>
+      </UiCardContent>
+    </UiCard>
 
     <!-- Live Preview -->
-    <div
+    <UiCard
       v-motion
       :initial="{ opacity: 0, y: 12 }"
       :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 200 } }"
-      class="rounded-xl border border-border bg-card shadow-sm p-6"
     >
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold">Live Preview — What Would Be Deleted</h3>
-        <button
-          class="h-8 px-3 rounded-lg border border-input text-xs font-medium hover:bg-accent transition-colors inline-flex items-center gap-1.5"
-          @click="fetchPreview"
-        >
-          <component :is="previewLoading ? LoaderCircleIcon : RefreshCwIcon" :class="{ 'animate-spin': previewLoading }" class="w-3.5 h-3.5" />
-          Refresh
-        </button>
-      </div>
+      <UiCardHeader>
+        <div class="flex items-center justify-between">
+          <UiCardTitle>Live Preview — What Would Be Deleted</UiCardTitle>
+          <UiButton variant="outline" size="sm" @click="fetchPreview">
+            <component :is="previewLoading ? LoaderCircleIcon : RefreshCwIcon" :class="{ 'animate-spin': previewLoading }" class="w-3.5 h-3.5" />
+            Refresh
+          </UiButton>
+        </div>
+      </UiCardHeader>
+      <UiCardContent>
+        <div v-if="previewLoading" class="flex items-center justify-center py-12">
+          <component :is="LoaderCircleIcon" class="w-6 h-6 text-primary animate-spin" />
+        </div>
 
-      <div v-if="previewLoading" class="flex items-center justify-center py-12">
-        <component :is="LoaderCircleIcon" class="w-6 h-6 text-primary animate-spin" />
-      </div>
+        <div v-else-if="preview.length === 0" class="text-center py-8 text-muted-foreground text-sm">
+          No items to evaluate. Connect integrations and ensure media exists.
+        </div>
 
-      <div v-else-if="preview.length === 0" class="text-center py-8 text-muted-foreground text-sm">
-        No items to evaluate. Connect integrations and ensure media exists.
-      </div>
-
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border">
-              <th class="w-8 px-3 py-2"></th>
-              <th class="text-left px-4 py-2 text-xs font-medium uppercase text-muted-foreground">Score</th>
-              <th class="text-left px-4 py-2 text-xs font-medium uppercase text-muted-foreground">Title</th>
-              <th class="text-left px-4 py-2 text-xs font-medium uppercase text-muted-foreground">Type</th>
-              <th class="text-right px-4 py-2 text-xs font-medium uppercase text-muted-foreground">Size</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="group in groupedPreview" :key="group.key">
-              <tr class="border-b border-border hover:bg-accent/30 transition-colors cursor-pointer" @click="selectPreviewItem(group.entry); group.seasons.length > 0 && togglePreviewGroup(group.key)">
-                <td class="px-3 py-2 w-8">
-                  <button v-if="group.seasons.length > 0" class="text-muted-foreground hover:text-foreground transition-colors" @click.stop="togglePreviewGroup(group.key)">
-                    <ChevronRightIcon class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-90': expandedPreviewGroups.has(group.key) }" />
-                  </button>
-                </td>
-                <td class="px-4 py-2">
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-24 h-2.5 rounded-full bg-muted/50 overflow-hidden">
-                      <div
-                        data-slot="score-bar"
-                        class="h-full rounded-full transition-all duration-300"
-                        :class="group.entry.isProtected ? 'bg-emerald-500' : ''"
-                        :style="{
-                          width: (group.entry.isProtected ? 0 : group.entry.score * 100) + '%',
-                          ...(!group.entry.isProtected ? { background: `linear-gradient(90deg, var(--color-primary), oklch(from var(--color-primary) calc(l + 0.1) c h))` } : {})
-                        }"
-                      />
-                    </div>
+        <div v-else class="overflow-x-auto">
+          <UiTable>
+            <UiTableHeader>
+              <UiTableRow>
+                <UiTableHead class="w-12">#</UiTableHead>
+                <UiTableHead>Score</UiTableHead>
+                <UiTableHead>Title</UiTableHead>
+                <UiTableHead>Type</UiTableHead>
+                <UiTableHead class="text-right">Size</UiTableHead>
+              </UiTableRow>
+            </UiTableHeader>
+            <UiTableBody>
+              <template v-for="(group, groupIdx) in groupedPreview" :key="group.key">
+                <UiTableRow class="cursor-pointer" @click="selectPreviewItem(group.entry); group.seasons.length > 0 && togglePreviewGroup(group.key)">
+                  <UiTableCell class="w-12 text-center">
+                    <span class="text-xs font-mono tabular-nums text-muted-foreground">{{ groupIdx + 1 }}</span>
+                  </UiTableCell>
+                  <UiTableCell>
                     <span class="text-xs font-mono tabular-nums font-semibold" :class="group.entry.isProtected ? 'text-emerald-500' : 'text-primary'">
                       {{ group.entry.isProtected ? 'Protected' : group.entry.score.toFixed(2) }}
                     </span>
-                  </div>
-                </td>
-                <td class="px-4 py-2 font-medium">
-                  {{ group.entry.item.title }}
-                  <span v-if="group.seasons.length > 0" class="ml-1.5 text-xs text-muted-foreground font-normal">({{ group.seasons.length }} season{{ group.seasons.length !== 1 ? 's' : '' }})</span>
-                </td>
-                <td class="px-4 py-2">
-                  <span class="text-xs px-2 py-0.5 rounded bg-muted capitalize">{{ group.entry.item.type }}</span>
-                </td>
-                <td class="px-4 py-2 text-right font-mono text-xs tabular-nums">{{ formatBytes(group.entry.item.sizeBytes) }}</td>
-              </tr>
-              <template v-if="expandedPreviewGroups.has(group.key)">
-                <tr v-for="(season, sIdx) in group.seasons" :key="`${group.key}-s${sIdx}`" class="border-b border-border bg-muted/30 transition-colors cursor-pointer" @click.stop="selectPreviewItem(season)">
-                  <td class="px-3 py-2 w-8"></td>
-                  <td class="px-4 py-2">
-                    <div class="flex items-center gap-2.5">
-                      <div class="w-20 h-2 rounded-full bg-muted/50 overflow-hidden">
-                        <div
-                          data-slot="score-bar"
-                          class="h-full rounded-full transition-all duration-300"
-                          :class="season.isProtected ? 'bg-emerald-500' : ''"
-                          :style="{
-                            width: (season.isProtected ? 0 : season.score * 100) + '%',
-                            ...(!season.isProtected ? { background: `linear-gradient(90deg, var(--color-primary), oklch(from var(--color-primary) calc(l + 0.1) c h))` } : {})
-                          }"
-                        />
-                      </div>
+                  </UiTableCell>
+                  <UiTableCell class="font-medium">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="truncate">{{ group.entry.item.title }}</span>
+                      <button v-if="group.seasons.length > 0" class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5" @click.stop="togglePreviewGroup(group.key)">
+                        <ChevronRightIcon class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-90': expandedPreviewGroups.has(group.key) }" />
+                        <span class="text-xs text-muted-foreground font-normal whitespace-nowrap">({{ group.seasons.length }} season{{ group.seasons.length !== 1 ? 's' : '' }})</span>
+                      </button>
+                    </div>
+                  </UiTableCell>
+                  <UiTableCell>
+                    <UiBadge variant="secondary" class="capitalize">{{ group.entry.item.type }}</UiBadge>
+                  </UiTableCell>
+                  <UiTableCell class="text-right font-mono text-xs tabular-nums">{{ formatBytes(group.entry.item.sizeBytes) }}</UiTableCell>
+                </UiTableRow>
+                <template v-if="expandedPreviewGroups.has(group.key)">
+                  <UiTableRow v-for="(season, sIdx) in group.seasons" :key="`${group.key}-s${sIdx}`" class="bg-muted/30 cursor-pointer" @click.stop="selectPreviewItem(season)">
+                    <UiTableCell class="w-12" />
+                    <UiTableCell>
                       <span class="text-xs font-mono tabular-nums font-semibold" :class="season.isProtected ? 'text-emerald-500' : 'text-primary'">
                         {{ season.isProtected ? 'Protected' : season.score.toFixed(2) }}
                       </span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-2 text-muted-foreground pl-8">
-                    <span class="inline-flex items-center gap-1.5">
-                      <span class="w-3 h-px bg-zinc-300 dark:bg-zinc-600 inline-block"></span>
-                      {{ extractPreviewSeasonLabel(season.item.title) }}
-                    </span>
-                  </td>
-                  <td class="px-4 py-2">
-                    <span class="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground dark:text-muted-foreground capitalize">{{ season.item.type }}</span>
-                  </td>
-                    <td class="px-4 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">{{ formatBytes(season.item.sizeBytes) }}</td>
-                </tr>
+                    </UiTableCell>
+                    <UiTableCell class="text-muted-foreground pl-8">
+                      <span class="inline-flex items-center gap-1.5">
+                        <UiSeparator orientation="horizontal" class="w-3" />
+                        {{ extractPreviewSeasonLabel(season.item.title) }}
+                      </span>
+                    </UiTableCell>
+                    <UiTableCell>
+                      <UiBadge variant="secondary" class="capitalize">{{ season.item.type }}</UiBadge>
+                    </UiTableCell>
+                    <UiTableCell class="text-right font-mono text-xs tabular-nums text-muted-foreground">{{ formatBytes(season.item.sizeBytes) }}</UiTableCell>
+                  </UiTableRow>
+                </template>
               </template>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
+            </UiTableBody>
+          </UiTable>
+        </div>
+      </UiCardContent>
+    </UiCard>
 
     <ScoreDetailModal
       v-if="selectedPreviewItem"
@@ -475,7 +459,7 @@
 </template>
 
 <script setup lang="ts">
-import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, ChevronRightIcon, HardDriveIcon } from 'lucide-vue-next'
+import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon } from 'lucide-vue-next'
 import { formatBytes } from '~/utils/format'
 
 const api = useApi()
@@ -512,10 +496,27 @@ function ensureThresholdEdit(dgId: number, dg: any) {
   }
 }
 
+// Debounce timers for auto-save per disk group
+const debounceTimers: Record<number, ReturnType<typeof setTimeout>> = {}
+
 function updateThresholdEdit(dgId: number, field: 'threshold' | 'target', value: number, dg: any) {
   ensureThresholdEdit(dgId, dg)
-  thresholdEdits[dgId][field] = value
-  thresholdEdits[dgId].message = ''
+  const edit = thresholdEdits[dgId]!
+  edit[field] = value
+  edit.message = ''
+  edit.success = false
+
+  // Cancel any pending debounce for this disk group
+  if (debounceTimers[dgId]) {
+    clearTimeout(debounceTimers[dgId])
+  }
+
+  // Auto-save after 1 second debounce (skip if validation fails)
+  debounceTimers[dgId] = setTimeout(() => {
+    if (!thresholdValidation(dgId, dg)) {
+      saveThresholds(dg)
+    }
+  }, 1000)
 }
 
 function thresholdValidation(dgId: number, dg: any): string {
@@ -530,11 +531,12 @@ function thresholdValidation(dgId: number, dg: any): string {
 
 async function saveThresholds(dg: any) {
   ensureThresholdEdit(dg.id, dg)
-  const edit = thresholdEdits[dg.id]
+  const edit = thresholdEdits[dg.id]!
   if (thresholdValidation(dg.id, dg)) return
 
   edit.saving = true
   edit.message = ''
+  edit.success = false
 
   try {
     const updated = await api(`/api/v1/disk-groups/${dg.id}`, {
@@ -546,8 +548,7 @@ async function saveThresholds(dg: any) {
     }) as any
 
     edit.success = true
-    edit.message = 'Thresholds updated successfully'
-    addToast('Thresholds saved', 'success')
+    edit.message = 'Saved'
 
     // Update local diskGroups array with canonical values from the API response
     const idx = diskGroups.value.findIndex((g: any) => g.id === dg.id)
@@ -558,7 +559,7 @@ async function saveThresholds(dg: any) {
       diskGroups.value[idx].targetPct = edit.target
     }
 
-    setTimeout(() => { edit.message = '' }, 3000)
+    setTimeout(() => { edit.message = ''; edit.success = false }, 2500)
   } catch (err: any) {
     edit.success = false
     edit.message = err.message || 'Failed to save thresholds'
@@ -719,6 +720,10 @@ async function addRule() {
   try {
     await api('/api/v1/protections', { method: 'POST', body: { ...newRule } })
     newRule.value = ''
+    newRule.type = 'protect'
+    newRule.field = 'quality'
+    newRule.operator = '=='
+    newRule.intensity = 'absolute'
     showAddRule.value = false
     addToast('Protection rule added', 'success')
     await fetchRules()
@@ -759,6 +764,7 @@ function scoreColor(score: number) {
   return 'bg-primary/40'
 }
 
+
 // ─── Preview Show/Season Grouping ─────────────────────────────────────────────
 interface PreviewGroup {
   key: string
@@ -776,7 +782,7 @@ const groupedPreview = computed<PreviewGroup[]>(() => {
     if (item.item?.type === 'season' && item.item?.title?.includes(' - Season ')) {
       const showName = item.item.title.split(' - Season ')[0]
       const groupIdx = showMap.get(showName)
-      if (groupIdx !== undefined) {
+      if (groupIdx !== undefined && groups[groupIdx]) {
         groups[groupIdx].seasons.push(item)
         continue
       }

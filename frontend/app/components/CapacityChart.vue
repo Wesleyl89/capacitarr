@@ -48,12 +48,14 @@ interface ChartSeries {
 }
 
 const series = ref<ChartSeries[]>([])
+const totalCapacity = ref<number | undefined>(undefined)
 
 const chartOptions = computed(() => {
   const dark = isDark.value
   const textColor = dark ? '#a1a1aa' : '#71717a'
   const gridColor = dark ? 'rgba(63,63,70,0.5)' : '#e4e4e7'
   const isPercent = props.mode === 'percentage'
+  const isRaw = props.mode === 'raw'
 
   return {
     chart: {
@@ -66,7 +68,8 @@ const chartOptions = computed(() => {
       animations: { enabled: true, easing: 'easeinout', speed: 400 }
     },
     // Theme-aware colors: primary for used, success green for total
-    colors: isPercent
+    // Raw mode only has one series (Used), so only one color needed
+    colors: isPercent || isRaw
       ? [primaryColor.value]
       : [primaryColor.value, successColor.value],
     fill: {
@@ -83,7 +86,7 @@ const chartOptions = computed(() => {
     },
     yaxis: {
       min: isPercent ? 0 : undefined,
-      max: isPercent ? 100 : undefined,
+      max: isPercent ? 100 : (isRaw && totalCapacity.value ? totalCapacity.value : undefined),
       labels: {
         style: { colors: textColor, fontSize: '11px' },
         formatter: (value: number) => isPercent ? `${value.toFixed(0)}%` : formatBytes(value)
@@ -104,7 +107,7 @@ const chartOptions = computed(() => {
       }
     },
     legend: {
-      show: !isPercent,
+      show: !isPercent && !isRaw,
       position: 'top',
       horizontalAlign: 'right',
       labels: { colors: textColor }
@@ -125,6 +128,13 @@ async function fetchMetrics() {
 
     if (res.status === 'success' && res.data?.length > 0) {
       const isPercent = props.mode === 'percentage'
+      const isRaw = props.mode === 'raw'
+
+      // Capture total capacity from the last data point for y-axis max
+      const lastRow = res.data[res.data.length - 1]
+      if (lastRow?.TotalCapacity) {
+        totalCapacity.value = lastRow.TotalCapacity
+      }
 
       const usedData = res.data.map((row: any) => {
         const ts = new Date(row.Timestamp).getTime()
@@ -137,6 +147,9 @@ async function fetchMetrics() {
 
       if (isPercent) {
         series.value = [{ name: 'Used %', data: usedData }]
+      } else if (isRaw) {
+        // Raw mode: only show Used series; y-axis max is set to totalCapacity
+        series.value = [{ name: 'Used', data: usedData }]
       } else {
         const totalData = res.data.map((row: any) => [
           new Date(row.Timestamp).getTime(),

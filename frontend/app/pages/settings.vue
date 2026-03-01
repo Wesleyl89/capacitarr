@@ -21,159 +21,165 @@
       <!-- ═══════════════════════════════════════════════════════
            GENERAL TAB
            ═══════════════════════════════════════════════════════ -->
-      <UiTabsContent value="general">
+      <UiTabsContent value="general" class="space-y-6">
         <!-- Poll Interval -->
-        <div
+        <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
           :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
-          class="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+          class="overflow-hidden"
         >
-          <div class="px-5 py-4 border-b border-border">
+          <UiCardHeader class="border-b border-border">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
                 <component :is="TimerIcon" class="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 class="font-semibold">Poll Interval</h3>
-                <span class="text-xs text-muted-foreground">How often Capacitarr checks your integrations</span>
+                <UiCardTitle class="text-base">Poll Interval</UiCardTitle>
+                <UiCardDescription>How often Capacitarr checks your integrations</UiCardDescription>
               </div>
             </div>
-          </div>
-          <div class="px-5 py-5 space-y-4">
+          </UiCardHeader>
+          <UiCardContent class="pt-5">
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Interval</label>
-              <select
-                v-model.number="pollIntervalSeconds"
-                class="w-full max-w-xs h-9 px-3 rounded-lg border border-input bg-input text-sm text-foreground focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-              >
-                <option :value="30">30 seconds</option>
-                <option :value="60">1 minute</option>
-                <option :value="300">5 minutes (default)</option>
-                <option :value="900">15 minutes</option>
-                <option :value="1800">30 minutes</option>
-                <option :value="3600">1 hour</option>
-              </select>
+              <div class="flex items-center gap-2">
+                <UiLabel>Interval</UiLabel>
+                <SaveIndicator :status="saveStatus.pollInterval" />
+              </div>
+              <UiSelect v-model="pollIntervalStr">
+                <UiSelectTrigger class="w-full max-w-xs">
+                  <UiSelectValue placeholder="Select interval" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="30">30 seconds</UiSelectItem>
+                  <UiSelectItem value="60">1 minute</UiSelectItem>
+                  <UiSelectItem value="300">5 minutes (default)</UiSelectItem>
+                  <UiSelectItem value="900">15 minutes</UiSelectItem>
+                  <UiSelectItem value="1800">30 minutes</UiSelectItem>
+                  <UiSelectItem value="3600">1 hour</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
               <p class="text-xs text-muted-foreground/70">The poller adjusts dynamically — no restart required.</p>
             </div>
-          </div>
-        </div>
+          </UiCardContent>
+        </UiCard>
 
         <!-- Data Management Section -->
-        <div
+        <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
           :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 100 } }"
-          class="mt-6 rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+          class="overflow-hidden"
         >
-          <div class="px-5 py-4 border-b border-border">
+          <UiCardHeader class="border-b border-border">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
                 <component :is="DatabaseIcon" class="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 class="font-semibold">Data Management</h3>
-                <span class="text-xs text-muted-foreground">Configure audit log retention</span>
+                <UiCardTitle class="text-base">Data Management</UiCardTitle>
+                <UiCardDescription>Configure audit log retention</UiCardDescription>
               </div>
             </div>
-          </div>
-          <div class="px-5 py-5 space-y-4">
+          </UiCardHeader>
+          <UiCardContent class="pt-5 space-y-4">
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Audit Log Retention</label>
-              <select
-                v-model.number="retentionDays"
-                class="w-full max-w-xs h-9 px-3 rounded-lg border border-input bg-input text-sm text-foreground focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-              >
-                <option :value="7">7 days</option>
-                <option :value="14">14 days</option>
-                <option :value="30">30 days (default)</option>
-                <option :value="60">60 days</option>
-                <option :value="90">90 days</option>
-                <option :value="180">180 days</option>
-                <option :value="365">365 days</option>
-                <option :value="0">Indefinite</option>
-              </select>
-              <p class="text-xs text-muted-foreground/70">How long to keep audit log entries before automatic cleanup.</p>
+              <div class="flex items-center gap-2">
+                <UiLabel>Audit Log Retention</UiLabel>
+                <SaveIndicator :status="saveStatus.retention" />
+              </div>
+              <UiSelect v-model="retentionStr">
+                <UiSelectTrigger class="w-full max-w-xs">
+                  <UiSelectValue placeholder="Select retention" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="7">7 days</UiSelectItem>
+                  <UiSelectItem value="14">14 days</UiSelectItem>
+                  <UiSelectItem value="30">30 days (default)</UiSelectItem>
+                  <UiSelectItem value="60">60 days</UiSelectItem>
+                  <UiSelectItem value="90">90 days</UiSelectItem>
+                  <UiSelectItem value="180">180 days</UiSelectItem>
+                  <UiSelectItem value="365">365 days</UiSelectItem>
+                  <UiSelectItem value="0">Indefinite</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
 
             <!-- Indefinite warning -->
-            <div
-              v-if="retentionDays === 0"
-              class="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
-            >
-              ⚠️ <strong>Warning:</strong> Indefinite retention will cause the database to grow continuously. This may eventually impact performance.
-            </div>
-          </div>
-        </div>
+            <UiAlert v-if="retentionDays === 0" variant="destructive">
+              <UiAlertTitle>Warning</UiAlertTitle>
+              <UiAlertDescription>
+                Indefinite retention will cause the database to grow continuously. This may eventually impact performance.
+              </UiAlertDescription>
+            </UiAlert>
+          </UiCardContent>
+        </UiCard>
 
         <!-- Display Preferences Section -->
-        <div
+        <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
           :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 200 } }"
-          class="mt-6 rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+          class="overflow-hidden"
         >
-          <div class="px-5 py-4 border-b border-border">
+          <UiCardHeader class="border-b border-border">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
                 <component :is="MonitorIcon" class="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 class="font-semibold">Display</h3>
-                <span class="text-xs text-muted-foreground">Timezone and clock format preferences (saved locally)</span>
+                <UiCardTitle class="text-base">Display</UiCardTitle>
+                <UiCardDescription>Timezone and clock format preferences (saved locally)</UiCardDescription>
               </div>
             </div>
-          </div>
-          <div class="px-5 py-5 space-y-5">
+          </UiCardHeader>
+          <UiCardContent class="pt-5 space-y-5">
             <!-- Timezone -->
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Timezone</label>
-              <select
-                :value="displayTimezone"
-                class="w-full max-w-xs h-9 px-3 rounded-lg border border-input bg-input text-sm text-foreground focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-                @change="setTimezone(($event.target as HTMLSelectElement).value)"
-              >
-                <option value="local">Local (Browser)</option>
-                <option value="UTC">UTC</option>
-                <option value="America/New_York">America/New_York (Eastern)</option>
-                <option value="America/Chicago">America/Chicago (Central)</option>
-                <option value="America/Denver">America/Denver (Mountain)</option>
-                <option value="America/Los_Angeles">America/Los_Angeles (Pacific)</option>
-                <option value="Europe/London">Europe/London</option>
-                <option value="Europe/Paris">Europe/Paris</option>
-                <option value="Asia/Tokyo">Asia/Tokyo</option>
-                <option value="Australia/Sydney">Australia/Sydney</option>
-              </select>
+              <UiLabel>Timezone</UiLabel>
+              <UiSelect :model-value="displayTimezone" @update:model-value="(v: any) => setTimezone(String(v))">
+                <UiSelectTrigger class="w-full max-w-xs">
+                  <UiSelectValue placeholder="Select timezone" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="local">Local (Browser)</UiSelectItem>
+                  <UiSelectItem value="UTC">UTC</UiSelectItem>
+                  <UiSelectItem value="America/New_York">America/New_York (Eastern)</UiSelectItem>
+                  <UiSelectItem value="America/Chicago">America/Chicago (Central)</UiSelectItem>
+                  <UiSelectItem value="America/Denver">America/Denver (Mountain)</UiSelectItem>
+                  <UiSelectItem value="America/Los_Angeles">America/Los_Angeles (Pacific)</UiSelectItem>
+                  <UiSelectItem value="Europe/London">Europe/London</UiSelectItem>
+                  <UiSelectItem value="Europe/Paris">Europe/Paris</UiSelectItem>
+                  <UiSelectItem value="Asia/Tokyo">Asia/Tokyo</UiSelectItem>
+                  <UiSelectItem value="Australia/Sydney">Australia/Sydney</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
 
             <!-- Clock Format -->
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Clock Format</label>
+              <UiLabel>Clock Format</UiLabel>
               <div class="flex gap-2">
-                <button
-                  class="h-9 px-4 rounded-lg text-sm font-medium border transition-colors"
-                  :class="displayClockFormat === '12h'
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-input text-muted-foreground hover:bg-accent'"
+                <UiButton
+                  :variant="displayClockFormat === '12h' ? 'default' : 'outline'"
+                  size="sm"
                   @click="setClockFormat('12h')"
                 >
                   12-hour
-                </button>
-                <button
-                  class="h-9 px-4 rounded-lg text-sm font-medium border transition-colors"
-                  :class="displayClockFormat === '24h'
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-input text-muted-foreground hover:bg-accent'"
+                </UiButton>
+                <UiButton
+                  :variant="displayClockFormat === '24h' ? 'default' : 'outline'"
+                  size="sm"
                   @click="setClockFormat('24h')"
                 >
                   24-hour
-                </button>
+                </UiButton>
               </div>
             </div>
 
             <!-- Theme -->
             <div class="space-y-2">
-              <label class="text-sm font-medium text-foreground">Theme</label>
+              <UiLabel>Theme</UiLabel>
               <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 <button
                   v-for="t in themeList"
@@ -192,20 +198,8 @@
             </div>
 
             <p class="text-xs text-muted-foreground/70">Changes apply immediately and are stored in your browser.</p>
-          </div>
-        </div>
-
-        <!-- Save General Settings -->
-        <div class="mt-6 mb-8 flex items-center gap-3">
-          <button
-            class="h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
-            :disabled="savingGeneral"
-            @click="saveGeneralSettings"
-          >
-            {{ savingGeneral ? 'Saving…' : 'Save Settings' }}
-          </button>
-          <span v-if="generalSaved" class="text-sm text-emerald-500 font-medium">✓ Saved</span>
-        </div>
+          </UiCardContent>
+        </UiCard>
       </UiTabsContent>
 
       <!-- ═══════════════════════════════════════════════════════
@@ -245,40 +239,36 @@
 
         <!-- Integration Cards Grid -->
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div
+          <UiCard
             v-for="(integration, idx) in integrations"
             :key="integration.id"
             v-motion
             :initial="{ opacity: 0, y: 12 }"
             :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 80 * idx } }"
-            data-slot="integration-card"
-            class="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+            class="overflow-hidden"
           >
             <!-- Card Header -->
-            <div class="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div :class="['w-10 h-10 rounded-lg flex items-center justify-center', typeColor(integration.type)]">
-                  <component :is="typeIcon(integration.type)" class="w-5 h-5 text-white" />
+            <UiCardHeader class="border-b border-border">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div :class="['w-10 h-10 rounded-lg flex items-center justify-center', typeColor(integration.type)]">
+                    <component :is="typeIcon(integration.type)" class="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <UiCardTitle class="text-base">{{ integration.name }}</UiCardTitle>
+                    <span class="text-xs uppercase tracking-wider font-medium" :class="typeTextColor(integration.type)">
+                      {{ integration.type }}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h3 class="font-semibold">{{ integration.name }}</h3>
-                  <span class="text-xs uppercase tracking-wider font-medium" :class="typeTextColor(integration.type)">
-                    {{ integration.type }}
-                  </span>
-                </div>
+                <UiBadge :variant="integration.enabled ? 'default' : 'secondary'">
+                  {{ integration.enabled ? 'Active' : 'Disabled' }}
+                </UiBadge>
               </div>
-              <span
-                class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium"
-                :class="integration.enabled
-                  ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-muted text-muted-foreground'"
-              >
-                {{ integration.enabled ? 'Active' : 'Disabled' }}
-              </span>
-            </div>
+            </UiCardHeader>
 
             <!-- Card Body -->
-            <div class="px-5 py-4 space-y-2 text-sm text-muted-foreground">
+            <UiCardContent class="pt-4 space-y-2 text-sm text-muted-foreground">
               <div class="flex items-center gap-2">
                 <component :is="LinkIcon" class="w-3.5 h-3.5 shrink-0" />
                 <span class="truncate">{{ integration.url }}</span>
@@ -295,241 +285,200 @@
                 <component :is="AlertTriangleIcon" class="w-3.5 h-3.5 shrink-0" />
                 <span class="text-xs">{{ integration.lastError }}</span>
               </div>
-            </div>
+            </UiCardContent>
 
             <!-- Card Footer -->
-            <div class="px-5 py-3 border-t border-border flex items-center justify-between">
+            <UiCardFooter class="border-t border-border flex items-center justify-between">
               <div class="flex gap-2">
-                <button
-                  class="h-7 px-2.5 rounded-md text-xs font-medium border border-input bg-input hover:bg-accent transition-colors"
-                  @click="testConnection(integration)"
-                >
+                <UiButton variant="outline" size="sm" @click="testConnection(integration)">
                   Test
-                </button>
-                <button
-                  class="h-7 px-2.5 rounded-md text-xs font-medium border border-input bg-input hover:bg-accent transition-colors"
-                  @click="openEditModal(integration)"
-                >
+                </UiButton>
+                <UiButton variant="outline" size="sm" @click="openEditModal(integration)">
                   Edit
-                </button>
+                </UiButton>
               </div>
-              <button
-                class="h-7 px-2.5 rounded-md text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                @click="deleteIntegration(integration)"
-              >
+              <UiButton variant="destructive" size="sm" @click="deleteIntegration(integration)">
                 Delete
-              </button>
-            </div>
-          </div>
+              </UiButton>
+            </UiCardFooter>
+          </UiCard>
         </div>
       </UiTabsContent>
 
       <!-- ═══════════════════════════════════════════════════════
            AUTHENTICATION TAB
            ═══════════════════════════════════════════════════════ -->
-      <UiTabsContent value="authentication">
+      <UiTabsContent value="authentication" class="space-y-6">
         <!-- Password Change -->
-        <div
+        <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
           :enter="{ opacity: 1, y: 0 }"
-          class="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+          class="overflow-hidden"
         >
-          <div class="px-5 py-4 border-b border-border">
+          <UiCardHeader class="border-b border-border">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center">
                 <component :is="ShieldIcon" class="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 class="font-semibold">Change Password</h3>
-                <span class="text-xs text-muted-foreground">Update your admin password</span>
+                <UiCardTitle class="text-base">Change Password</UiCardTitle>
+                <UiCardDescription>Update your admin password</UiCardDescription>
               </div>
             </div>
-          </div>
-          <div class="px-5 py-5 space-y-4">
+          </UiCardHeader>
+          <UiCardContent class="pt-5 space-y-4 max-w-md">
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Current Password</label>
-              <input
+              <UiLabel for="current-password">Current Password</UiLabel>
+              <UiInput
+                id="current-password"
                 v-model="passwordForm.currentPassword"
                 type="password"
                 placeholder="Enter current password"
-                class="w-full max-w-sm h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
               />
             </div>
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">New Password</label>
-              <input
+              <UiLabel for="new-password">New Password</UiLabel>
+              <UiInput
+                id="new-password"
                 v-model="passwordForm.newPassword"
                 type="password"
                 placeholder="Enter new password"
-                class="w-full max-w-sm h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
               />
             </div>
             <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Confirm New Password</label>
-              <input
+              <UiLabel for="confirm-password">Confirm New Password</UiLabel>
+              <UiInput
+                id="confirm-password"
                 v-model="passwordForm.confirmPassword"
                 type="password"
                 placeholder="Confirm new password"
-                class="w-full max-w-sm h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
               />
             </div>
-            <div v-if="passwordError" class="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">
-              {{ passwordError }}
-            </div>
-            <div class="flex items-center gap-3">
-              <button
-                class="h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
-                :disabled="savingPassword"
-                @click="changePassword"
-              >
+            <UiAlert v-if="passwordError" variant="destructive">
+              <UiAlertDescription>{{ passwordError }}</UiAlertDescription>
+            </UiAlert>
+            <div>
+              <UiButton :disabled="savingPassword" @click="changePassword">
                 {{ savingPassword ? 'Changing…' : 'Change Password' }}
-              </button>
+              </UiButton>
             </div>
-          </div>
-        </div>
+          </UiCardContent>
+        </UiCard>
 
         <!-- API Key -->
-        <div
+        <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
           :enter="{ opacity: 1, y: 0, transition: { delay: 100 } }"
-          class="mt-6 mb-8 rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+          class="overflow-hidden"
         >
-          <div class="px-5 py-4 border-b border-border">
+          <UiCardHeader class="border-b border-border">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
                 <component :is="KeyIcon" class="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 class="font-semibold">API Key</h3>
-                <span class="text-xs text-muted-foreground">For external tool integration</span>
+                <UiCardTitle class="text-base">API Key</UiCardTitle>
+                <UiCardDescription>For external tool integration</UiCardDescription>
               </div>
             </div>
-          </div>
-          <div class="px-5 py-5 space-y-4">
+          </UiCardHeader>
+          <UiCardContent class="pt-5 space-y-4">
             <div v-if="apiKey" class="flex items-center gap-2">
               <code class="flex-1 px-3 py-2 bg-muted rounded-lg text-sm font-mono break-all">{{ apiKey }}</code>
-              <button
-                class="h-9 px-3 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors shrink-0"
-                @click="copyApiKey"
-              >
+              <UiButton variant="outline" size="sm" @click="copyApiKey">
                 Copy
-              </button>
+              </UiButton>
             </div>
             <div v-else class="text-sm text-muted-foreground">No API key generated yet.</div>
-            <button
-              class="h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
-              :disabled="generatingApiKey"
-              @click="generateApiKey"
-            >
-              {{ apiKey ? 'Regenerate API Key' : 'Generate API Key' }}
-            </button>
-          </div>
-        </div>
+            <div>
+              <UiButton :disabled="generatingApiKey" @click="generateApiKey">
+                {{ apiKey ? 'Regenerate API Key' : 'Generate API Key' }}
+              </UiButton>
+            </div>
+          </UiCardContent>
+        </UiCard>
       </UiTabsContent>
     </UiTabs>
 
-    <!-- Integration Modal (shared across tabs) -->
-    <Teleport to="body">
-      <div
-        v-if="showModal"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        @click.self="showModal = false"
-      >
-        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" @click="showModal = false" />
-        <div
-          v-motion
-          :initial="{ opacity: 0, scale: 0.95 }"
-          :enter="{ opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 350, damping: 25 } }"
-          class="relative w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-6"
-        >
-          <h3 class="text-lg font-semibold mb-4">
+    <!-- Integration Modal -->
+    <UiDialog :open="showModal" @update:open="(val: boolean) => { showModal = val }">
+      <UiDialogContent class="max-w-md">
+        <UiDialogHeader>
+          <UiDialogTitle>
             {{ editingIntegration ? 'Edit Integration' : 'Add Integration' }}
-          </h3>
+          </UiDialogTitle>
+        </UiDialogHeader>
 
-          <form class="space-y-4" @submit.prevent="onSubmit">
-            <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Type</label>
-              <select
-                v-model="formState.type"
-                :disabled="!!editingIntegration"
-                class="w-full h-9 px-3 rounded-lg border border-input bg-input text-sm disabled:opacity-60"
-              >
-                <option value="sonarr">Sonarr</option>
-                <option value="radarr">Radarr</option>
-                <option value="lidarr">Lidarr</option>
-                <option value="plex">Plex</option>
-                <option value="tautulli">Tautulli</option>
-                <option value="overseerr">Overseerr</option>
-              </select>
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">Name</label>
-              <input
-                v-model="formState.name"
-                type="text"
-                :placeholder="namePlaceholder"
-                class="w-full h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-              />
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">URL</label>
-              <input
-                v-model="formState.url"
-                type="text"
-                placeholder="http://localhost:8989"
-                class="w-full h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-              />
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="text-sm font-medium text-foreground">
-                {{ formState.type === 'plex' ? 'Plex Token' : 'API Key' }}
-              </label>
-              <input
-                v-model="formState.apiKey"
-                type="password"
-                placeholder="Enter API key or token"
-                class="w-full h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50"
-              />
-            </div>
-
-            <!-- Error -->
-            <div v-if="formError" class="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">
-              {{ formError }}
-            </div>
-          </form>
-
-          <!-- Footer -->
-          <div class="flex items-center justify-between mt-6">
-            <button
-              class="h-9 px-4 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
-              @click="testFormConnection"
-            >
-              Test Connection
-            </button>
-            <div class="flex gap-2">
-              <button
-                class="h-9 px-4 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                @click="showModal = false"
-              >
-                Cancel
-              </button>
-              <button
-                class="h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium shadow-sm transition-colors"
-                :disabled="saving"
-                @click="onSubmit"
-              >
-                {{ editingIntegration ? 'Save' : 'Add' }}
-              </button>
-            </div>
+        <form class="space-y-4" @submit.prevent="onSubmit">
+          <div class="space-y-1.5">
+            <UiLabel>Type</UiLabel>
+            <UiSelect v-model="formState.type" :disabled="!!editingIntegration">
+              <UiSelectTrigger class="w-full">
+                <UiSelectValue placeholder="Select type" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="sonarr">Sonarr</UiSelectItem>
+                <UiSelectItem value="radarr">Radarr</UiSelectItem>
+                <UiSelectItem value="lidarr">Lidarr</UiSelectItem>
+                <UiSelectItem value="plex">Plex</UiSelectItem>
+                <UiSelectItem value="tautulli">Tautulli</UiSelectItem>
+                <UiSelectItem value="overseerr">Overseerr</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
           </div>
-        </div>
-      </div>
-    </Teleport>
+
+          <div class="space-y-1.5">
+            <UiLabel>Name</UiLabel>
+            <UiInput
+              v-model="formState.name"
+              type="text"
+              :placeholder="namePlaceholder"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <UiLabel>URL</UiLabel>
+            <UiInput
+              v-model="formState.url"
+              type="text"
+              placeholder="http://localhost:8989"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <UiLabel>
+              {{ formState.type === 'plex' ? 'Plex Token' : 'API Key' }}
+            </UiLabel>
+            <UiInput
+              v-model="formState.apiKey"
+              type="password"
+              placeholder="Enter API key or token"
+            />
+          </div>
+
+          <!-- Error -->
+          <UiAlert v-if="formError" variant="destructive">
+            <UiAlertDescription>{{ formError }}</UiAlertDescription>
+          </UiAlert>
+        </form>
+
+        <UiDialogFooter class="flex items-center justify-between">
+          <UiButton variant="outline" @click="testFormConnection">
+            Test Connection
+          </UiButton>
+          <div class="flex gap-2">
+            <UiButton variant="ghost" @click="showModal = false">
+              Cancel
+            </UiButton>
+            <UiButton :disabled="saving" @click="onSubmit">
+              {{ editingIntegration ? 'Save' : 'Add' }}
+            </UiButton>
+          </div>
+        </UiDialogFooter>
+      </UiDialogContent>
+    </UiDialog>
   </div>
 </template>
 
@@ -539,9 +488,37 @@ import {
   LinkIcon, KeyIcon, ClockIcon, AlertTriangleIcon,
   TvIcon, FilmIcon, PlayCircleIcon, ServerIcon,
   DatabaseIcon, MonitorIcon, ActivityIcon,
-  InboxIcon, MusicIcon, TimerIcon, ShieldIcon
+  InboxIcon, MusicIcon, TimerIcon, ShieldIcon,
+  CheckIcon
 } from 'lucide-vue-next'
 import { formatRelativeTime } from '~/utils/format'
+
+// ─── SaveIndicator functional component ──────────────────────────────────────
+const SaveIndicator = defineComponent({
+  props: {
+    status: { type: String as () => 'idle' | 'saving' | 'saved' | 'error', default: 'idle' }
+  },
+  setup(props) {
+    return () => {
+      if (props.status === 'idle') return null
+      if (props.status === 'saving') {
+        return h('span', { class: 'inline-flex items-center gap-1 text-xs text-muted-foreground animate-pulse' }, '…saving')
+      }
+      if (props.status === 'saved') {
+        return h('span', {
+          class: 'inline-flex items-center gap-1 text-xs text-emerald-500 font-medium transition-opacity'
+        }, [
+          h(CheckIcon, { class: 'w-3 h-3' }),
+          'Saved'
+        ])
+      }
+      if (props.status === 'error') {
+        return h('span', { class: 'inline-flex items-center gap-1 text-xs text-red-500 font-medium' }, '✕ Failed')
+      }
+      return null
+    }
+  }
+})
 
 const api = useApi()
 const { timezone: displayTimezone, clockFormat: displayClockFormat, setTimezone, setClockFormat } = useDisplayPrefs()
@@ -558,8 +535,23 @@ const { addToast } = useToast()
 // General settings state
 const retentionDays = ref(30)
 const pollIntervalSeconds = ref(300)
-const savingGeneral = ref(false)
-const generalSaved = ref(false)
+
+// String wrappers for UiSelect (which requires string values)
+const pollIntervalStr = computed({
+  get: () => String(pollIntervalSeconds.value),
+  set: (val: string) => { pollIntervalSeconds.value = Number(val) }
+})
+
+const retentionStr = computed({
+  get: () => String(retentionDays.value),
+  set: (val: string) => { retentionDays.value = Number(val) }
+})
+
+// Per-field save status for inline feedback
+const saveStatus = reactive<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({
+  pollInterval: 'idle',
+  retention: 'idle',
+})
 
 // Password change state
 const passwordForm = reactive({
@@ -624,6 +616,47 @@ function typeTextColor(type: string) {
     default: return 'text-muted-foreground'
   }
 }
+
+// ─── Auto-save helpers ───────────────────────────────────────────────────────
+let saveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+
+function showSaveStatus(field: string, status: 'saving' | 'saved' | 'error') {
+  saveStatus[field] = status
+  if (status === 'saved') {
+    if (saveTimers[field]) clearTimeout(saveTimers[field])
+    saveTimers[field] = setTimeout(() => { saveStatus[field] = 'idle' }, 2000)
+  }
+}
+
+async function autoSavePreference(field: string, key: string, value: any) {
+  showSaveStatus(field, 'saving')
+  try {
+    const currentPrefs = await api('/api/v1/preferences') as any
+    await api('/api/v1/preferences', {
+      method: 'PUT',
+      body: { ...currentPrefs, [key]: value }
+    })
+    showSaveStatus(field, 'saved')
+  } catch (e) {
+    console.error(`Failed to save ${key}:`, e)
+    showSaveStatus(field, 'error')
+    addToast(`Failed to save ${field} setting`, 'error')
+  }
+}
+
+// Watch poll interval — immediate save on select change
+watch(pollIntervalSeconds, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    autoSavePreference('pollInterval', 'pollIntervalSeconds', newVal)
+  }
+})
+
+// Watch retention days — immediate save on select change
+watch(retentionDays, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    autoSavePreference('retention', 'auditLogRetentionDays', newVal)
+  }
+})
 
 // ─── Integrations ────────────────────────────────────────────────────────────
 async function fetchIntegrations() {
@@ -739,30 +772,6 @@ async function fetchPreferences() {
     }
   } catch (e) {
     console.error('Failed to fetch preferences:', e)
-  }
-}
-
-async function saveGeneralSettings() {
-  savingGeneral.value = true
-  generalSaved.value = false
-  try {
-    const currentPrefs = await api('/api/v1/preferences') as any
-    await api('/api/v1/preferences', {
-      method: 'PUT',
-      body: {
-        ...currentPrefs,
-        auditLogRetentionDays: retentionDays.value,
-        pollIntervalSeconds: pollIntervalSeconds.value
-      }
-    })
-    generalSaved.value = true
-    addToast('Settings saved', 'success')
-    setTimeout(() => { generalSaved.value = false }, 3000)
-  } catch (e) {
-    console.error('Failed to save settings:', e)
-    addToast('Failed to save settings', 'error')
-  } finally {
-    savingGeneral.value = false
   }
 }
 

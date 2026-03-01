@@ -1,0 +1,27 @@
+# Version control
+.git
+.gitignore
+
+# Node modules (reinstalled in Docker)
+frontend/node_modules
+frontend/.output
+frontend/.nuxt
+frontend/.data
+
+# Go build artifacts
+backend/capacitarr
+backend/tmp
+
+# Documentation and plans
+docs/
+*.md
+!frontend/README.md
+
+# IDE and editor files
+.vscode
+*.code-workspace
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -218,9 +218,9 @@ function parseLegacyReason(reason: string): LegacyParsed {
   const legacyFactors: LegacyFactor[] = []
   let match: RegExpExecArray | null
 
-  while ((match = factorPattern.exec(breakdownStr)) !== null) {
-    const name = match[1]
-    const value = parseFloat(match[2])
+  while ((match = factorPattern.exec(breakdownStr!)) !== null) {
+    const name = match[1]!
+    const value = parseFloat(match[2]!)
     legacyFactors.push({
       name,
       label: LEGACY_LABELS[name] || name,
@@ -229,7 +229,7 @@ function parseLegacyReason(reason: string): LegacyParsed {
     })
   }
 
-  return { score, factors: legacyFactors, rawBreakdown: breakdownStr }
+  return { score: score ?? null, factors: legacyFactors, rawBreakdown: breakdownStr ?? '' }
 }
 
 const legacyParsed = computed(() => parseLegacyReason(props.reason))

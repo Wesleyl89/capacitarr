@@ -66,10 +66,10 @@
           class="absolute bottom-3 flex flex-col items-center z-20"
           :style="{ left: group.targetPct + '%', transform: 'translateX(-50%)' }"
         >
-          <span class="text-[10px] font-medium text-success whitespace-nowrap mb-0.5">
+          <span class="text-[10px] font-medium text-emerald-500 whitespace-nowrap mb-0.5">
             Target {{ group.targetPct }}%
           </span>
-          <span class="text-success text-[10px] leading-none mb-0.5">▼</span>
+          <span class="text-emerald-500 text-[10px] leading-none mb-0.5">▼</span>
         </div>
         <!-- Threshold marker BELOW the bar -->
         <div
@@ -77,8 +77,8 @@
           class="absolute top-3 flex flex-col items-center z-20"
           :style="{ left: group.thresholdPct + '%', transform: 'translateX(-50%)' }"
         >
-          <span class="text-destructive text-[10px] leading-none mt-0.5">▲</span>
-          <span class="text-[10px] font-medium text-destructive whitespace-nowrap mt-0.5">
+          <span class="text-red-500 text-[10px] leading-none mt-0.5">▲</span>
+          <span class="text-[10px] font-medium text-red-500 whitespace-nowrap mt-0.5">
             Threshold {{ group.thresholdPct }}%
           </span>
         </div>
@@ -139,30 +139,30 @@ const usagePercent = computed(() => {
 
 const statusBgColor = computed(() => {
   const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'bg-destructive'
-  if (pct >= (props.group.targetPct || 75)) return 'bg-warning'
-  return 'bg-primary'
+  if (pct >= (props.group.thresholdPct || 85)) return 'bg-red-500'
+  if (pct >= (props.group.targetPct || 75)) return 'bg-amber-500'
+  return 'bg-green-500'
 })
 
 const statusTextColor = computed(() => {
   const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'text-destructive'
-  if (pct >= (props.group.targetPct || 75)) return 'text-warning'
-  return 'text-primary'
+  if (pct >= (props.group.thresholdPct || 85)) return 'text-red-500'
+  if (pct >= (props.group.targetPct || 75)) return 'text-amber-500'
+  return 'text-green-500'
 })
 
 const barColor = computed(() => {
   const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'bg-destructive'
-  if (pct >= (props.group.targetPct || 75)) return 'bg-warning'
-  return 'bg-primary'
+  if (pct >= (props.group.thresholdPct || 85)) return 'bg-red-500'
+  if (pct >= (props.group.targetPct || 75)) return 'bg-amber-500'
+  return 'bg-green-500'
 })
 
 /** Inline fill color for the progress bar (bypasses Tailwind alpha issues) */
 const barFillColor = computed(() => {
   const pct = usagePercent.value
-  if (pct >= (props.group.thresholdPct || 85)) return 'var(--color-destructive)'
-  if (pct >= (props.group.targetPct || 75)) return 'var(--color-warning)'
-  return 'var(--color-primary)'
+  if (pct >= (props.group.thresholdPct || 85)) return '#ef4444'
+  if (pct >= (props.group.targetPct || 75)) return '#eab308'
+  return '#22c55e'
 })
 </script>

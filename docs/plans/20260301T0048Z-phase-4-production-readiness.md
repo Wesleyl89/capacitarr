@@ -265,6 +265,40 @@ The Run Now button and `POST /api/v1/run-now` endpoint already work. Polish the 
 
 ---
 
+### Phase 12: Frontend/Backend Decoupling & OpenAPI Spec
+
+**Effort:** M
+**Source:** Architecture discussion (2026-03-01)
+
+Formalize the clean separation between the Capacitarr REST API and the premium Vue/Nuxt frontend, enabling third-party frontends (React, Svelte, mobile apps, CLI tools) to plug into the backend.
+
+**Current state (already decoupled at ~90%):**
+- All endpoints are under `/api/v1/` with standard JSON request/response, no SSR
+- CORS middleware already exists (activated via `CORS_ORIGINS` env var)
+- Auth supports 4 methods: cookie JWT, `Authorization: Bearer`, `X-Api-Key` header, proxy auth header
+- Login endpoint already returns the JWT in the response body for non-cookie clients
+
+**Remaining work:**
+
+1. **OpenAPI 3.1 specification** — Write/generate a complete OpenAPI spec for all `/api/v1/` endpoints. This is the #1 enabler for third-party developers.
+2. **Optional frontend embedding** — Make `go:embed frontend/dist` conditional so the backend can be built as an API-only binary (headless mode).
+3. **Headless Docker image variant** — Dockerfile target that skips the frontend build stage, producing a smaller API-only image.
+4. **CORS documentation** — Document `CORS_ORIGINS` env var and headless deployment patterns.
+5. **API versioning strategy** — Formalize the `/api/v1/` contract: what's stable, what's experimental.
+
+**Deployment models enabled:**
+- **Bundled (current)** — Single container with embedded frontend
+- **Headless** — API-only container; users bring their own frontend
+- **Separate services** — Backend + frontend as independent docker-compose services
+
+**Files:**
+- `docs/api/openapi.yaml` — OpenAPI 3.1 specification
+- `backend/main.go` — conditional frontend embedding
+- `Dockerfile` — multi-target build (bundled vs headless)
+- `docs/deployment.md` — headless deployment documentation
+
+---
+
 ## Deferred to Advanced Configuration Backlog
 
 These items are tracked in `20260301T0048Z-advanced-configuration-backlog.md` and will be implemented when demand warrants:
@@ -289,3 +323,4 @@ These items are tracked in `20260301T0048Z-advanced-configuration-backlog.md` an
 | 9 | Visual design polish (on `feature/visual-polish-apexcharts` branch) | L | Visual |
 | 10 | Run Now UX polish | S | UX |
 | 11 | Touchscreen + pull-to-refresh | S-M | Accessibility |
+| 12 | Frontend/backend decoupling & OpenAPI spec | M | Architecture |

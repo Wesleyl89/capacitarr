@@ -108,7 +108,7 @@ import type { ThemeMeta } from '~/composables/useTheme'
 const { isDark, toggle } = useAppColorMode()
 const { theme, setTheme, themes } = useTheme()
 const router = useRouter()
-const token = useCookie('jwt')
+const authenticated = useCookie('authenticated')
 
 const navLinks = [
   { to: '/', label: 'Dashboard' },
@@ -118,7 +118,7 @@ const navLinks = [
 ]
 
 function logout() {
-  token.value = null
+  authenticated.value = null
   router.push('/login')
 }
 

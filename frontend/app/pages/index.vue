@@ -1,5 +1,12 @@
 <template>
   <div>
+    <!-- Pull-to-refresh indicator -->
+    <PullToRefreshIndicator
+      :pull-distance="pullDistance"
+      :pull-progress="pullProgress"
+      :is-refreshing="isRefreshing"
+    />
+
     <!-- Header -->
     <div data-slot="page-header" class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
@@ -292,6 +299,12 @@ import { formatBytes, formatRelativeTime } from '~/utils/format'
 
 const api = useApi()
 const { primaryColor, destructiveColor } = useThemeColors()
+
+// Pull-to-refresh for touch devices
+const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () => {
+  await fetchDashboardData(true)
+  refreshKey.value++
+})
 
 const chartModeOptions = [
   { label: 'Percentage', value: 'percentage' },

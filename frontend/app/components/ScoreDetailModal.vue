@@ -27,10 +27,10 @@
         <!-- Factor Table -->
         <div v-if="weightFactors.length > 0">
           <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Score Factors</h3>
-          <div class="rounded-lg border border-border overflow-hidden">
+          <div class="rounded-lg border border-border/50 overflow-hidden bg-card/80">
             <UiTable>
               <UiTableHeader>
-                <UiTableRow class="bg-muted/50">
+                <UiTableRow class="bg-primary/5 dark:bg-primary/10">
                   <UiTableHead class="text-xs">Factor</UiTableHead>
                   <UiTableHead class="text-xs text-right">Raw</UiTableHead>
                   <UiTableHead class="text-xs text-right">Weight</UiTableHead>
@@ -79,7 +79,7 @@
       </div>
 
       <!-- Footer -->
-      <UiDialogFooter class="flex-row items-center justify-between border-t border-border pt-3">
+      <UiDialogFooter class="flex-row items-center justify-between border-t border-primary/10 dark:border-primary/15 pt-3">
         <div class="flex items-center gap-3">
           <span class="text-sm text-muted-foreground font-mono tabular-nums">
             {{ formatBytes(sizeBytes) }}
