@@ -98,6 +98,48 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 	protected := g.Group("")
 	protected.Use(RequireAuth(database, cfg))
 
+	protected.PUT("/auth/password", func(c echo.Context) error {
+		username, ok := c.Get("user").(string)
+		if !ok || username == "" {
+			return echo.ErrUnauthorized
+		}
+
+		var req struct {
+			CurrentPassword string `json:"currentPassword"`
+			NewPassword     string `json:"newPassword"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		}
+
+		if req.CurrentPassword == "" || req.NewPassword == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Current and new password are required"})
+		}
+		if len(req.NewPassword) < 8 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "New password must be at least 8 characters"})
+		}
+
+		var user db.AuthConfig
+		if err := database.Where("username = ?", username).First(&user).Error; err != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+		}
+
+		hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
+		}
+
+		if err := database.Model(&user).Update("password", string(hashed)).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update password"})
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
+	})
+
 	protected.POST("/auth/apikey", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
