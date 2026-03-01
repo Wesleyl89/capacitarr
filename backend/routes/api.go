@@ -159,6 +159,20 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 		return c.JSON(http.StatusOK, map[string]string{"api_key": apiKey})
 	})
 
+	protected.GET("/auth/apikey", func(c echo.Context) error {
+		username, ok := c.Get("user").(string)
+		if !ok || username == "" {
+			return echo.ErrUnauthorized
+		}
+
+		var user db.AuthConfig
+		if err := database.Where("username = ?", username).First(&user).Error; err != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{"api_key": user.APIKey})
+	})
+
 	protected.GET("/metrics/history", func(c echo.Context) error {
 		resolution := c.QueryParam("resolution")
 		if resolution == "" {

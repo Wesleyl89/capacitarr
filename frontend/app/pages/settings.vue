@@ -823,8 +823,10 @@ async function generateApiKey() {
 
 async function fetchApiKey() {
   try {
-    const prefs = await api('/api/v1/preferences') as any
-    // API key is fetched from the auth endpoint — stub for now
+    const result = await api('/api/v1/auth/apikey') as any
+    if (result?.api_key) {
+      apiKey.value = result.api_key
+    }
   } catch {
     // Silently fail — no API key yet
   }
