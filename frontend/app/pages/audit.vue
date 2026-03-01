@@ -60,7 +60,6 @@
         <UiTable>
           <UiTableHeader class="sticky top-0 z-10 bg-background">
             <UiTableRow>
-              <UiTableHead class="w-8"></UiTableHead>
               <UiTableHead
                 class="cursor-pointer select-none group"
                 @click="toggleAuditSort('created_at')"
@@ -112,15 +111,15 @@
           <UiTableBody>
             <template v-for="group in groupedLogs" :key="group.key">
               <UiTableRow class="cursor-pointer" @click="selectItem(group.entry); group.seasons.length > 0 && toggleGroup(group.key)">
-                <UiTableCell class="w-8">
-                  <button v-if="group.seasons.length > 0" class="text-muted-foreground hover:text-foreground transition-colors" @click.stop="toggleGroup(group.key)">
-                    <ChevronRightIcon class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-90': expandedGroups.has(group.key) }" />
-                  </button>
-                </UiTableCell>
                 <UiTableCell class="text-xs text-muted-foreground whitespace-nowrap">{{ formatTimestamp(group.entry.createdAt) }}</UiTableCell>
                 <UiTableCell class="font-medium whitespace-nowrap">
-                  {{ group.entry.mediaName }}
-                  <span v-if="group.seasons.length > 0" class="ml-1.5 text-xs text-muted-foreground font-normal">({{ group.seasons.length }} season{{ group.seasons.length !== 1 ? 's' : '' }})</span>
+                  <div class="flex items-center gap-2">
+                    <span class="truncate">{{ group.entry.mediaName }}</span>
+                    <button v-if="group.seasons.length > 0" class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5" @click.stop="toggleGroup(group.key)">
+                      <ChevronRightIcon class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-90': expandedGroups.has(group.key) }" />
+                      <span class="text-xs text-muted-foreground font-normal whitespace-nowrap">({{ group.seasons.length }} season{{ group.seasons.length !== 1 ? 's' : '' }})</span>
+                    </button>
+                  </div>
                 </UiTableCell>
                 <UiTableCell>
                   <UiBadge variant="secondary" class="capitalize">{{ group.entry.mediaType }}</UiBadge>
@@ -135,7 +134,6 @@
               </UiTableRow>
               <template v-if="expandedGroups.has(group.key)">
                 <UiTableRow v-for="season in group.seasons" :key="season.id" class="bg-muted/30 cursor-pointer" @click.stop="selectItem(season)">
-                  <UiTableCell class="w-8"></UiTableCell>
                   <UiTableCell class="text-xs text-muted-foreground whitespace-nowrap pl-8">{{ formatTimestamp(season.createdAt) }}</UiTableCell>
                   <UiTableCell class="text-muted-foreground whitespace-nowrap pl-8">
                     <span class="inline-flex items-center gap-1.5">
