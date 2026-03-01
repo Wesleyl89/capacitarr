@@ -700,7 +700,7 @@ const sliders = [
   { key: 'fileSizeWeight', label: 'File Size', description: 'Larger files score higher to free more space.' },
   { key: 'ratingWeight', label: 'Rating', description: 'Low-rated content scores higher for deletion.' },
   { key: 'timeInLibraryWeight', label: 'Time in Library', description: 'Older content may be less valuable.' },
-  { key: 'availabilityWeight', label: 'Availability (Show Status)', description: 'Ended shows score higher than continuing.' }
+  { key: 'availabilityWeight', label: 'Series Status', description: 'Ended or canceled shows score higher for removal since no new episodes are expected.' }
 ]
 
 const presets = [

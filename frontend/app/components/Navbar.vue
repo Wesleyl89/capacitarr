@@ -93,6 +93,48 @@
             </NuxtLink>
           </UiButton>
 
+          <!-- About -->
+          <UiPopover>
+            <UiPopoverTrigger as-child>
+              <UiButton variant="ghost" size="icon" aria-label="About Capacitarr">
+                <component :is="InfoIcon" class="w-5 h-5" />
+              </UiButton>
+            </UiPopoverTrigger>
+            <UiPopoverContent align="end" class="w-72">
+              <div class="space-y-3">
+                <div>
+                  <h4 class="font-semibold text-sm">Capacitarr</h4>
+                  <span class="text-xs text-muted-foreground font-mono">v{{ uiVersion }}</span>
+                </div>
+                <p class="text-sm text-muted-foreground leading-snug">
+                  Automated media library capacity management — score, rank, and clean up your *arr libraries.
+                </p>
+                <UiSeparator />
+                <div class="space-y-1.5 text-xs text-muted-foreground">
+                  <p>Built by the Capacitarr team</p>
+                  <p>
+                    Inspired by
+                    <a href="https://github.com/jorenn92/Maintainerr" target="_blank" rel="noopener" class="text-primary hover:underline inline-flex items-center gap-0.5">
+                      Maintainerr <component :is="ExternalLinkIcon" class="w-3 h-3" />
+                    </a>
+                    and the
+                    <a href="https://wiki.servarr.com/" target="_blank" rel="noopener" class="text-primary hover:underline inline-flex items-center gap-0.5">
+                      *arr <component :is="ExternalLinkIcon" class="w-3 h-3" />
+                    </a>
+                    ecosystem
+                  </p>
+                </div>
+                <UiSeparator />
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] text-muted-foreground/60">Go · Nuxt · shadcn-vue · SQLite</span>
+                  <a href="https://github.com/capacitarr/capacitarr" target="_blank" rel="noopener" class="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                    GitHub <component :is="ExternalLinkIcon" class="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </UiPopoverContent>
+          </UiPopover>
+
           <!-- Logout -->
           <UiButton
             variant="ghost"
@@ -110,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { DatabaseIcon, MoonIcon, SunIcon, LogOutIcon, CircleHelpIcon, PaletteIcon, CheckIcon } from 'lucide-vue-next'
+import { DatabaseIcon, MoonIcon, SunIcon, LogOutIcon, CircleHelpIcon, PaletteIcon, CheckIcon, InfoIcon, ExternalLinkIcon } from 'lucide-vue-next'
 import type { ThemeMeta } from '~/composables/useTheme'
 
 const { isDark, toggle } = useAppColorMode()
