@@ -86,6 +86,67 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 	})
 
 	// ---------------------------------------------------------
+	// RULE FIELD OPTIONS (dynamic based on integrations)
+	// ---------------------------------------------------------
+	protected.GET("/rule-fields", func(c echo.Context) error {
+		// Base fields available for all integration types
+		fields := []map[string]interface{}{
+			{"field": "title", "label": "Title", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "type", "label": "Media Type", "type": "string", "operators": []string{"==", "!="}},
+			{"field": "quality", "label": "Quality Profile", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "tag", "label": "Tag", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "genre", "label": "Genre", "type": "string", "operators": []string{"==", "!=", "contains"}},
+			{"field": "rating", "label": "Rating", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			{"field": "sizebytes", "label": "Size (bytes)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			{"field": "timeinlibrary", "label": "Time in Library (days)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			{"field": "monitored", "label": "Monitored", "type": "boolean", "operators": []string{"=="}},
+			{"field": "year", "label": "Year", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			{"field": "language", "label": "Language", "type": "string", "operators": []string{"==", "!=", "contains"}},
+		}
+
+		// Check for Sonarr-specific fields
+		var configs []db.IntegrationConfig
+		database.Where("enabled = ?", true).Find(&configs)
+		hasTV := false
+		hasTautulli := false
+		hasOverseerr := false
+		for _, cfg := range configs {
+			if cfg.Type == "sonarr" {
+				hasTV = true
+			}
+			if cfg.Type == "tautulli" {
+				hasTautulli = true
+			}
+			if cfg.Type == "overseerr" {
+				hasOverseerr = true
+			}
+		}
+
+		if hasTV {
+			fields = append(fields,
+				map[string]interface{}{"field": "availability", "label": "Show Status", "type": "string", "operators": []string{"==", "!="}},
+				map[string]interface{}{"field": "seasoncount", "label": "Season Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+				map[string]interface{}{"field": "episodecount", "label": "Episode Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			)
+		}
+
+		if hasTautulli {
+			fields = append(fields,
+				map[string]interface{}{"field": "playcount", "label": "Play Count (Tautulli)", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			)
+		}
+
+		if hasOverseerr {
+			fields = append(fields,
+				map[string]interface{}{"field": "requested", "label": "Is Requested (Overseerr)", "type": "boolean", "operators": []string{"=="}},
+				map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+			)
+		}
+
+		return c.JSON(http.StatusOK, fields)
+	})
+
+	// ---------------------------------------------------------
 	// CUSTOM RULES (protection/targeting)
 	// ---------------------------------------------------------
 	protected.GET("/protections", func(c echo.Context) error {

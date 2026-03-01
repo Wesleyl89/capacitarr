@@ -152,6 +152,32 @@ func matchesRule(item integrations.MediaItem, rule db.ProtectionRule) bool {
 		// Boolean match: item.Monitored == (val == "true")
 		expected := val == "true"
 		return item.Monitored == expected
+	case "playcount":
+		ruleNum, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return false
+		}
+		return numberMatch(float64(item.PlayCount), cond, ruleNum)
+	case "requested":
+		// Boolean match: item.IsRequested == (val == "true")
+		expected := val == "true"
+		return item.IsRequested == expected
+	case "requestcount":
+		ruleNum, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return false
+		}
+		return numberMatch(float64(item.RequestCount), cond, ruleNum)
+	case "language":
+		return stringMatch(strings.ToLower(item.Language), cond, val)
+	case "type":
+		return stringMatch(strings.ToLower(string(item.Type)), cond, val)
+	case "year":
+		ruleNum, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return false
+		}
+		return numberMatch(float64(item.Year), cond, ruleNum)
 	}
 
 	return false

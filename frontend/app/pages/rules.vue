@@ -292,10 +292,10 @@
             <option value="target">Target</option>
           </select>
           <select v-model="newRule.field" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option v-for="f in fields" :key="f" :value="f">{{ f }}</option>
+            <option v-for="f in ruleFields" :key="f.field" :value="f.field">{{ f.label }}</option>
           </select>
           <select v-model="newRule.operator" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
-            <option v-for="op in operators" :key="op" :value="op">{{ op }}</option>
+            <option v-for="op in selectedFieldOperators" :key="op" :value="op">{{ op }}</option>
           </select>
           <input v-model="newRule.value" placeholder="Value" class="h-9 px-3 rounded-lg border border-input bg-input text-sm focus:outline-none focus:ring-2 focus-visible:ring-ring/50" />
           <select v-model="newRule.intensity" class="h-9 px-3 rounded-lg border border-input bg-input text-sm">
@@ -611,8 +611,28 @@ const newRule = reactive({
   intensity: 'absolute'
 })
 
-const fields = ['title', 'quality', 'availability', 'tag', 'genre', 'rating', 'sizeBytes', 'timeInLibrary', 'seasoncount', 'episodecount', 'monitored']
-const operators = ['==', '!=', 'contains', '>', '<', '>=', '<=']
+// Dynamic rule fields fetched from API based on configured integrations
+const ruleFields = ref<Array<{ field: string; label: string; type: string; operators: string[] }>>([])
+const selectedFieldOperators = computed(() => {
+  const selected = ruleFields.value.find(f => f.field === newRule.field)
+  return selected?.operators ?? ['==', '!=', 'contains', '>', '<', '>=', '<=']
+})
+
+async function fetchRuleFields() {
+  try {
+    ruleFields.value = await api('/api/v1/rule-fields') as any[]
+  } catch {
+    // Fallback to base fields if API fails
+    ruleFields.value = [
+      { field: 'title', label: 'Title', type: 'string', operators: ['==', '!=', 'contains'] },
+      { field: 'quality', label: 'Quality Profile', type: 'string', operators: ['==', '!=', 'contains'] },
+      { field: 'tag', label: 'Tag', type: 'string', operators: ['==', '!=', 'contains'] },
+      { field: 'genre', label: 'Genre', type: 'string', operators: ['==', '!=', 'contains'] },
+      { field: 'rating', label: 'Rating', type: 'number', operators: ['==', '!=', '>', '>=', '<', '<='] },
+      { field: 'monitored', label: 'Monitored', type: 'boolean', operators: ['=='] },
+    ]
+  }
+}
 
 // Preview
 const preview = ref<any[]>([])
@@ -640,7 +660,7 @@ function selectPreviewItem(entry: any) {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchPreferences(), fetchRules(), fetchPreview(), fetchDiskGroups()])
+  await Promise.all([fetchPreferences(), fetchRules(), fetchPreview(), fetchDiskGroups(), fetchRuleFields()])
 })
 
 async function fetchDiskGroups() {

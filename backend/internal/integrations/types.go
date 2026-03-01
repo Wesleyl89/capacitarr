@@ -65,6 +65,13 @@ type MediaItem struct {
 
 	// Tags
 	Tags []string `json:"tags,omitempty"`
+
+	// Enrichment data (from Tautulli, Overseerr, etc.)
+	IsRequested  bool   `json:"isRequested,omitempty"`  // Overseerr: was this item user-requested?
+	RequestedBy  string `json:"requestedBy,omitempty"`  // Overseerr: who requested it
+	RequestCount int    `json:"requestCount,omitempty"` // Overseerr: number of requests
+	TMDbID       int    `json:"tmdbId,omitempty"`       // TMDb ID for cross-referencing Overseerr
+	Language     string `json:"language,omitempty"`      // Original language from *arr
 }
 
 // MediaType represents different forms of media content

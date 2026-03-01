@@ -244,6 +244,57 @@ func poll() {
 		}
 	}
 
+	// ─── Enrichment: Tautulli watch history ──────────────────────────────────
+	if tautulliClient != nil && len(allItems) > 0 {
+		slog.Info("Poller: enriching items with Tautulli watch data")
+		for i := range allItems {
+			item := &allItems[i]
+			if item.ExternalID == "" {
+				continue
+			}
+			var watchData *integrations.TautulliWatchData
+			var err error
+			if item.Type == integrations.MediaTypeShow {
+				watchData, err = tautulliClient.GetShowWatchHistory(item.ExternalID)
+			} else {
+				watchData, err = tautulliClient.GetWatchHistory(item.ExternalID)
+			}
+			if err != nil {
+				slog.Debug("Poller: Tautulli enrichment failed", "title", item.Title, "error", err)
+				continue
+			}
+			if watchData != nil {
+				item.PlayCount = watchData.PlayCount
+				item.LastPlayed = watchData.LastPlayed
+			}
+		}
+	}
+
+	// ─── Enrichment: Overseerr request data ──────────────────────────────────
+	if overseerrClient != nil && len(allItems) > 0 {
+		slog.Info("Poller: enriching items with Overseerr request data")
+		requests, err := overseerrClient.GetRequestedMedia()
+		if err != nil {
+			slog.Warn("Poller: failed to fetch Overseerr requests", "error", err)
+		} else {
+			// Build lookup by TMDb ID
+			requestMap := make(map[int]integrations.OverseerrMediaRequest)
+			for _, req := range requests {
+				requestMap[req.TMDbID] = req
+			}
+			for i := range allItems {
+				item := &allItems[i]
+				if item.TMDbID > 0 {
+					if req, ok := requestMap[item.TMDbID]; ok {
+						item.IsRequested = true
+						item.RequestedBy = req.RequestedBy
+						item.RequestCount = 1
+					}
+				}
+			}
+		}
+	}
+
 	// Find the most specific mount for each root folder
 	mediaMounts := findMediaMounts(diskMap, rootFolders)
 
