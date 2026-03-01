@@ -274,6 +274,78 @@
       </UiCard>
     </div>
 
+    <!-- Lifetime Stats Cards (Row 2) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8" data-stagger>
+      <!-- Total Space Reclaimed -->
+      <UiCard
+        v-motion
+        :initial="{ opacity: 0, y: 12 }"
+        :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 280 } }"
+        data-slot="stat-card"
+      >
+        <UiCardContent class="pt-5">
+          <div class="flex items-center gap-3 font-medium text-sm mb-3">
+            <div data-slot="stat-icon">
+              <component :is="Trash2Icon" class="w-4 h-4" />
+            </div>
+            <span class="text-primary">Total Space Reclaimed</span>
+          </div>
+          <div class="text-3xl font-bold tabular-nums">
+            {{ formatBytes(dashboardStats?.totalBytesReclaimed ?? 0) }}
+          </div>
+          <p class="text-sm text-muted-foreground mt-1">
+            {{ dashboardStats?.totalItemsRemoved ?? 0 }} items removed lifetime
+          </p>
+        </UiCardContent>
+      </UiCard>
+
+      <!-- Protected Items -->
+      <UiCard
+        v-motion
+        :initial="{ opacity: 0, y: 12 }"
+        :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 340 } }"
+        data-slot="stat-card"
+      >
+        <UiCardContent class="pt-5">
+          <div class="flex items-center gap-3 font-medium text-sm mb-3">
+            <div data-slot="stat-icon">
+              <component :is="ShieldCheckIcon" class="w-4 h-4" />
+            </div>
+            <span class="text-primary">Protected Items</span>
+          </div>
+          <div class="text-3xl font-bold tabular-nums">
+            {{ dashboardStats?.protectedCount ?? 0 }}
+          </div>
+          <p class="text-sm text-muted-foreground mt-1">
+            items protected by your rules
+          </p>
+        </UiCardContent>
+      </UiCard>
+
+      <!-- Library Growth Rate -->
+      <UiCard
+        v-motion
+        :initial="{ opacity: 0, y: 12 }"
+        :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24, delay: 400 } }"
+        data-slot="stat-card"
+      >
+        <UiCardContent class="pt-5">
+          <div class="flex items-center gap-3 font-medium text-sm mb-3">
+            <div data-slot="stat-icon">
+              <component :is="TrendingUpIcon" class="w-4 h-4" />
+            </div>
+            <span class="text-primary">Library Growth Rate</span>
+          </div>
+          <div class="text-3xl font-bold tabular-nums">
+            {{ formattedGrowthRate }}
+          </div>
+          <p class="text-sm text-muted-foreground mt-1">
+            {{ dashboardStats?.hasGrowthData ? 'over the last 7 days' : 'not enough data yet' }}
+          </p>
+        </UiCardContent>
+      </UiCard>
+    </div>
+
     <!-- Empty State -->
     <div
       v-if="!engineStats && !loading"
@@ -313,7 +385,7 @@
 </template>
 
 <script setup lang="ts">
-import { ServerIcon, ChartPieIcon, HardDriveIcon, LoaderCircleIcon, RefreshCwIcon, ActivityIcon, PlayIcon, CheckCircle2Icon } from 'lucide-vue-next'
+import { ServerIcon, ChartPieIcon, HardDriveIcon, LoaderCircleIcon, RefreshCwIcon, ActivityIcon, PlayIcon, CheckCircle2Icon, Trash2Icon, ShieldCheckIcon, TrendingUpIcon } from 'lucide-vue-next'
 import { formatBytes, formatRelativeTime } from '~/utils/format'
 
 const api = useApi()
@@ -374,6 +446,14 @@ const diskGroups = ref<any[]>([])
 const allIntegrations = ref<any[]>([])
 const flaggedSeries = ref<{ x: string; y: number }[]>([])
 const deletedSeries = ref<{ x: string; y: number }[]>([])
+const dashboardStats = ref<{
+  totalBytesReclaimed: number
+  totalItemsRemoved: number
+  totalEngineRuns: number
+  protectedCount: number
+  growthBytesPerWeek: number
+  hasGrowthData: boolean
+} | null>(null)
 const loading = ref(true)
 const lastUpdated = ref<Date | null>(null)
 const isAutoRefreshing = ref(false)
@@ -396,6 +476,13 @@ const totalCapacity = computed(() =>
 const totalUsed = computed(() =>
   diskGroups.value.reduce((sum: number, g: any) => sum + (g.usedBytes || 0), 0)
 )
+
+const formattedGrowthRate = computed(() => {
+  if (!dashboardStats.value?.hasGrowthData) return '—'
+  const bytes = dashboardStats.value.growthBytesPerWeek
+  const prefix = bytes >= 0 ? '+' : ''
+  return `${prefix}${formatBytes(Math.abs(bytes))} / week`
+})
 
 // --- Status banner ---
 const engineStatusBannerClass = computed(() => {
@@ -484,9 +571,10 @@ onUnmounted(() => {
 async function fetchDashboardData(silent = false) {
   if (!silent) loading.value = true
   try {
-    const [groups, integrations] = await Promise.all([
+    const [groups, integrations, dStats] = await Promise.all([
       api('/api/v1/disk-groups'),
       api('/api/v1/integrations'),
+      api('/api/v1/dashboard-stats').catch(() => null),
     ])
     // Fetch engine stats via the shared composable (handles toast on completion)
     engineFetchStats()
@@ -494,6 +582,7 @@ async function fetchDashboardData(silent = false) {
     fetchActivityData()
     diskGroups.value = groups as any[]
     allIntegrations.value = integrations as any[]
+    if (dStats) dashboardStats.value = dStats as any
     lastUpdated.value = new Date()
   } catch (e) {
     console.error('Failed to fetch dashboard data:', e)

@@ -337,9 +337,60 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 		}
 	})
 
+	// Lifetime stats (cumulative counters, not cleared by data reset)
+	protected.GET("/lifetime-stats", func(c echo.Context) error {
+		var stats db.LifetimeStats
+		if err := database.FirstOrCreate(&stats, db.LifetimeStats{ID: 1}).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch lifetime stats"})
+		}
+		return c.JSON(http.StatusOK, stats)
+	})
+
+	// Dashboard stats (aggregates lifetime stats, protected count, library growth rate)
+	protected.GET("/dashboard-stats", handleDashboardStats(database))
+
 	// Audit routes
 	RegisterAuditRoutes(protected, database)
 
 	// Data management routes (reset/clear)
 	RegisterDataRoutes(protected, database)
+}
+
+func handleDashboardStats(database *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// 1. Lifetime stats
+		var lifetime db.LifetimeStats
+		database.FirstOrCreate(&lifetime, db.LifetimeStats{ID: 1})
+
+		// 2. Protected count from worker metrics
+		metrics := poller.GetWorkerMetrics()
+		protectedCount, _ := metrics["protectedCount"].(int64)
+
+		// 3. Library growth rate: compare most recent entry to 7 days ago
+		var recent db.LibraryHistory
+		var weekAgo db.LibraryHistory
+		growthBytes := int64(0)
+		hasGrowthData := false
+
+		cutoff := time.Now().Add(-7 * 24 * time.Hour)
+		// Most recent entry
+		if err := database.Where("resolution = ?", "raw").
+			Order("timestamp DESC").First(&recent).Error; err == nil {
+			// Entry closest to 7 days ago
+			if err := database.Where("resolution = ? AND timestamp <= ?", "raw", cutoff).
+				Order("timestamp DESC").First(&weekAgo).Error; err == nil {
+				growthBytes = recent.UsedCapacity - weekAgo.UsedCapacity
+				hasGrowthData = true
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"totalBytesReclaimed": lifetime.TotalBytesReclaimed,
+			"totalItemsRemoved":   lifetime.TotalItemsRemoved,
+			"totalEngineRuns":     lifetime.TotalEngineRuns,
+			"protectedCount":      protectedCount,
+			"growthBytesPerWeek":  growthBytes,
+			"hasGrowthData":       hasGrowthData,
+		})
+	}
 }

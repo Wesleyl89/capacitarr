@@ -15,6 +15,8 @@ import (
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
 	"capacitarr/internal/integrations"
+
+	"gorm.io/gorm"
 )
 
 // RunNowCh allows triggering an immediate engine evaluation cycle from the API.
@@ -81,10 +83,15 @@ func poll() {
 
 	pollStart := time.Now()
 
+	// Increment lifetime engine runs counter (atomic DB update)
+	db.DB.Model(&db.LifetimeStats{}).Where("id = 1").
+		UpdateColumn("total_engine_runs", gorm.Expr("total_engine_runs + ?", 1))
+
 	// Reset per-run counters at the start of each poll cycle
 	atomic.StoreInt64(&lastRunEvaluated, 0)
 	atomic.StoreInt64(&lastRunFlagged, 0)
 	atomic.StoreInt64(&lastRunFreedBytes, 0)
+	atomic.StoreInt64(&lastRunProtected, 0)
 
 	var configs []db.IntegrationConfig
 	if err := db.DB.Where("enabled = ?", true).Find(&configs).Error; err != nil {
@@ -460,6 +467,7 @@ var (
 	lastRunEvaluated  int64
 	lastRunFlagged    int64
 	lastRunFreedBytes int64
+	lastRunProtected  int64
 
 	// Currently-deleting item name (atomic.Value storing string)
 	currentlyDeletingVal atomic.Value
@@ -510,15 +518,16 @@ func GetWorkerMetrics() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"executionMode":      mode,
-		"isRunning":          pollRunning.Load(),
+		"executionMode":       mode,
+		"isRunning":           pollRunning.Load(),
 		"pollIntervalSeconds": prefs.PollIntervalSeconds,
-		"queueDepth":         len(deleteQueue),
-		"lastRunEvaluated":   lastRunEval,
-		"lastRunFlagged":     lastRunFlag,
-		"lastRunFreedBytes":  lastRunFreed,
-		"lastRunEpoch":       lastRunEpochVal,
-		"currentlyDeleting":  currentlyDeletion,
+		"queueDepth":          len(deleteQueue),
+		"lastRunEvaluated":    lastRunEval,
+		"lastRunFlagged":      lastRunFlag,
+		"lastRunFreedBytes":   lastRunFreed,
+		"lastRunEpoch":        lastRunEpochVal,
+		"currentlyDeleting":   currentlyDeletion,
+		"protectedCount":      atomic.LoadInt64(&lastRunProtected),
 		// Cumulative totals from DB
 		"evaluated":  totals.TotalEvaluated,
 		"actioned":   totals.TotalFlagged,
@@ -580,6 +589,13 @@ func deletionWorker() {
 		currentlyDeletingVal.Store("")
 		atomic.AddInt64(&metricsProcessed, 1)
 
+		// Increment lifetime stats (atomic DB update, not for dry-runs)
+		db.DB.Model(&db.LifetimeStats{}).Where("id = 1").
+			UpdateColumns(map[string]interface{}{
+				"total_bytes_reclaimed": gorm.Expr("total_bytes_reclaimed + ?", job.item.SizeBytes),
+				"total_items_removed":   gorm.Expr("total_items_removed + ?", 1),
+			})
+
 		factorsJSON, _ := json.Marshal(job.factors)
 		logEntry := db.AuditLog{
 			MediaName:    job.item.Title,
@@ -622,6 +638,13 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 	// Evaluate
 	evaluated := engine.EvaluateMedia(diskItems, prefs, rules)
 	atomic.AddInt64(&lastRunEvaluated, int64(len(evaluated)))
+
+	// Count protected items for dashboard stats
+	for _, ev := range evaluated {
+		if ev.IsProtected {
+			atomic.AddInt64(&lastRunProtected, 1)
+		}
+	}
 
 	// Sort by score descending
 	sort.Slice(evaluated, func(i, j int) bool {

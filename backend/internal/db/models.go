@@ -109,3 +109,14 @@ type EngineRunStats struct {
 	DurationMs    int64     `gorm:"not null;default:0" json:"durationMs"`
 	ErrorMessage  string    `json:"errorMessage,omitempty"`
 }
+
+// LifetimeStats stores cumulative counters that persist across container restarts
+// and are NOT cleared by the "Clear All Scraped Data" action. Singleton row (id=1).
+type LifetimeStats struct {
+	ID                  uint  `gorm:"primarykey" json:"id"`
+	TotalBytesReclaimed int64 `gorm:"not null;default:0" json:"totalBytesReclaimed"`
+	TotalItemsRemoved   int   `gorm:"not null;default:0" json:"totalItemsRemoved"`
+	TotalEngineRuns     int   `gorm:"not null;default:0" json:"totalEngineRuns"`
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
