@@ -56,17 +56,57 @@
         <span class="text-sm font-medium">No history found</span>
       </div>
 
-      <div v-else class="overflow-x-auto">
+      <div v-else class="overflow-x-auto max-h-[600px] overflow-y-auto relative">
         <UiTable>
-          <UiTableHeader>
+          <UiTableHeader class="sticky top-0 z-10 bg-background">
             <UiTableRow>
               <UiTableHead class="w-8"></UiTableHead>
-              <UiTableHead>Timestamp</UiTableHead>
-              <UiTableHead>Title</UiTableHead>
+              <UiTableHead
+                class="cursor-pointer select-none group"
+                @click="toggleAuditSort('created_at')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Timestamp
+                  <ArrowUpIcon v-if="auditSortBy === 'created_at' && auditSortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDownIcon v-else-if="auditSortBy === 'created_at' && auditSortDir === 'desc'" class="w-3 h-3" />
+                  <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                </span>
+              </UiTableHead>
+              <UiTableHead
+                class="cursor-pointer select-none group"
+                @click="toggleAuditSort('media_name')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Title
+                  <ArrowUpIcon v-if="auditSortBy === 'media_name' && auditSortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDownIcon v-else-if="auditSortBy === 'media_name' && auditSortDir === 'desc'" class="w-3 h-3" />
+                  <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                </span>
+              </UiTableHead>
               <UiTableHead>Type</UiTableHead>
-              <UiTableHead>Result</UiTableHead>
+              <UiTableHead
+                class="cursor-pointer select-none group"
+                @click="toggleAuditSort('action')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Result
+                  <ArrowUpIcon v-if="auditSortBy === 'action' && auditSortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDownIcon v-else-if="auditSortBy === 'action' && auditSortDir === 'desc'" class="w-3 h-3" />
+                  <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                </span>
+              </UiTableHead>
               <UiTableHead>Score</UiTableHead>
-              <UiTableHead class="text-right">Space</UiTableHead>
+              <UiTableHead
+                class="text-right cursor-pointer select-none group"
+                @click="toggleAuditSort('size_bytes')"
+              >
+                <span class="inline-flex items-center gap-1 justify-end">
+                  Space
+                  <ArrowUpIcon v-if="auditSortBy === 'size_bytes' && auditSortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDownIcon v-else-if="auditSortBy === 'size_bytes' && auditSortDir === 'desc'" class="w-3 h-3" />
+                  <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                </span>
+              </UiTableHead>
             </UiTableRow>
           </UiTableHeader>
           <UiTableBody>
@@ -145,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshCwIcon, LoaderCircleIcon, ClockIcon, ChevronRightIcon, SearchIcon } from 'lucide-vue-next'
+import { RefreshCwIcon, LoaderCircleIcon, ClockIcon, ChevronRightIcon, SearchIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon } from 'lucide-vue-next'
 
 const api = useApi()
 const { formatTimestamp } = useDisplayPrefs()
@@ -168,6 +208,22 @@ const auditActionFilter = ref<string | null>(null)
 const auditActionTypes = ['Deleted', 'Dry-Run', 'Queued for Approval', 'Queued for Deletion'] as const
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
+// Audit sorting (server-side)
+type AuditSortColumn = 'created_at' | 'media_name' | 'size_bytes' | 'action'
+const auditSortBy = ref<AuditSortColumn>('created_at')
+const auditSortDir = ref<'asc' | 'desc'>('desc')
+
+function toggleAuditSort(column: AuditSortColumn) {
+  if (auditSortBy.value === column) {
+    auditSortDir.value = auditSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    auditSortBy.value = column
+    auditSortDir.value = column === 'created_at' || column === 'size_bytes' ? 'desc' : 'asc'
+  }
+  page.value = 1
+  fetchLogs()
+}
+
 function selectItem(entry: any) {
   const scoreMatch = entry.reason?.match(/^Score:\s*([\d.]+)/)
   const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0
@@ -189,6 +245,8 @@ async function fetchLogs() {
     if (auditActionFilter.value) {
       params.set('action', auditActionFilter.value)
     }
+    params.set('sort_by', auditSortBy.value)
+    params.set('sort_dir', auditSortDir.value)
     const data = await api(`/api/v1/audit?${params.toString()}`) as any
     if (data?.data) {
       logs.value = data.data

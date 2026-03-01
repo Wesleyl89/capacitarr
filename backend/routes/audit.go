@@ -157,23 +157,42 @@ func RegisterAuditRoutes(g *echo.Group, database *gorm.DB) {
 
 		// Build query with optional search and action filters
 		query := database.Model(&db.AuditLog{})
-
+	
 		if search := strings.TrimSpace(c.QueryParam("search")); search != "" {
 			query = query.Where("media_name LIKE ?", "%"+search+"%")
 		}
-
+	
 		if action := strings.TrimSpace(c.QueryParam("action")); action != "" {
 			query = query.Where("action = ?", action)
 		}
-
+	
+		// Sorting: whitelist allowed columns to prevent SQL injection
+		allowedSortColumns := map[string]string{
+			"created_at": "created_at",
+			"media_name": "media_name",
+			"size_bytes": "size_bytes",
+			"action":     "action",
+		}
+		sortBy := "created_at"
+		if sb := strings.TrimSpace(c.QueryParam("sort_by")); sb != "" {
+			if col, ok := allowedSortColumns[sb]; ok {
+				sortBy = col
+			}
+		}
+		sortDir := "desc"
+		if sd := strings.ToLower(strings.TrimSpace(c.QueryParam("sort_dir"))); sd == "asc" || sd == "desc" {
+			sortDir = sd
+		}
+		orderClause := sortBy + " " + sortDir
+	
 		var logs []db.AuditLog
 		var total int64
-
+	
 		// Get total count with filters applied
 		query.Count(&total)
-
-		// Get paginated logs, ordered by newest first
-		if err := query.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error; err != nil {
+	
+		// Get paginated logs with requested sort order
+		if err := query.Order(orderClause).Limit(limit).Offset(offset).Find(&logs).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch audit logs"})
 		}
 

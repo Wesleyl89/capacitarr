@@ -437,15 +437,65 @@
             No items match filters.
           </div>
 
-          <div v-else class="overflow-x-auto">
+          <div v-else class="overflow-x-auto max-h-[600px] overflow-y-auto relative">
           <UiTable>
-            <UiTableHeader>
+            <UiTableHeader class="sticky top-0 z-10 bg-background">
               <UiTableRow>
-                <UiTableHead class="w-12">#</UiTableHead>
-                <UiTableHead>Score</UiTableHead>
-                <UiTableHead>Title</UiTableHead>
-                <UiTableHead>Type</UiTableHead>
-                <UiTableHead class="text-right">Size</UiTableHead>
+                <UiTableHead
+                  class="w-12 cursor-pointer select-none group"
+                  @click="togglePreviewSort('rank')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    #
+                    <ArrowUpIcon v-if="previewSortBy === 'rank' && previewSortDir === 'asc'" class="w-3 h-3" />
+                    <ArrowDownIcon v-else-if="previewSortBy === 'rank' && previewSortDir === 'desc'" class="w-3 h-3" />
+                    <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </span>
+                </UiTableHead>
+                <UiTableHead
+                  class="cursor-pointer select-none group"
+                  @click="togglePreviewSort('score')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    Score
+                    <ArrowUpIcon v-if="previewSortBy === 'score' && previewSortDir === 'asc'" class="w-3 h-3" />
+                    <ArrowDownIcon v-else-if="previewSortBy === 'score' && previewSortDir === 'desc'" class="w-3 h-3" />
+                    <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </span>
+                </UiTableHead>
+                <UiTableHead
+                  class="cursor-pointer select-none group"
+                  @click="togglePreviewSort('title')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    Title
+                    <ArrowUpIcon v-if="previewSortBy === 'title' && previewSortDir === 'asc'" class="w-3 h-3" />
+                    <ArrowDownIcon v-else-if="previewSortBy === 'title' && previewSortDir === 'desc'" class="w-3 h-3" />
+                    <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </span>
+                </UiTableHead>
+                <UiTableHead
+                  class="cursor-pointer select-none group"
+                  @click="togglePreviewSort('type')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    Type
+                    <ArrowUpIcon v-if="previewSortBy === 'type' && previewSortDir === 'asc'" class="w-3 h-3" />
+                    <ArrowDownIcon v-else-if="previewSortBy === 'type' && previewSortDir === 'desc'" class="w-3 h-3" />
+                    <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </span>
+                </UiTableHead>
+                <UiTableHead
+                  class="text-right cursor-pointer select-none group"
+                  @click="togglePreviewSort('size')"
+                >
+                  <span class="inline-flex items-center gap-1 justify-end">
+                    Size
+                    <ArrowUpIcon v-if="previewSortBy === 'size' && previewSortDir === 'asc'" class="w-3 h-3" />
+                    <ArrowDownIcon v-else-if="previewSortBy === 'size' && previewSortDir === 'desc'" class="w-3 h-3" />
+                    <ArrowUpDownIcon v-else class="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </span>
+                </UiTableHead>
               </UiTableRow>
             </UiTableHeader>
             <UiTableBody>
@@ -517,7 +567,7 @@
 </template>
 
 <script setup lang="ts">
-import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon, SearchIcon, ShieldCheckIcon, FilterIcon } from 'lucide-vue-next'
+import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon, SearchIcon, ShieldCheckIcon, FilterIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon } from 'lucide-vue-next'
 import { formatBytes } from '~/utils/format'
 
 const api = useApi()
@@ -831,6 +881,20 @@ const previewSearch = ref('')
 const previewTypeFilter = ref<string | null>(null)
 const previewStatusFilter = ref<'all' | 'protected' | 'unprotected'>('all')
 
+// Preview sorting
+type PreviewSortColumn = 'rank' | 'score' | 'title' | 'type' | 'size'
+const previewSortBy = ref<PreviewSortColumn>('rank')
+const previewSortDir = ref<'asc' | 'desc'>('asc')
+
+function togglePreviewSort(column: PreviewSortColumn) {
+  if (previewSortBy.value === column) {
+    previewSortDir.value = previewSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    previewSortBy.value = column
+    previewSortDir.value = column === 'score' || column === 'size' ? 'desc' : 'asc'
+  }
+}
+
 const previewMediaTypes = ['movie', 'show', 'season', 'artist', 'book'] as const
 
 function selectPreviewItem(entry: any) {
@@ -1010,54 +1074,95 @@ const groupedPreview = computed<PreviewGroup[]>(() => {
   return groups.filter(g => !(g.entry.item?.type === 'show' && g.seasons.length === 0))
 })
 
-// Filtered preview: applies search, type, and status filters to groupedPreview
+// Filtered preview: applies search, type, status filters and sorting to groupedPreview
 const filteredGroupedPreview = computed<PreviewGroup[]>(() => {
   let groups = groupedPreview.value
   const search = previewSearch.value.trim().toLowerCase()
   const typeFilter = previewTypeFilter.value
   const statusFilter = previewStatusFilter.value
 
-  if (!search && !typeFilter && statusFilter === 'all') return groups
+  // Apply filters
+  if (search || typeFilter || statusFilter !== 'all') {
+    groups = groups.reduce<PreviewGroup[]>((result, group) => {
+      const entry = group.entry
+      const entryType = entry.item?.type
+      const entryTitle = (entry.item?.title || '').toLowerCase()
+      const entryProtected = !!entry.isProtected
 
-  return groups.reduce<PreviewGroup[]>((result, group) => {
-    const entry = group.entry
-    const entryType = entry.item?.type
-    const entryTitle = (entry.item?.title || '').toLowerCase()
-    const entryProtected = !!entry.isProtected
+      // For show groups, also check if any seasons match
+      if (group.seasons.length > 0) {
+        const filteredSeasons = group.seasons.filter((s: any) => {
+          const sTitle = (s.item?.title || '').toLowerCase()
+          const sType = s.item?.type
+          const sProtected = !!s.isProtected
+          const matchSearch = !search || sTitle.includes(search) || entryTitle.includes(search)
+          const matchType = !typeFilter || sType === typeFilter || entryType === typeFilter
+          const matchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? sProtected : !sProtected)
+          return matchSearch && matchType && matchStatus
+        })
 
-    // For show groups, also check if any seasons match
-    if (group.seasons.length > 0) {
-      const filteredSeasons = group.seasons.filter((s: any) => {
-        const sTitle = (s.item?.title || '').toLowerCase()
-        const sType = s.item?.type
-        const sProtected = !!s.isProtected
-        const matchSearch = !search || sTitle.includes(search) || entryTitle.includes(search)
-        const matchType = !typeFilter || sType === typeFilter || entryType === typeFilter
-        const matchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? sProtected : !sProtected)
-        return matchSearch && matchType && matchStatus
-      })
+        // Also check if the parent entry matches
+        const parentMatchSearch = !search || entryTitle.includes(search)
+        const parentMatchType = !typeFilter || entryType === typeFilter
+        const parentMatchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? entryProtected : !entryProtected)
 
-      // Also check if the parent entry matches
-      const parentMatchSearch = !search || entryTitle.includes(search)
-      const parentMatchType = !typeFilter || entryType === typeFilter
-      const parentMatchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? entryProtected : !entryProtected)
-
-      if (filteredSeasons.length > 0) {
-        result.push({ ...group, seasons: filteredSeasons })
-      } else if (parentMatchSearch && parentMatchType && parentMatchStatus) {
-        result.push({ ...group, seasons: [] })
+        if (filteredSeasons.length > 0) {
+          result.push({ ...group, seasons: filteredSeasons })
+        } else if (parentMatchSearch && parentMatchType && parentMatchStatus) {
+          result.push({ ...group, seasons: [] })
+        }
+      } else {
+        // Non-grouped entries (movies, artists, books, etc.)
+        const matchSearch = !search || entryTitle.includes(search)
+        const matchType = !typeFilter || entryType === typeFilter
+        const matchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? entryProtected : !entryProtected)
+        if (matchSearch && matchType && matchStatus) {
+          result.push(group)
+        }
       }
-    } else {
-      // Non-grouped entries (movies, artists, books, etc.)
-      const matchSearch = !search || entryTitle.includes(search)
-      const matchType = !typeFilter || entryType === typeFilter
-      const matchStatus = statusFilter === 'all' || (statusFilter === 'protected' ? entryProtected : !entryProtected)
-      if (matchSearch && matchType && matchStatus) {
-        result.push(group)
+      return result
+    }, [])
+  }
+
+  // Apply sorting
+  const sortBy = previewSortBy.value
+  const sortDir = previewSortDir.value
+  if (sortBy === 'rank' && sortDir === 'asc') return groups // natural order
+
+  const sorted = [...groups]
+  const dir = sortDir === 'asc' ? 1 : -1
+
+  sorted.sort((a, b) => {
+    switch (sortBy) {
+      case 'rank':
+        // Rank is the natural index from groupedPreview; use indexOf
+        return dir * (groupedPreview.value.indexOf(a) - groupedPreview.value.indexOf(b))
+      case 'score': {
+        const scoreA = a.entry.isProtected ? Infinity : (a.entry.score ?? 0)
+        const scoreB = b.entry.isProtected ? Infinity : (b.entry.score ?? 0)
+        return dir * (scoreA - scoreB)
       }
+      case 'title': {
+        const titleA = (a.entry.item?.title || '').toLowerCase()
+        const titleB = (b.entry.item?.title || '').toLowerCase()
+        return dir * titleA.localeCompare(titleB)
+      }
+      case 'type': {
+        const typeA = (a.entry.item?.type || '').toLowerCase()
+        const typeB = (b.entry.item?.type || '').toLowerCase()
+        return dir * typeA.localeCompare(typeB)
+      }
+      case 'size': {
+        const sizeA = a.entry.item?.sizeBytes ?? 0
+        const sizeB = b.entry.item?.sizeBytes ?? 0
+        return dir * (sizeA - sizeB)
+      }
+      default:
+        return 0
     }
-    return result
-  }, [])
+  })
+
+  return sorted
 })
 
 // Start with all groups expanded so seasons are always visible
