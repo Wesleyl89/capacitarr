@@ -507,6 +507,55 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			limit = len(evaluated)
 		}
 
-		return c.JSON(http.StatusOK, evaluated[:limit])
+		// Build disk context from disk groups
+		var diskGroups []db.DiskGroup
+		database.Find(&diskGroups)
+
+		type diskContextPayload struct {
+			TotalBytes   int64   `json:"totalBytes"`
+			UsedBytes    int64   `json:"usedBytes"`
+			TargetPct    float64 `json:"targetPct"`
+			ThresholdPct float64 `json:"thresholdPct"`
+			BytesToFree  int64   `json:"bytesToFree"`
+		}
+
+		var diskCtx *diskContextPayload
+		if len(diskGroups) > 0 {
+			// Pick the disk group that is over threshold with the most bytes to free.
+			// If none are over threshold, pick the one with the most potential bytes to free.
+			var bestGroup *db.DiskGroup
+			var bestBytesToFree int64
+
+			for i := range diskGroups {
+				dg := &diskGroups[i]
+				usedPct := float64(dg.UsedBytes) / float64(dg.TotalBytes) * 100
+				var btf int64
+				if usedPct >= dg.ThresholdPct {
+					btf = dg.UsedBytes - int64(float64(dg.TotalBytes)*dg.TargetPct/100)
+					if btf < 0 {
+						btf = 0
+					}
+				}
+				if bestGroup == nil || btf > bestBytesToFree {
+					bestGroup = dg
+					bestBytesToFree = btf
+				}
+			}
+
+			if bestGroup != nil {
+				diskCtx = &diskContextPayload{
+					TotalBytes:   bestGroup.TotalBytes,
+					UsedBytes:    bestGroup.UsedBytes,
+					TargetPct:    bestGroup.TargetPct,
+					ThresholdPct: bestGroup.ThresholdPct,
+					BytesToFree:  bestBytesToFree,
+				}
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"items":       evaluated[:limit],
+			"diskContext": diskCtx,
+		})
 	})
 }

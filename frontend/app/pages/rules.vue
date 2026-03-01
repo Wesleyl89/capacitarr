@@ -343,7 +343,10 @@
     >
       <UiCardHeader>
         <div class="flex items-center justify-between">
-          <UiCardTitle>Live Preview — What Would Be Deleted</UiCardTitle>
+          <div>
+            <UiCardTitle>Deletion Priority</UiCardTitle>
+            <UiCardDescription class="mt-1">Items ranked by deletion priority. Only enough items are removed to reach the target disk threshold.</UiCardDescription>
+          </div>
           <UiButton variant="outline" size="sm" @click="fetchPreview">
             <component :is="previewLoading ? LoaderCircleIcon : RefreshCwIcon" :class="{ 'animate-spin': previewLoading }" class="w-3.5 h-3.5" />
             Refresh
@@ -351,6 +354,12 @@
         </div>
       </UiCardHeader>
       <UiCardContent>
+        <!-- Disk below threshold banner -->
+        <div v-if="!previewLoading && preview.length > 0 && diskContext && diskContext.bytesToFree === 0" class="mb-4 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+          <CheckIcon class="w-4 h-4 shrink-0" />
+          Disk usage is below threshold. No items would be removed.
+        </div>
+
         <div v-if="previewLoading" class="flex items-center justify-center py-12">
           <component :is="LoaderCircleIcon" class="w-6 h-6 text-primary animate-spin" />
         </div>
@@ -474,7 +483,21 @@
             </UiTableHeader>
             <UiTableBody>
               <template v-for="(group, groupIdx) in filteredGroupedPreview" :key="group.key">
-                <UiTableRow class="cursor-pointer" @click="selectPreviewItem(group.entry); group.seasons.length > 0 && togglePreviewGroup(group.key)">
+                <!-- Deletion line: inserted before the first item that falls below the cutoff -->
+                <UiTableRow v-if="deletionLineIndex !== null && deletionLineIndex === groupIdx" class="pointer-events-none">
+                  <UiTableCell :colspan="5" class="!p-0">
+                    <div class="flex items-center gap-2 px-4 py-1.5 bg-destructive/10 border-y border-destructive/30">
+                      <div class="flex-1 h-px bg-destructive/40" />
+                      <span class="text-xs font-medium text-destructive whitespace-nowrap">Engine stops here (target reached)</span>
+                      <div class="flex-1 h-px bg-destructive/40" />
+                    </div>
+                  </UiTableCell>
+                </UiTableRow>
+                <UiTableRow
+                  class="cursor-pointer"
+                  :class="{ 'opacity-40': deletionLineIndex !== null && groupIdx >= deletionLineIndex }"
+                  @click="selectPreviewItem(group.entry); group.seasons.length > 0 && togglePreviewGroup(group.key)"
+                >
                   <UiTableCell class="w-12 text-center">
                     <span class="text-xs font-mono tabular-nums text-muted-foreground">{{ groupIdx + 1 }}</span>
                   </UiTableCell>
@@ -498,7 +521,13 @@
                   <UiTableCell class="text-right font-mono text-xs tabular-nums">{{ formatBytes(group.entry.item.sizeBytes) }}</UiTableCell>
                 </UiTableRow>
                 <template v-if="expandedPreviewGroups.has(group.key)">
-                  <UiTableRow v-for="(season, sIdx) in group.seasons" :key="`${group.key}-s${sIdx}`" class="bg-muted/30 cursor-pointer" @click.stop="selectPreviewItem(season)">
+                  <UiTableRow
+                    v-for="(season, sIdx) in group.seasons"
+                    :key="`${group.key}-s${sIdx}`"
+                    class="bg-muted/30 cursor-pointer"
+                    :class="{ 'opacity-40': deletionLineIndex !== null && groupIdx >= deletionLineIndex }"
+                    @click.stop="selectPreviewItem(season)"
+                  >
                     <UiTableCell class="w-12" />
                     <UiTableCell>
                       <span class="text-xs font-mono tabular-nums font-semibold" :class="season.isProtected ? 'text-emerald-500' : 'text-primary'">
@@ -855,6 +884,7 @@ const preview = ref<any[]>([])
 const previewLoading = ref(false)
 const previewFetchedAt = ref<string>('')
 const selectedPreviewItem = ref<any | null>(null)
+const diskContext = ref<{ totalBytes: number; usedBytes: number; targetPct: number; thresholdPct: number; bytesToFree: number } | null>(null)
 
 // Preview filters
 const previewSearch = ref('')
@@ -978,7 +1008,9 @@ async function deleteRule(id: number) {
 async function fetchPreview() {
   previewLoading.value = true
   try {
-    preview.value = await api('/api/v1/preview') as any[]
+    const data = await api('/api/v1/preview') as { items: any[]; diskContext: any }
+    preview.value = data.items || []
+    diskContext.value = data.diskContext || null
     previewFetchedAt.value = new Date().toISOString()
   } catch (e) {
     console.error('Failed to fetch preview', e)
@@ -1143,6 +1175,33 @@ const filteredGroupedPreview = computed<PreviewGroup[]>(() => {
   })
 
   return sorted
+})
+
+// Deletion line: index in filteredGroupedPreview where cumulative size exceeds bytesToFree
+const deletionLineIndex = computed<number | null>(() => {
+  const ctx = diskContext.value
+  if (!ctx || ctx.bytesToFree <= 0) return null
+
+  const groups = filteredGroupedPreview.value
+  let cumulative = 0
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i]
+    // Skip protected items — the engine wouldn't delete them
+    if (group.entry.isProtected) continue
+    // Accumulate group entry size plus any season sizes
+    cumulative += group.entry.item?.sizeBytes ?? 0
+    if (group.seasons.length > 0) {
+      for (const season of group.seasons) {
+        if (!season.isProtected) {
+          cumulative += season.item?.sizeBytes ?? 0
+        }
+      }
+    }
+    if (cumulative >= ctx.bytesToFree) {
+      return i + 1 // Line goes *after* this item
+    }
+  }
+  return null // Not enough items to reach the target
 })
 
 // Seasons collapsed by default — user clicks to expand
