@@ -443,8 +443,9 @@
             <UiInput
               v-model="formState.url"
               type="text"
-              placeholder="http://localhost:8989"
+              :placeholder="urlPlaceholder"
             />
+            <p class="text-xs text-muted-foreground/70">{{ urlHelp }}</p>
           </div>
 
           <div class="space-y-1.5">
@@ -456,6 +457,9 @@
               type="password"
               placeholder="Enter API key or token"
             />
+            <p v-if="formState.type === 'plex'" class="text-xs text-muted-foreground/70">
+              To find your Plex token: open any library item in Plex Web → Get Info → View XML → look for <code class="font-mono text-[11px]">X-Plex-Token</code> in the URL.
+            </p>
           </div>
 
           <!-- Error -->
@@ -579,6 +583,30 @@ const namePlaceholder = computed(() => {
     plex: 'My Plex', tautulli: 'My Tautulli', overseerr: 'My Overseerr'
   }
   return defaults[formState.type] || 'Integration Name'
+})
+
+const urlPlaceholder = computed(() => {
+  const defaults: Record<string, string> = {
+    sonarr: 'http://localhost:8989',
+    radarr: 'http://localhost:7878',
+    lidarr: 'http://localhost:8686',
+    plex: 'http://192.168.1.100:32400',
+    tautulli: 'http://localhost:8181',
+    overseerr: 'http://localhost:5055'
+  }
+  return defaults[formState.type] || 'http://localhost:8080'
+})
+
+const urlHelp = computed(() => {
+  const help: Record<string, string> = {
+    sonarr: 'Your Sonarr instance URL (IP or hostname + port).',
+    radarr: 'Your Radarr instance URL (IP or hostname + port).',
+    lidarr: 'Your Lidarr instance URL (IP or hostname + port).',
+    plex: 'Your Plex Media Server URL. Use the direct server address, not app.plex.tv.',
+    tautulli: 'Your Tautulli instance URL (IP or hostname + port).',
+    overseerr: 'Full URL including any subpath (e.g., https://example.com/requests/).'
+  }
+  return help[formState.type] || 'The base URL of your integration.'
 })
 
 function typeIcon(type: string) {
