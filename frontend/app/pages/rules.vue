@@ -933,9 +933,9 @@ const groupedPreview = computed<PreviewGroup[]>(() => {
     // Shows already handled in pass 1
   }
 
-  // Sort groups by the entry's score (highest first = most likely to be deleted)
-  // Preserve the original order from the backend (already sorted)
-  return groups
+  // Filter out show-level entries with no seasons — they're only useful as grouping parents
+  // A show with 0 seasons in the preview has nothing actionable to display
+  return groups.filter(g => !(g.entry.item?.type === 'show' && g.seasons.length === 0))
 })
 
 // Start with all groups expanded so seasons are always visible
