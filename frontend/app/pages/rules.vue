@@ -690,7 +690,9 @@ function fieldLabel(field: string): string {
 
 function integrationName(id: number): string {
   const svc = allIntegrations.value.find((i: any) => i.id === id)
-  return svc?.name ?? `Integration #${id}`
+  if (!svc) return `Integration #${id}`
+  const typeName = svc.type ? svc.type.charAt(0).toUpperCase() + svc.type.slice(1) : ''
+  return typeName ? `${typeName}: ${svc.name}` : svc.name
 }
 
 // Convert legacy type+intensity to new effect (for display of pre-migration rules)
