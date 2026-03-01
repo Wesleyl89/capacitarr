@@ -6,9 +6,12 @@ import "time"
 type IntegrationType string
 
 const (
-	IntegrationTypePlex   IntegrationType = "plex"
-	IntegrationTypeSonarr IntegrationType = "sonarr"
-	IntegrationTypeRadarr IntegrationType = "radarr"
+	IntegrationTypePlex      IntegrationType = "plex"
+	IntegrationTypeSonarr    IntegrationType = "sonarr"
+	IntegrationTypeRadarr    IntegrationType = "radarr"
+	IntegrationTypeTautulli  IntegrationType = "tautulli"
+	IntegrationTypeOverseerr IntegrationType = "overseerr"
+	IntegrationTypeLidarr    IntegrationType = "lidarr"
 )
 
 // Integration defines the common interface all service integrations implement
@@ -21,6 +24,8 @@ type Integration interface {
 	GetRootFolders() ([]string, error)
 	// GetMediaItems returns all media items managed by the service
 	GetMediaItems() ([]MediaItem, error)
+	// DeleteMediaItem removes the item from the service and disk
+	DeleteMediaItem(item MediaItem) error
 }
 
 // DiskSpace represents disk usage reported by a service
@@ -33,19 +38,19 @@ type DiskSpace struct {
 // MediaItem represents a single media item from any service
 type MediaItem struct {
 	// Core identity
-	ExternalID    string          `json:"externalId"`    // ID from the source service
-	IntegrationID uint            `json:"integrationId"` // FK to IntegrationConfig
-	Type          MediaType       `json:"type"`          // movie, show, season, episode, album
-	Title         string          `json:"title"`
-	Year          int             `json:"year,omitempty"`
-	SizeBytes     int64           `json:"sizeBytes"`
-	Path          string          `json:"path"` // File path on disk
+	ExternalID    string    `json:"externalId"`    // ID from the source service
+	IntegrationID uint      `json:"integrationId"` // FK to IntegrationConfig
+	Type          MediaType `json:"type"`          // movie, show, season, episode, album
+	Title         string    `json:"title"`
+	Year          int       `json:"year,omitempty"`
+	SizeBytes     int64     `json:"sizeBytes"`
+	Path          string    `json:"path"` // File path on disk
 
 	// TV-specific
-	SeasonNumber  int    `json:"seasonNumber,omitempty"`
-	EpisodeCount  int    `json:"episodeCount,omitempty"`
-	ShowTitle     string `json:"showTitle,omitempty"`
-	ShowStatus    string `json:"showStatus,omitempty"` // continuing, ended
+	SeasonNumber int    `json:"seasonNumber,omitempty"`
+	EpisodeCount int    `json:"episodeCount,omitempty"`
+	ShowTitle    string `json:"showTitle,omitempty"`
+	ShowStatus   string `json:"showStatus,omitempty"` // continuing, ended
 
 	// Quality / metadata
 	QualityProfile string  `json:"qualityProfile,omitempty"`
@@ -54,9 +59,9 @@ type MediaItem struct {
 	Monitored      bool    `json:"monitored"`
 
 	// Watch data (from Plex)
-	PlayCount   int        `json:"playCount,omitempty"`
-	LastPlayed  *time.Time `json:"lastPlayed,omitempty"`
-	AddedAt     *time.Time `json:"addedAt,omitempty"`
+	PlayCount  int        `json:"playCount,omitempty"`
+	LastPlayed *time.Time `json:"lastPlayed,omitempty"`
+	AddedAt    *time.Time `json:"addedAt,omitempty"`
 
 	// Tags
 	Tags []string `json:"tags,omitempty"`
@@ -70,4 +75,5 @@ const (
 	MediaTypeShow    MediaType = "show"
 	MediaTypeSeason  MediaType = "season"
 	MediaTypeEpisode MediaType = "episode"
+	MediaTypeArtist  MediaType = "artist"
 )

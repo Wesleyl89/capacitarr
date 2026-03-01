@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"capacitarr/internal/config"
+	"capacitarr/internal/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -25,12 +26,36 @@ func Init(cfg *config.Config) error {
 		return err
 	}
 
-	// Run migrations
-	err = db.AutoMigrate(&AuthConfig{}, &LibraryHistory{}, &IntegrationConfig{}, &DiskGroup{})
+	// Run Goose migrations (sole schema management — no AutoMigrate)
+	sqlDB, err := db.DB()
 	if err != nil {
-		slog.Error("Failed to migrate database", "error", err)
+		slog.Error("Failed to get underlying sql.DB for migrations", "error", err)
 		return err
 	}
+	if err := RunMigrations(sqlDB); err != nil {
+		slog.Error("Failed to run database migrations", "error", err)
+		return err
+	}
+
+	// Ensure default preferences exist with strictly safe defaults
+	var pref PreferenceSet
+	if err := db.FirstOrCreate(&pref, PreferenceSet{
+		ID:                    1,
+		ExecutionMode:         "dry-run",
+		LogLevel:              "info",
+		AuditLogRetentionDays: 30,
+		WatchHistoryWeight:    10,
+		LastWatchedWeight:     8,
+		FileSizeWeight:        6,
+		RatingWeight:          5,
+		TimeInLibraryWeight:   4,
+		AvailabilityWeight:    3,
+	}).Error; err != nil {
+		slog.Error("Failed to seed default preferences", "error", err)
+	}
+
+	// Apply dynamic log level from preferences
+	logger.SetLevel(pref.LogLevel)
 
 	slog.Info("Database initialized successfully", "path", cfg.Database)
 	DB = db

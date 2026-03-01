@@ -1,12 +1,22 @@
 <template>
-  <div class="min-h-screen bg-zinc-50 dark:bg-zinc-950 transition-colors duration-300">
-    <LazyNavbar v-if="isAuthenticated" />
-    <UContainer class="py-8">
+    <div data-slot="app-shell" class="min-h-screen bg-background text-foreground transition-colors duration-300">
+    <Navbar v-if="isAuthenticated" />
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <NuxtPage />
-    </UContainer>
+    </main>
   </div>
+  <ClientOnly>
+    <ToastContainer />
+  </ClientOnly>
 </template>
 
 <script setup lang="ts">
-const isAuthenticated = useCookie('jwt')
+const token = useCookie('jwt')
+const isAuthenticated = computed(() => !!token.value)
+
+// Initialize color mode and theme on client
+if (import.meta.client) {
+  useAppColorMode()
+  useTheme()
+}
 </script>

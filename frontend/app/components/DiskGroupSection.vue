@@ -1,0 +1,168 @@
+<template>
+  <UiCard
+    v-motion
+    :initial="{ opacity: 0, y: 12 }"
+    :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
+    class="overflow-hidden"
+  >
+    <!-- Header with progress -->
+    <UiCardContent class="pt-5 pb-0 border-b border-border">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+            :class="statusBgColor"
+          >
+            <component :is="HardDriveIcon" class="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 class="font-semibold text-sm truncate" :title="group.mountPath">
+              {{ group.mountPath }}
+            </h3>
+            <span class="text-xs text-muted-foreground">
+              {{ formatBytes(group.usedBytes) }} / {{ formatBytes(group.totalBytes) }}
+            </span>
+          </div>
+        </div>
+        <span class="text-2xl font-bold tabular-nums" :class="statusTextColor">
+          {{ usagePercent }}%
+        </span>
+      </div>
+
+      <!-- Progress Bar with segmented zone background + triangle markers -->
+      <div class="relative w-full mt-8 mb-6">
+        <!-- Bar container -->
+        <div class="relative w-full h-3 rounded-full overflow-hidden">
+          <!-- Segmented background zones -->
+          <div class="absolute inset-0 flex">
+            <!-- Green zone: 0% → target% -->
+            <div
+              class="h-full"
+              :style="{ width: (group.targetPct || 75) + '%', backgroundColor: 'oklch(0.648 0.2 160 / 0.2)' }"
+            />
+            <!-- Amber zone: target% → threshold% -->
+            <div
+              class="h-full"
+              :style="{ width: ((group.thresholdPct || 85) - (group.targetPct || 75)) + '%', backgroundColor: 'oklch(0.75 0.183 55.934 / 0.2)' }"
+            />
+            <!-- Red zone: threshold% → 100% -->
+            <div
+              class="h-full"
+              :style="{ width: (100 - (group.thresholdPct || 85)) + '%', backgroundColor: 'oklch(0.577 0.245 27.325 / 0.2)' }"
+            />
+          </div>
+          <!-- Usage fill bar (on top of zones) -->
+          <div
+            data-slot="progress-bar-fill"
+            :data-status="usagePercent >= (group.thresholdPct || 85) ? 'danger' : usagePercent >= (group.targetPct || 75) ? 'warning' : 'ok'"
+            class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
+            :style="{ width: usagePercent + '%', backgroundColor: barFillColor }"
+          />
+        </div>
+
+        <!-- Target marker ABOVE the bar -->
+        <div
+          v-if="group.targetPct"
+          class="absolute bottom-3 flex flex-col items-center z-20"
+          :style="{ left: group.targetPct + '%', transform: 'translateX(-50%)' }"
+        >
+          <span class="text-[10px] font-medium text-success whitespace-nowrap mb-0.5">
+            Target {{ group.targetPct }}%
+          </span>
+          <span class="text-success text-[10px] leading-none mb-0.5">▼</span>
+        </div>
+        <!-- Threshold marker BELOW the bar -->
+        <div
+          v-if="group.thresholdPct"
+          class="absolute top-3 flex flex-col items-center z-20"
+          :style="{ left: group.thresholdPct + '%', transform: 'translateX(-50%)' }"
+        >
+          <span class="text-destructive text-[10px] leading-none mt-0.5">▲</span>
+          <span class="text-[10px] font-medium text-destructive whitespace-nowrap mt-0.5">
+            Threshold {{ group.thresholdPct }}%
+          </span>
+        </div>
+      </div>
+
+      <!-- Free space info -->
+      <div class="text-xs text-muted-foreground pb-4">
+        <span>{{ formatBytes(group.totalBytes - group.usedBytes) }} free</span>
+      </div>
+    </UiCardContent>
+
+    <!-- Chart Area -->
+    <UiCardContent class="pt-3 pb-1">
+      <span class="text-xs font-medium text-muted-foreground">
+        Capacity · {{ dateRangeLabel }}
+      </span>
+      <div class="h-64 pt-1">
+        <CapacityChart
+          :key="`chart-${group.id}-${refreshKey || 0}`"
+          :mode="chartMode"
+          :disk-group-id="group.id"
+          :since="dateRange"
+        />
+      </div>
+    </UiCardContent>
+  </UiCard>
+</template>
+
+<script setup lang="ts">
+import { HardDriveIcon } from 'lucide-vue-next'
+import { formatBytes } from '~/utils/format'
+
+interface DiskGroup {
+  id: number
+  mountPath: string
+  totalBytes: number
+  usedBytes: number
+  thresholdPct: number
+  targetPct: number
+}
+
+const props = defineProps<{
+  group: DiskGroup
+  chartMode: string
+  dateRange: string
+  dateRangeLabel: string
+  refreshKey?: number
+}>()
+
+defineEmits<{
+  (e: 'updated'): void
+}>()
+
+const usagePercent = computed(() => {
+  if (props.group.totalBytes === 0) return 0
+  return Math.round((props.group.usedBytes / props.group.totalBytes) * 100)
+})
+
+const statusBgColor = computed(() => {
+  const pct = usagePercent.value
+  if (pct >= (props.group.thresholdPct || 85)) return 'bg-destructive'
+  if (pct >= (props.group.targetPct || 75)) return 'bg-warning'
+  return 'bg-primary'
+})
+
+const statusTextColor = computed(() => {
+  const pct = usagePercent.value
+  if (pct >= (props.group.thresholdPct || 85)) return 'text-destructive'
+  if (pct >= (props.group.targetPct || 75)) return 'text-warning'
+  return 'text-primary'
+})
+
+const barColor = computed(() => {
+  const pct = usagePercent.value
+  if (pct >= (props.group.thresholdPct || 85)) return 'bg-destructive'
+  if (pct >= (props.group.targetPct || 75)) return 'bg-warning'
+  return 'bg-primary'
+})
+
+/** Inline fill color for the progress bar (bypasses Tailwind alpha issues) */
+const barFillColor = computed(() => {
+  const pct = usagePercent.value
+  if (pct >= (props.group.thresholdPct || 85)) return 'var(--color-destructive)'
+  if (pct >= (props.group.targetPct || 75)) return 'var(--color-warning)'
+  return 'var(--color-primary)'
+})
+</script>

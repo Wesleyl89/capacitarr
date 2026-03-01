@@ -2,7 +2,12 @@
     "name": "capacitarr",
     "version": "0.1.0",
     "private": true,
+    "license": "PolyForm-Noncommercial-1.0.0",
     "scripts": {
+        "lint:frontend": "cd frontend && npm run lint",
+        "lint:backend": "cd backend && golangci-lint run",
+        "lint": "npm run lint:frontend && npm run lint:backend",
+        "format": "cd frontend && npm run format",
         "release": "git cliff --bump -o CHANGELOG.md && npm version $(git cliff --bumped-version) --no-git-tag-version && git add CHANGELOG.md package.json && git commit -m \"chore(release): prepare for release\" && git tag $(git cliff --bumped-version)"
     }
 }

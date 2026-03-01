@@ -1,6 +1,743 @@
 @import "tailwindcss";
-@import "@nuxt/ui";
+@import "tw-animate-css";
 
-@theme static {
-  --font-sans: 'Inter', 'Public Sans', system-ui, sans-serif;
+/* Enable class-based dark mode (Tailwind v4 defaults to prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ========================================
+   Capacitarr Design System
+   Multi-Theme Color System (oklch)
+   ======================================== */
+
+/* ----------------------------------------
+   Shared Neutral Variables — Light Mode
+   (Same for all themes)
+   ---------------------------------------- */
+:root {
+  /* Surfaces — subtle light gray so white cards stand out (3% lighter than cards) */
+  --color-background: oklch(0.97 0.004 247.839);
+  --color-foreground: oklch(0.141 0.005 285.823);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.141 0.005 285.823);
+
+  /* Borders & Muted */
+  --color-border: oklch(0.871 0.006 286.029);
+  --color-muted: oklch(0.945 0.005 264.542);
+  --color-muted-foreground: oklch(0.552 0.016 285.938);
+
+  /* Popover */
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.141 0.005 285.823);
+
+  /* Secondary */
+  --color-secondary: oklch(0.945 0.005 264.542);
+  --color-secondary-foreground: oklch(0.21 0.006 285.885);
+
+  /* Accent */
+  --color-accent: oklch(0.945 0.005 264.542);
+  --color-accent-foreground: oklch(0.21 0.006 285.885);
+
+  /* Semantic (theme-independent) */
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-success: oklch(0.648 0.2 160);
+  --color-warning: oklch(0.75 0.183 55.934);
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* ----------------------------------------
+   Shared Neutral Variables — Dark Mode
+   (Same for all themes)
+   ---------------------------------------- */
+.dark {
+  --color-background: oklch(0.08 0.005 285.823);
+  --color-foreground: oklch(0.985 0.002 247.839);
+  --color-card: oklch(0.119 0.011 285.823);
+  --color-card-foreground: oklch(0.985 0.002 247.839);
+  --color-border: oklch(0.255 0.014 285.823);
+  --color-muted: oklch(0.179 0.012 285.823);
+  --color-muted-foreground: oklch(0.603 0.016 285.938);
+
+  /* Popover */
+  --color-popover: oklch(0.119 0.011 285.823);
+  --color-popover-foreground: oklch(0.985 0.002 247.839);
+
+  /* Secondary */
+  --color-secondary: oklch(0.179 0.012 285.823);
+  --color-secondary-foreground: oklch(0.985 0.002 247.839);
+
+  /* Accent */
+  --color-accent: oklch(0.179 0.012 285.823);
+  --color-accent-foreground: oklch(0.985 0.002 247.839);
+}
+
+/* ========================================
+   Theme 1: Violet (Default) — Analogous
+   Hue family: 280–310, cool violet primary
+   ======================================== */
+[data-theme="violet"],
+:root {
+  --color-primary: oklch(0.606 0.25 292.717);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-ring: oklch(0.606 0.25 292.717);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  /* Chart accent colors */
+  --color-chart-1: oklch(0.606 0.25 292.717);
+  --color-chart-2: oklch(0.55 0.22 280);
+  --color-chart-3: oklch(0.65 0.18 305);
+  --color-chart-4: oklch(0.7 0.15 320);
+}
+
+.dark[data-theme="violet"],
+.dark:not([data-theme]) {
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.606 0.25 292.717);
+}
+
+/* ========================================
+   Theme 2: Ocean — Analogous
+   Hue family: 210–250, blue-cyan-teal
+   ======================================== */
+[data-theme="ocean"] {
+  --color-primary: oklch(0.55 0.2 230);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-ring: oklch(0.55 0.2 230);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  --color-chart-1: oklch(0.55 0.2 230);
+  --color-chart-2: oklch(0.50 0.18 215);
+  --color-chart-3: oklch(0.60 0.16 245);
+  --color-chart-4: oklch(0.65 0.14 200);
+}
+
+.dark[data-theme="ocean"] {
+  --color-primary: oklch(0.65 0.18 230);
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.65 0.18 230);
+}
+
+/* ========================================
+   Theme 3: Emerald — Analogous
+   Hue family: 140–180, green-teal-mint
+   ======================================== */
+[data-theme="emerald"] {
+  --color-primary: oklch(0.60 0.19 160);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-ring: oklch(0.60 0.19 160);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  --color-chart-1: oklch(0.60 0.19 160);
+  --color-chart-2: oklch(0.55 0.17 145);
+  --color-chart-3: oklch(0.65 0.15 175);
+  --color-chart-4: oklch(0.70 0.13 130);
+}
+
+.dark[data-theme="emerald"] {
+  --color-primary: oklch(0.70 0.17 160);
+  --color-primary-foreground: oklch(0.15 0.02 160);
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.70 0.17 160);
+}
+
+/* ========================================
+   Theme 4: Sunset — Complementary
+   Hue family: 40–70, warm amber/orange
+   ======================================== */
+[data-theme="sunset"] {
+  --color-primary: oklch(0.70 0.18 55);
+  --color-primary-foreground: oklch(0.15 0.03 55);
+  --color-ring: oklch(0.70 0.18 55);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  --color-chart-1: oklch(0.70 0.18 55);
+  --color-chart-2: oklch(0.65 0.16 42);
+  --color-chart-3: oklch(0.75 0.14 68);
+  --color-chart-4: oklch(0.60 0.20 35);
+}
+
+.dark[data-theme="sunset"] {
+  --color-primary: oklch(0.78 0.15 55);
+  --color-primary-foreground: oklch(0.15 0.03 55);
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.78 0.15 55);
+}
+
+/* ========================================
+   Theme 5: Rose — Complementary
+   Hue family: 335–15, pink-rose-red
+   ======================================== */
+[data-theme="rose"] {
+  --color-primary: oklch(0.60 0.22 350);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-ring: oklch(0.60 0.22 350);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  --color-chart-1: oklch(0.60 0.22 350);
+  --color-chart-2: oklch(0.55 0.20 337);
+  --color-chart-3: oklch(0.65 0.18 5);
+  --color-chart-4: oklch(0.70 0.16 15);
+}
+
+.dark[data-theme="rose"] {
+  --color-primary: oklch(0.70 0.19 350);
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.70 0.19 350);
+}
+
+/* ========================================
+   Theme 6: Slate — Monochrome
+   Hue family: 250–270, desaturated blue-gray
+   ======================================== */
+[data-theme="slate"] {
+  --color-primary: oklch(0.45 0.03 260);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-ring: oklch(0.45 0.03 260);
+  --color-input: oklch(0.871 0.006 286.029);
+
+  --color-chart-1: oklch(0.45 0.03 260);
+  --color-chart-2: oklch(0.40 0.025 250);
+  --color-chart-3: oklch(0.55 0.025 270);
+  --color-chart-4: oklch(0.60 0.02 245);
+}
+
+.dark[data-theme="slate"] {
+  --color-primary: oklch(0.65 0.03 260);
+  --color-input: oklch(0.255 0.014 285.823);
+  --color-ring: oklch(0.65 0.03 260);
+}
+
+/* ========================================
+   Base Styles
+   ======================================== */
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Ensure portaled elements (dropdowns, dialogs) render against the correct background */
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color — uses primary with opacity */
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  opacity: 0.9;
+}
+
+/* ========================================
+   Card Shadow & Depth System
+   Premium card styling with shadows, hover lift,
+   and dark mode glow borders
+   ======================================== */
+
+/* Light mode: soft layered shadow */
+[data-slot="card"] {
+  box-shadow:
+    0 1px 2px oklch(0.141 0.005 285.823 / 0.04),
+    0 2px 8px oklch(0.141 0.005 285.823 / 0.04),
+    0 4px 16px oklch(0.141 0.005 285.823 / 0.02);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+/* Card hover lift — subtle but perceptible */
+[data-slot="card"]:hover {
+  box-shadow:
+    0 2px 4px oklch(0.141 0.005 285.823 / 0.06),
+    0 4px 12px oklch(0.141 0.005 285.823 / 0.06),
+    0 8px 24px oklch(0.141 0.005 285.823 / 0.04);
+  transform: translateY(-1px);
+}
+
+/* Dark mode: subtle primary-colored glow border + soft glow shadow */
+.dark [data-slot="card"] {
+  border-color: oklch(from var(--color-primary) l c h / 0.12);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.3),
+    0 0 0 1px oklch(from var(--color-primary) l c h / 0.06),
+    0 2px 12px oklch(from var(--color-primary) l c h / 0.04);
+}
+
+.dark [data-slot="card"]:hover {
+  border-color: oklch(from var(--color-primary) l c h / 0.18);
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.4),
+    0 0 0 1px oklch(from var(--color-primary) l c h / 0.1),
+    0 4px 20px oklch(from var(--color-primary) l c h / 0.08);
+  transform: translateY(-1px);
+}
+
+/* ========================================
+   Glassmorphism Navbar
+   Frosted glass with gradient border
+   ======================================== */
+
+[data-slot="navbar"] {
+  background: oklch(from var(--color-background) l c h / 0.72);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid oklch(from var(--color-border) l c h / 0.5);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.04), 0 4px 12px oklch(0 0 0 / 0.02);
+}
+
+/* Gradient shimmer line beneath navbar */
+[data-slot="navbar"]::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(from var(--color-primary) l c h / 0.3) 30%,
+    oklch(from var(--color-primary) l c h / 0.5) 50%,
+    oklch(from var(--color-primary) l c h / 0.3) 70%,
+    transparent 100%
+  );
+}
+
+.dark [data-slot="navbar"] {
+  background: oklch(from var(--color-background) l c h / 0.65);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-bottom-color: oklch(from var(--color-border) l c h / 0.4);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.2), 0 4px 16px oklch(0 0 0 / 0.15);
+}
+
+.dark [data-slot="navbar"]::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(from var(--color-primary) l c h / 0.4) 30%,
+    oklch(from var(--color-primary) l c h / 0.6) 50%,
+    oklch(from var(--color-primary) l c h / 0.4) 70%,
+    transparent 100%
+  );
+}
+
+/* Active nav link — gradient underline indicator */
+[data-slot="nav-link-active"] {
+  position: relative;
+}
+
+[data-slot="nav-link-active"]::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    oklch(from var(--color-primary) l c h / 0.8),
+    oklch(from var(--color-primary) l c h / 0.4)
+  );
+}
+
+/* ========================================
+   Brand Icon Glow
+   ======================================== */
+
+[data-slot="brand-icon"] {
+  box-shadow:
+    0 0 0 3px oklch(from var(--color-primary) l c h / 0.15),
+    0 4px 12px oklch(from var(--color-primary) l c h / 0.25);
+  transition: box-shadow 0.2s ease;
+}
+
+[data-slot="brand-icon"]:hover {
+  box-shadow:
+    0 0 0 4px oklch(from var(--color-primary) l c h / 0.2),
+    0 4px 16px oklch(from var(--color-primary) l c h / 0.35);
+}
+
+/* ========================================
+   Summary Stat Card Gradient Accent
+   Subtle gradient wash from primary
+   ======================================== */
+
+[data-slot="stat-card"] {
+  background: linear-gradient(
+    135deg,
+    oklch(from var(--color-primary) l c h / 0.04) 0%,
+    oklch(from var(--color-card) l c h / 1) 60%
+  );
+}
+
+.dark [data-slot="stat-card"] {
+  background: linear-gradient(
+    135deg,
+    oklch(from var(--color-primary) l c h / 0.08) 0%,
+    oklch(from var(--color-card) l c h / 1) 60%
+  );
+}
+
+/* Colored icon circle backgrounds for stat cards */
+[data-slot="stat-icon"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.625rem;
+  background: oklch(from var(--color-primary) l c h / 0.1);
+  color: var(--color-primary);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dark [data-slot="stat-icon"] {
+  background: oklch(from var(--color-primary) l c h / 0.15);
+  box-shadow: 0 0 8px oklch(from var(--color-primary) l c h / 0.1);
+}
+
+/* ========================================
+   Progress Bar Glow
+   Color-matched glow beneath the fill bar
+   ======================================== */
+
+[data-slot="progress-bar-fill"] {
+  box-shadow: 0 0 8px oklch(from var(--color-primary) l c h / 0.3);
+}
+
+[data-slot="progress-bar-fill"][data-status="warning"] {
+  box-shadow: 0 0 8px oklch(0.75 0.183 55.934 / 0.4);
+}
+
+[data-slot="progress-bar-fill"][data-status="danger"] {
+  box-shadow: 0 0 8px oklch(0.577 0.245 27.325 / 0.4);
+}
+
+.dark [data-slot="progress-bar-fill"] {
+  box-shadow: 0 0 12px oklch(from var(--color-primary) l c h / 0.35);
+}
+
+.dark [data-slot="progress-bar-fill"][data-status="warning"] {
+  box-shadow: 0 0 12px oklch(0.75 0.183 55.934 / 0.45);
+}
+
+.dark [data-slot="progress-bar-fill"][data-status="danger"] {
+  box-shadow: 0 0 12px oklch(0.577 0.245 27.325 / 0.45);
+}
+
+/* ========================================
+   Input Focus Glow
+   Primary-colored ring with soft glow
+   ======================================== */
+
+input:focus,
+select:focus,
+textarea:focus,
+[data-slot="input"]:focus {
+  outline: none;
+  border-color: var(--color-primary) !important;
+  box-shadow:
+    0 0 0 3px oklch(from var(--color-primary) l c h / 0.15),
+    0 1px 2px oklch(0 0 0 / 0.05) !important;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus,
+.dark [data-slot="input"]:focus {
+  box-shadow:
+    0 0 0 3px oklch(from var(--color-primary) l c h / 0.2),
+    0 0 8px oklch(from var(--color-primary) l c h / 0.1),
+    0 1px 2px oklch(0 0 0 / 0.2) !important;
+}
+
+/* ========================================
+   Badge Enhancement
+   Subtle shadow, slight gradient overlay
+   ======================================== */
+
+[data-slot="badge"] {
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+  text-shadow: 0 0.5px 0 oklch(0 0 0 / 0.03);
+}
+
+.dark [data-slot="badge"] {
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.2);
+}
+
+/* ========================================
+   Table Row Hover Enhancement
+   Subtle highlight with left edge accent
+   ======================================== */
+
+[data-slot="table-row"]:hover {
+  background-color: oklch(from var(--color-primary) l c h / 0.04) !important;
+}
+
+.dark [data-slot="table-row"]:hover {
+  background-color: oklch(from var(--color-primary) l c h / 0.06) !important;
+}
+
+/* ========================================
+   Section Gradient Divider
+   ======================================== */
+
+[data-slot="section-divider"] {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(from var(--color-border) l c h / 0.6) 20%,
+    oklch(from var(--color-primary) l c h / 0.2) 50%,
+    oklch(from var(--color-border) l c h / 0.6) 80%,
+    transparent 100%
+  );
+}
+
+/* ========================================
+   Page Header Animated Gradient
+   Subtle background mesh effect
+   ======================================== */
+
+[data-slot="page-header"] {
+  position: relative;
+}
+
+[data-slot="page-header"]::before {
+  content: '';
+  position: absolute;
+  inset: -1rem -2rem;
+  border-radius: 1rem;
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(from var(--color-primary) l c h / 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(from var(--color-primary) l c h / 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(from var(--color-primary) l c h / 0.02) 0%, transparent 50%);
+  z-index: -1;
+  animation: header-mesh 8s ease-in-out infinite alternate;
+}
+
+.dark [data-slot="page-header"]::before {
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(from var(--color-primary) l c h / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(from var(--color-primary) l c h / 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(from var(--color-primary) l c h / 0.03) 0%, transparent 50%);
+}
+
+@keyframes header-mesh {
+  0% {
+    background-position: 0% 0%, 100% 0%, 50% 100%;
+  }
+  100% {
+    background-position: 100% 100%, 0% 100%, 50% 0%;
+  }
+}
+
+/* ========================================
+   Dark Mode Background Gradient
+   Subtle radial gradient from center
+   ======================================== */
+
+.dark [data-slot="app-shell"] {
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      oklch(from var(--color-primary) l c h / 0.03) 0%,
+      transparent 60%
+    ),
+    var(--color-background);
+}
+
+/* ========================================
+   Login Card — Dramatic Shadow
+   ======================================== */
+
+[data-slot="login-card"] {
+  box-shadow:
+    0 4px 6px oklch(0 0 0 / 0.04),
+    0 10px 30px oklch(0 0 0 / 0.08),
+    0 20px 60px oklch(from var(--color-primary) l c h / 0.06);
+}
+
+.dark [data-slot="login-card"] {
+  border-color: oklch(from var(--color-primary) l c h / 0.15);
+  box-shadow:
+    0 4px 6px oklch(0 0 0 / 0.3),
+    0 0 0 1px oklch(from var(--color-primary) l c h / 0.1),
+    0 10px 40px oklch(0 0 0 / 0.4),
+    0 20px 60px oklch(from var(--color-primary) l c h / 0.1);
+}
+
+/* ========================================
+   Login Icon — Enhanced Glow
+   ======================================== */
+
+[data-slot="login-icon"] {
+  box-shadow:
+    0 0 0 4px oklch(from var(--color-primary) l c h / 0.12),
+    0 0 0 8px oklch(from var(--color-primary) l c h / 0.06),
+    0 4px 16px oklch(from var(--color-primary) l c h / 0.25);
+}
+
+.dark [data-slot="login-icon"] {
+  box-shadow:
+    0 0 0 4px oklch(from var(--color-primary) l c h / 0.15),
+    0 0 0 8px oklch(from var(--color-primary) l c h / 0.08),
+    0 4px 20px oklch(from var(--color-primary) l c h / 0.35);
+}
+
+/* ========================================
+   Button Hover Enhancement
+   Subtle shadow lift on hover
+   ======================================== */
+
+button:not([disabled]):hover,
+[role="button"]:not([disabled]):hover {
+  filter: brightness(1.02);
+}
+
+/* Primary button glow */
+[data-slot="button"].bg-primary:hover {
+  box-shadow:
+    0 2px 8px oklch(from var(--color-primary) l c h / 0.3),
+    0 4px 16px oklch(from var(--color-primary) l c h / 0.15);
+}
+
+/* ========================================
+   Settings Integration Card
+   Enhanced styling for integration tiles
+   ======================================== */
+
+[data-slot="integration-card"] {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+[data-slot="integration-card"]:hover {
+  transform: translateY(-1px);
+}
+
+.dark [data-slot="integration-card"] {
+  border-color: oklch(from var(--color-border) l c h / 0.6);
+}
+
+.dark [data-slot="integration-card"]:hover {
+  border-color: oklch(from var(--color-primary) l c h / 0.15);
+}
+
+/* ========================================
+   Slider / Range Input Polish
+   ======================================== */
+
+input[type="range"]::-webkit-slider-thumb {
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.2), 0 0 0 2px oklch(from var(--color-primary) l c h / 0.15);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.25), 0 0 0 3px oklch(from var(--color-primary) l c h / 0.2);
+}
+
+/* ========================================
+   Animations
+   ======================================== */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 25%,
+    oklch(0.9 0.005 285 / 0.5) 50%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 25%,
+    oklch(0.25 0.01 285 / 0.3) 50%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Stagger animation utility */
+[data-stagger] > * {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: stagger-in 0.4s ease-out forwards;
+}
+
+[data-stagger] > *:nth-child(1) { animation-delay: 0ms; }
+[data-stagger] > *:nth-child(2) { animation-delay: 60ms; }
+[data-stagger] > *:nth-child(3) { animation-delay: 120ms; }
+[data-stagger] > *:nth-child(4) { animation-delay: 180ms; }
+[data-stagger] > *:nth-child(5) { animation-delay: 240ms; }
+[data-stagger] > *:nth-child(6) { animation-delay: 300ms; }
+
+@keyframes stagger-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Page transitions (Nuxt pageTransition: 'page') */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* ========================================
+   Scrollbar Styling (WebKit)
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: oklch(0.7 0.005 285 / 0.3);
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.6 0.005 285 / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: oklch(0.4 0.005 285 / 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.5 0.005 285 / 0.5);
 }

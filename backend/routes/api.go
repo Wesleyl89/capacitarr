@@ -13,6 +13,7 @@ import (
 
 	"capacitarr/internal/config"
 	"capacitarr/internal/db"
+	"capacitarr/internal/poller"
 )
 
 type LoginRequest struct {
@@ -33,13 +34,20 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		}
 
+		if req.Username == "" || req.Password == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username and password are required"})
+		}
+
 		var user db.AuthConfig
 		if err := database.Where("username = ?", req.Username).First(&user).Error; err != nil {
 			// If no user exists in DB at all, bootstrap the first user
 			var count int64
 			database.Model(&db.AuthConfig{}).Count(&count)
 			if count == 0 {
-				hashed, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+				hashed, hashErr := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+				if hashErr != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
+				}
 				user = db.AuthConfig{Username: req.Username, Password: string(hashed)}
 				database.Create(&user)
 			} else {
@@ -61,12 +69,24 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error generating token"})
 		}
 
+		// Set HttpOnly JWT cookie for secure transport
 		c.SetCookie(&http.Cookie{
 			Name:     "jwt",
 			Value:    tokenString,
 			Expires:  time.Now().Add(24 * time.Hour),
-			HttpOnly: false, // SPA needs to read cookie for auth state
-			Secure:   false, // Set to true in production
+			HttpOnly: true,
+			Secure:   cfg.SecureCookies,
+			Path:     "/",
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		// Set a non-HttpOnly cookie so the SPA can detect auth state
+		c.SetCookie(&http.Cookie{
+			Name:     "authenticated",
+			Value:    "true",
+			Expires:  time.Now().Add(24 * time.Hour),
+			HttpOnly: false,
+			Secure:   cfg.SecureCookies,
 			Path:     "/",
 			SameSite: http.SameSiteLaxMode,
 		})
@@ -79,7 +99,10 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 	protected.Use(RequireAuth(database, cfg))
 
 	protected.POST("/auth/apikey", func(c echo.Context) error {
-		username := c.Get("user").(string)
+		username, ok := c.Get("user").(string)
+		if !ok || username == "" {
+			return echo.ErrUnauthorized
+		}
 
 		bytes := make([]byte, 32)
 		if _, err := rand.Read(bytes); err != nil {
@@ -137,4 +160,75 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config) {
 
 	// Integration management routes
 	RegisterIntegrationRoutes(protected, database)
+
+	// Preference and Rules routes
+	RegisterRuleRoutes(protected, database)
+
+	// Disk Groups routes
+	protected.GET("/disk-groups", func(c echo.Context) error {
+		var groups []db.DiskGroup
+		if err := database.Find(&groups).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch disk groups"})
+		}
+		return c.JSON(http.StatusOK, groups)
+	})
+
+	protected.PUT("/disk-groups/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		var group db.DiskGroup
+		if err := database.First(&group, id).Error; err != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Disk group not found"})
+		}
+
+		var req struct {
+			ThresholdPct float64 `json:"thresholdPct"`
+			TargetPct    float64 `json:"targetPct"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		}
+
+		// Validate thresholds
+		if req.ThresholdPct < 1 || req.ThresholdPct > 99 || req.TargetPct < 1 || req.TargetPct > 99 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Threshold and target must be between 1 and 99"})
+		}
+		if req.ThresholdPct <= req.TargetPct {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Threshold must be greater than target"})
+		}
+
+		if err := database.Model(&group).Select("threshold_pct", "target_pct").Updates(db.DiskGroup{
+			ThresholdPct: req.ThresholdPct,
+			TargetPct:    req.TargetPct,
+		}).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update disk group"})
+		}
+		group.ThresholdPct = req.ThresholdPct
+		group.TargetPct = req.TargetPct
+		return c.JSON(http.StatusOK, group)
+	})
+
+	// Worker Metrics
+	protected.GET("/metrics/worker", func(c echo.Context) error {
+		metrics := poller.GetWorkerMetrics()
+		return c.JSON(http.StatusOK, metrics)
+	})
+
+	// Worker Stats (alias for dashboard consumption)
+	protected.GET("/worker/stats", func(c echo.Context) error {
+		metrics := poller.GetWorkerMetrics()
+		return c.JSON(http.StatusOK, metrics)
+	})
+
+	// Engine Run Now - trigger an immediate evaluation cycle
+	protected.POST("/engine/run", func(c echo.Context) error {
+		select {
+		case poller.RunNowCh <- struct{}{}:
+			return c.JSON(http.StatusOK, map[string]string{"status": "triggered"})
+		default:
+			return c.JSON(http.StatusOK, map[string]string{"status": "already_pending"})
+		}
+	})
+
+	// Audit routes
+	RegisterAuditRoutes(protected, database)
 }

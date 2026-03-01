@@ -1,11 +1,16 @@
 # Build artifacts
 backend/capacitarr
+backend/server
 backend/frontend/dist/
 
 # Database files
 *.db
 *.db-shm
 *.db-wal
+
+# Air live-reload artifacts
+backend/tmp/
+backend/.air.toml
 
 # Editor / OS files
 .DS_Store

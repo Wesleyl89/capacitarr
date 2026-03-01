@@ -49,5 +49,17 @@ We will ensure that the Go backend and Vue frontend are heavily decoupled logica
 - [ ] Final UI/UX polish and refinement
 
 ### Phase 6: Deployment & Packaging
-- [ ] Construct multi-stage `Dockerfile` to compile Vue frontend and Go backend into a single statically linked binary
-- [ ] Verify reverse proxy behavior in compiled Docker container environment
+- [x] Construct multi-stage `Dockerfile` to compile Vue frontend and Go backend into a single statically linked binary
+- [x] Verify reverse proxy behavior in compiled Docker container environment
+
+### Phase 7: Intelligence (Scoring Engine v2)
+- [ ] Implement robust Preference Engine allowing users to assign weight to `Watch History`, `File Size`, `Rating`, etc.
+- [ ] Implement Protections/Targets rule builder UI for strict deletion constraints
+- [ ] Backend generation of composite deletion score per item prioritizing unwatched space hoggers
+- [ ] Live "What Would Be Deleted" UI preview
+
+### Phase 8: Action & Automation
+- [ ] Deletion Execution modes: Dry Run, Approval Queue, and Fully Automated
+- [ ] Connect Automated Execution to Radarr/Sonarr APIS natively
+- [ ] Implement Notification channels (Discord/Slack, In-app)
+- [ ] Historical audit log recording freed space metrics

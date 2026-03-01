@@ -3,7 +3,6 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,26 +23,7 @@ func NewRadarrClient(url, apiKey string) *RadarrClient {
 }
 
 func (r *RadarrClient) doRequest(endpoint string) ([]byte, error) {
-	req, err := http.NewRequest("GET", r.URL+endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Api-Key", r.APIKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("unauthorized: invalid API key")
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	return io.ReadAll(resp.Body)
+	return DoAPIRequest(r.URL+endpoint, "X-Api-Key", r.APIKey)
 }
 
 func (r *RadarrClient) TestConnection() error {
@@ -105,14 +85,14 @@ func (r *RadarrClient) GetRootFolders() ([]string, error) {
 
 // radarrMovie maps the Radarr movie API response (relevant fields)
 type radarrMovie struct {
-	ID        int    `json:"id"`
-	Title     string `json:"title"`
-	Year      int    `json:"year"`
-	Path      string `json:"path"`
-	Monitored bool   `json:"monitored"`
-	HasFile   bool   `json:"hasFile"`
-	SizeOnDisk int64 `json:"sizeOnDisk"`
-	Ratings   struct {
+	ID         int    `json:"id"`
+	Title      string `json:"title"`
+	Year       int    `json:"year"`
+	Path       string `json:"path"`
+	Monitored  bool   `json:"monitored"`
+	HasFile    bool   `json:"hasFile"`
+	SizeOnDisk int64  `json:"sizeOnDisk"`
+	Ratings    struct {
 		IMDB struct {
 			Value float64 `json:"value"`
 		} `json:"imdb"`
@@ -120,10 +100,10 @@ type radarrMovie struct {
 			Value float64 `json:"value"`
 		} `json:"tmdb"`
 	} `json:"ratings"`
-	Genres       []string `json:"genres"`
-	Tags         []int    `json:"tags"`
-	QualityProfileID int `json:"qualityProfileId"`
-	Added        string `json:"added"`
+	Genres           []string `json:"genres"`
+	Tags             []int    `json:"tags"`
+	QualityProfileID int      `json:"qualityProfileId"`
+	Added            string   `json:"added"`
 }
 
 // radarrQualityProfile maps quality profile names
@@ -145,7 +125,9 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 		return nil, fmt.Errorf("failed to fetch quality profiles: %w", err)
 	}
 	var profiles []radarrQualityProfile
-	json.Unmarshal(profileBody, &profiles)
+	if err := json.Unmarshal(profileBody, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to parse quality profiles: %w", err)
+	}
 	profileMap := make(map[int]string)
 	for _, p := range profiles {
 		profileMap[p.ID] = p.Name
@@ -157,7 +139,9 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 		return nil, fmt.Errorf("failed to fetch tags: %w", err)
 	}
 	var tags []radarrTag
-	json.Unmarshal(tagBody, &tags)
+	if err := json.Unmarshal(tagBody, &tags); err != nil {
+		return nil, fmt.Errorf("failed to parse tags: %w", err)
+	}
 	tagMap := make(map[int]string)
 	for _, t := range tags {
 		tagMap[t.ID] = t.Label
@@ -218,4 +202,28 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 	}
 
 	return items, nil
+}
+
+func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {
+	endpoint := fmt.Sprintf("/api/v3/movie/%s?deleteFiles=true", item.ExternalID)
+	req, err := http.NewRequest("DELETE", r.URL+endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", r.APIKey)
+
+	resp, err := sharedHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key")
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	return nil
 }

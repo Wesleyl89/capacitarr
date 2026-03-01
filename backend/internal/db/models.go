@@ -6,10 +6,10 @@ import (
 
 // AuthConfig stores credentials for web UI sessions
 type AuthConfig struct {
-	ID        uint      `gorm:"primarykey"`
-	Username  string    `gorm:"uniqueIndex;not null"`
-	Password  string    `gorm:"not null"` // Hashed password
-	APIKey    string    `gorm:"index"`
+	ID        uint   `gorm:"primarykey"`
+	Username  string `gorm:"uniqueIndex;not null"`
+	Password  string `gorm:"not null"` // Hashed password
+	APIKey    string `gorm:"index"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -28,13 +28,13 @@ type LibraryHistory struct {
 // IntegrationConfig stores a configured service connection
 type IntegrationConfig struct {
 	ID             uint       `gorm:"primarykey" json:"id"`
-	Type           string     `gorm:"not null;index" json:"type"`   // plex, sonarr, radarr
-	Name           string     `gorm:"not null" json:"name"`         // User-friendly name
+	Type           string     `gorm:"not null;index" json:"type"` // plex, sonarr, radarr
+	Name           string     `gorm:"not null" json:"name"`       // User-friendly name
 	URL            string     `gorm:"not null" json:"url"`
-	APIKey         string     `gorm:"not null" json:"apiKey"`       // API key or Plex token
+	APIKey         string     `gorm:"not null" json:"apiKey"` // API key or Plex token
 	Enabled        bool       `gorm:"default:true" json:"enabled"`
-	MediaSizeBytes int64      `json:"mediaSizeBytes"`               // Total media file size
-	MediaCount     int        `json:"mediaCount"`                   // Number of media items
+	MediaSizeBytes int64      `json:"mediaSizeBytes"` // Total media file size
+	MediaCount     int        `json:"mediaCount"`     // Number of media items
 	LastSync       *time.Time `json:"lastSync,omitempty"`
 	LastError      string     `json:"lastError,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -43,12 +43,52 @@ type IntegrationConfig struct {
 
 // DiskGroup represents a physical disk/mount point shared by multiple services
 type DiskGroup struct {
-	ID           uint    `gorm:"primarykey" json:"id"`
-	MountPath    string  `gorm:"uniqueIndex;not null" json:"mountPath"`
-	TotalBytes   int64   `gorm:"not null" json:"totalBytes"`
-	UsedBytes    int64   `gorm:"not null" json:"usedBytes"`
-	ThresholdPct float64 `gorm:"default:85" json:"thresholdPct"` // Clean up at this %
-	TargetPct    float64 `gorm:"default:75" json:"targetPct"`    // Free down to this %
+	ID           uint      `gorm:"primarykey" json:"id"`
+	MountPath    string    `gorm:"uniqueIndex;not null" json:"mountPath"`
+	TotalBytes   int64     `gorm:"not null" json:"totalBytes"`
+	UsedBytes    int64     `gorm:"not null" json:"usedBytes"`
+	ThresholdPct float64   `gorm:"default:85" json:"thresholdPct"` // Clean up at this %
+	TargetPct    float64   `gorm:"default:75" json:"targetPct"`    // Free down to this %
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// PreferenceSet stores the global weights for the scoring engine (0-10 scale)
+type PreferenceSet struct {
+	ID                    uint      `gorm:"primarykey" json:"id"`
+	LogLevel              string    `gorm:"default:'info';not null" json:"logLevel"`          // "debug", "info", "warn", "error"
+	AuditLogRetentionDays int       `gorm:"default:30;not null" json:"auditLogRetentionDays"` // 0 = forever, else days
+	WatchHistoryWeight    int       `gorm:"default:10" json:"watchHistoryWeight"`             // High default
+	LastWatchedWeight     int       `gorm:"default:8" json:"lastWatchedWeight"`
+	FileSizeWeight        int       `gorm:"default:6" json:"fileSizeWeight"`
+	RatingWeight          int       `gorm:"default:5" json:"ratingWeight"`
+	TimeInLibraryWeight   int       `gorm:"default:4" json:"timeInLibraryWeight"`
+	AvailabilityWeight    int       `gorm:"default:3" json:"availabilityWeight"`
+	ExecutionMode         string    `gorm:"default:'dry-run';not null" json:"executionMode"`      // "dry-run", "approval", "auto"
+	TiebreakerMethod      string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"` // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
+	UpdatedAt             time.Time `json:"updatedAt"`
+}
+
+// ProtectionRule stores absolute constraints to prevent media deletion
+type ProtectionRule struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	Type      string    `gorm:"not null" json:"type"`      // 'protect' or 'target'
+	Field     string    `gorm:"not null" json:"field"`     // e.g. "quality", "added_date", "tag"
+	Operator  string    `gorm:"not null" json:"operator"`  // e.g. "==", "contains", "<"
+	Value     string    `gorm:"not null" json:"value"`     // e.g. "4K", "14", "keeper"
+	Intensity string    `gorm:"not null" json:"intensity"` // 'slight', 'strong', 'absolute'
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AuditLog stores a history of what was deleted, when, and why
+type AuditLog struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	MediaName    string    `gorm:"index;not null" json:"mediaName"`
+	MediaType    string    `gorm:"not null" json:"mediaType"`
+	Reason       string    `gorm:"not null" json:"reason"`              // e.g. "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)" — backward compat
+	ScoreDetails string    `gorm:"type:text" json:"scoreDetails"`       // JSON-encoded []ScoreFactor
+	Action       string    `gorm:"not null" json:"action"`              // "Deleted", "Dry-Run"
+	SizeBytes    int64     `json:"sizeBytes"`
+	CreatedAt    time.Time `json:"createdAt"`
 }

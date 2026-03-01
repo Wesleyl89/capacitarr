@@ -19,7 +19,7 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 			// Check Authorization header first
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader != "" {
-				parts := strings.Split(authHeader, " ")
+				parts := strings.SplitN(authHeader, " ", 2)
 				if len(parts) != 2 {
 					return echo.ErrUnauthorized
 				}
@@ -50,6 +50,10 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 
 			// Validate JWT token
 			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+				// Ensure the signing method is what we expect
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, echo.ErrUnauthorized
+				}
 				return []byte(cfg.JWTSecret), nil
 			})
 
@@ -57,8 +61,18 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 				return echo.ErrUnauthorized
 			}
 
-			claims := token.Claims.(jwt.MapClaims)
-			c.Set("user", claims["sub"].(string))
+			// Safe type assertions with comma-ok pattern
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				return echo.ErrUnauthorized
+			}
+
+			sub, ok := claims["sub"].(string)
+			if !ok || sub == "" {
+				return echo.ErrUnauthorized
+			}
+
+			c.Set("user", sub)
 			return next(c)
 		}
 	}

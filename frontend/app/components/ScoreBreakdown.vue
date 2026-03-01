@@ -1,0 +1,244 @@
+<template>
+  <div v-if="factors.length > 0" class="flex flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <span :class="['font-semibold tabular-nums text-foreground', size === 'sm' ? 'text-xs' : 'text-sm']">
+        {{ scoreDisplay }}
+      </span>
+      <div
+        v-if="weightFactors.length > 0"
+        :class="['flex rounded-full overflow-hidden bg-muted flex-1 min-w-0', size === 'sm' ? 'h-1.5' : 'h-2']"
+      >
+        <div
+          v-for="f in weightFactors"
+          :key="f.name"
+          class="h-full transition-all duration-300"
+          :style="{
+            width: totalContrib > 0 ? `${(f.contribution / totalContrib) * 100}%` : '0%',
+            backgroundColor: factorColor(f.name),
+            minWidth: f.contribution > 0 ? '2px' : '0px',
+          }"
+          :title="`${f.name}: ${f.contribution.toFixed(2)}`"
+        ></div>
+      </div>
+    </div>
+    <div v-if="weightFactors.length > 0" class="flex flex-wrap gap-x-2 gap-y-0.5">
+      <span
+        v-for="f in visibleWeightFactors"
+        :key="f.name"
+        class="inline-flex items-center gap-1 text-[10px] text-zinc-500"
+        :title="`${f.name}: ${f.contribution.toFixed(2)} (raw: ${f.rawScore.toFixed(2)}, weight: ${f.weight})`"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          :style="{ backgroundColor: factorColor(f.name) }"
+        ></span>
+        <span>{{ factorAbbr(f.name) }}{{ f.contribution.toFixed(2) }}</span>
+      </span>
+    </div>
+    <div v-if="ruleFactors.length > 0" class="flex flex-wrap gap-1 mt-0.5">
+      <span
+        v-for="f in ruleFactors"
+        :key="f.name"
+        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+        :class="f.name.includes('Protect') ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'"
+        :title="f.name"
+      >
+        {{ f.name }}
+      </span>
+    </div>
+  </div>
+  <div v-else-if="legacyParsed.score" class="flex flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <span :class="['font-semibold tabular-nums', size === 'sm' ? 'text-xs' : 'text-sm']">
+        {{ legacyParsed.score }}
+      </span>
+      <div
+        v-if="legacyParsed.factors.length > 0"
+        :class="['flex rounded-full overflow-hidden bg-muted flex-1 min-w-0', size === 'sm' ? 'h-1.5' : 'h-2']"
+      >
+        <div
+          v-for="f in legacyParsed.factors"
+          :key="f.name"
+          class="h-full transition-all duration-300"
+          :style="{
+            width: legacyTotalContrib > 0 ? `${(f.value / legacyTotalContrib) * 100}%` : '0%',
+            backgroundColor: factorColor(f.name),
+            minWidth: f.value > 0 ? '2px' : '0px',
+          }"
+          :title="`${f.label}: ${f.value.toFixed(2)}`"
+        ></div>
+      </div>
+    </div>
+    <div v-if="legacyParsed.factors.length > 0" class="flex flex-wrap gap-x-2 gap-y-0.5">
+      <span
+        v-for="f in legacyVisibleFactors"
+        :key="f.name"
+        class="inline-flex items-center gap-1 text-[10px] text-zinc-500"
+        :title="`${f.label}: ${f.value.toFixed(2)}`"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          :style="{ backgroundColor: factorColor(f.name) }"
+        ></span>
+        <span>{{ f.abbr }}{{ f.value.toFixed(2) }}</span>
+      </span>
+    </div>
+    <span
+      v-if="legacyParsed.factors.length === 0 && legacyParsed.rawBreakdown"
+      class="text-[10px] text-zinc-400 truncate max-w-[200px]"
+      :title="legacyParsed.rawBreakdown"
+    >
+      {{ legacyParsed.rawBreakdown }}
+    </span>
+  </div>
+  <span v-else class="text-xs text-zinc-500 max-w-xs truncate block" :title="reason">
+    {{ reason }}
+  </span>
+</template>
+
+<script setup lang="ts">
+interface ScoreFactor {
+  name: string
+  rawScore: number
+  weight: number
+  contribution: number
+  type: string // "weight" or "rule"
+}
+
+interface Props {
+  reason: string
+  scoreDetails?: string
+  factors?: ScoreFactor[]
+  size?: string
+}
+const props = withDefaults(defineProps<Props>(), { size: 'md', scoreDetails: '', factors: () => [] })
+
+const FACTOR_COLORS: Record<string, string> = {
+  'Watch History': '#8b5cf6',
+  'Last Watched': '#3b82f6',
+  'File Size': '#f59e0b',
+  'Rating': '#10b981',
+  'Time in Library': '#f97316',
+  'Availability': '#ec4899',
+  // Legacy short names
+  Watch: '#8b5cf6',
+  Recency: '#3b82f6',
+  Size: '#f59e0b',
+  Age: '#f97316',
+  Status: '#ec4899',
+}
+
+const FACTOR_ABBRS: Record<string, string> = {
+  'Watch History': 'W:',
+  'Last Watched': 'R:',
+  'File Size': 'S:',
+  'Rating': 'Rt:',
+  'Time in Library': 'A:',
+  'Availability': 'St:',
+}
+
+const LEGACY_LABELS: Record<string, string> = {
+  Watch: 'Watch History',
+  Recency: 'Last Watched',
+  Size: 'File Size',
+  Rating: 'Rating',
+  Age: 'Time in Library',
+  Status: 'Availability',
+}
+
+function factorColor(name: string): string {
+  return FACTOR_COLORS[name] || '#6b7280'
+}
+
+function factorAbbr(name: string): string {
+  return FACTOR_ABBRS[name] || name.slice(0, 2) + ':'
+}
+
+// Parse structured factors from scoreDetails JSON or direct factors prop
+const factors = computed<ScoreFactor[]>(() => {
+  // Prefer direct factors prop (from preview API)
+  if (props.factors && props.factors.length > 0) {
+    return props.factors
+  }
+  // Try parsing scoreDetails JSON string (from audit API)
+  if (props.scoreDetails) {
+    try {
+      const parsed = JSON.parse(props.scoreDetails)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed as ScoreFactor[]
+      }
+    } catch {
+      // Fall through to legacy parsing
+    }
+  }
+  return []
+})
+
+const weightFactors = computed(() => factors.value.filter(f => f.type === 'weight'))
+const ruleFactors = computed(() => factors.value.filter(f => f.type === 'rule'))
+
+const totalContrib = computed(() =>
+  weightFactors.value.reduce((sum, f) => sum + f.contribution, 0)
+)
+
+const visibleWeightFactors = computed(() =>
+  weightFactors.value.filter(f => f.contribution > 0.01)
+)
+
+// Extract score from reason string for display
+const scoreDisplay = computed(() => {
+  const match = props.reason.match(/^Score:\s*([\d.]+)/)
+  return match ? match[1] : factors.value.reduce((s, f) => s + f.contribution, 0).toFixed(2)
+})
+
+// Legacy parsing for backward compatibility with old audit logs
+interface LegacyFactor {
+  name: string
+  label: string
+  abbr: string
+  value: number
+}
+
+interface LegacyParsed {
+  score: string | null
+  factors: LegacyFactor[]
+  rawBreakdown: string
+}
+
+function parseLegacyReason(reason: string): LegacyParsed {
+  const scoreMatch = reason.match(/^Score:\s*([\d.]+)\s*\((.+)\)$/)
+  if (!scoreMatch) {
+    return { score: null, factors: [], rawBreakdown: reason }
+  }
+
+  const score = scoreMatch[1]
+  const breakdownStr = scoreMatch[2]
+
+  const factorPattern = /(\w+):([\d.]+)/g
+  const legacyFactors: LegacyFactor[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = factorPattern.exec(breakdownStr)) !== null) {
+    const name = match[1]
+    const value = parseFloat(match[2])
+    legacyFactors.push({
+      name,
+      label: LEGACY_LABELS[name] || name,
+      abbr: name.slice(0, 1).toUpperCase() + ':',
+      value,
+    })
+  }
+
+  return { score, factors: legacyFactors, rawBreakdown: breakdownStr }
+}
+
+const legacyParsed = computed(() => parseLegacyReason(props.reason))
+
+const legacyTotalContrib = computed(() =>
+  legacyParsed.value.factors.reduce((sum, f) => sum + f.value, 0)
+)
+
+const legacyVisibleFactors = computed(() =>
+  legacyParsed.value.factors.filter(f => f.value > 0.01)
+)
+</script>

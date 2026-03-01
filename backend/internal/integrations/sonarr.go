@@ -3,7 +3,6 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,26 +23,7 @@ func NewSonarrClient(url, apiKey string) *SonarrClient {
 }
 
 func (s *SonarrClient) doRequest(endpoint string) ([]byte, error) {
-	req, err := http.NewRequest("GET", s.URL+endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Api-Key", s.APIKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("unauthorized: invalid API key")
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	return io.ReadAll(resp.Body)
+	return DoAPIRequest(s.URL+endpoint, "X-Api-Key", s.APIKey)
 }
 
 func (s *SonarrClient) TestConnection() error {
@@ -105,17 +85,17 @@ func (s *SonarrClient) GetRootFolders() ([]string, error) {
 
 // sonarrSeries maps the Sonarr series API response
 type sonarrSeries struct {
-	ID        int    `json:"id"`
-	Title     string `json:"title"`
-	Year      int    `json:"year"`
-	Path      string `json:"path"`
-	Monitored bool   `json:"monitored"`
-	Status    string `json:"status"` // continuing, ended
-	Genres    []string `json:"genres"`
-	Tags      []int    `json:"tags"`
-	QualityProfileID int `json:"qualityProfileId"`
-	Added     string `json:"added"`
-	Ratings   struct {
+	ID               int      `json:"id"`
+	Title            string   `json:"title"`
+	Year             int      `json:"year"`
+	Path             string   `json:"path"`
+	Monitored        bool     `json:"monitored"`
+	Status           string   `json:"status"` // continuing, ended
+	Genres           []string `json:"genres"`
+	Tags             []int    `json:"tags"`
+	QualityProfileID int      `json:"qualityProfileId"`
+	Added            string   `json:"added"`
+	Ratings          struct {
 		Value float64 `json:"value"`
 	} `json:"ratings"`
 	Statistics struct {
@@ -130,9 +110,9 @@ type sonarrSeason struct {
 	SeasonNumber int  `json:"seasonNumber"`
 	Monitored    bool `json:"monitored"`
 	Statistics   struct {
-		SizeOnDisk       int64 `json:"sizeOnDisk"`
-		EpisodeFileCount int   `json:"episodeFileCount"`
-		TotalEpisodeCount int  `json:"totalEpisodeCount"`
+		SizeOnDisk        int64 `json:"sizeOnDisk"`
+		EpisodeFileCount  int   `json:"episodeFileCount"`
+		TotalEpisodeCount int   `json:"totalEpisodeCount"`
 	} `json:"statistics"`
 }
 
@@ -155,7 +135,9 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 		return nil, fmt.Errorf("failed to fetch quality profiles: %w", err)
 	}
 	var profiles []sonarrQualityProfile
-	json.Unmarshal(profileBody, &profiles)
+	if err := json.Unmarshal(profileBody, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to parse quality profiles: %w", err)
+	}
 	profileMap := make(map[int]string)
 	for _, p := range profiles {
 		profileMap[p.ID] = p.Name
@@ -167,7 +149,9 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 		return nil, fmt.Errorf("failed to fetch tags: %w", err)
 	}
 	var tags []sonarrTag
-	json.Unmarshal(tagBody, &tags)
+	if err := json.Unmarshal(tagBody, &tags); err != nil {
+		return nil, fmt.Errorf("failed to parse tags: %w", err)
+	}
 	tagMap := make(map[int]string)
 	for _, t := range tags {
 		tagMap[t.ID] = t.Label
@@ -250,4 +234,93 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 	}
 
 	return items, nil
+}
+
+func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
+	var endpoint string
+	if item.Type == MediaTypeShow {
+		// Delete the entire series and its files
+		endpoint = fmt.Sprintf("/api/v3/series/%s?deleteFiles=true", item.ExternalID)
+	} else if item.Type == MediaTypeSeason {
+		// ExternalID for season is formatted as "seriesId-seasonNum" (e.g., "12-s1")
+		parts := strings.Split(item.ExternalID, "-s")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid season external ID format: %s", item.ExternalID)
+		}
+		
+		seriesIdStr := parts[0]
+		seasonNumStr := parts[1]
+		
+		// To delete a season, we fetch all episode files for the season...
+		filesBody, err := s.doRequest(fmt.Sprintf("/api/v3/episodefile?seriesId=%s&seasonNumber=%s", seriesIdStr, seasonNumStr))
+		if err != nil {
+			return fmt.Errorf("failed to fetch episode files for season: %w", err)
+		}
+		
+		var files []struct {
+			ID int `json:"id"`
+		}
+		if err := json.Unmarshal(filesBody, &files); err != nil {
+			return fmt.Errorf("failed to parse episode files: %w", err)
+		}
+		
+		// ...and delete them in bulk
+		fileIds := make([]int, len(files))
+		for i, f := range files {
+			fileIds[i] = f.ID
+		}
+		
+		if len(fileIds) == 0 {
+			return nil // Nothing to delete
+		}
+		
+		payload, _ := json.Marshal(map[string]interface{}{
+			"episodeFileIds": fileIds,
+		})
+		
+		req, err := http.NewRequest("DELETE", s.URL+"/api/v3/episodefile/bulk", strings.NewReader(string(payload)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-Api-Key", s.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		
+		resp, err := sharedHTTPClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode == 401 {
+			return fmt.Errorf("unauthorized: invalid API key")
+		}
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		}
+		
+		return nil
+	} else {
+		return fmt.Errorf("unsupported media type for sonarr deletion: %s", item.Type)
+	}
+
+	req, err := http.NewRequest("DELETE", s.URL+endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", s.APIKey)
+
+		resp, err := sharedHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key")
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	return nil
 }

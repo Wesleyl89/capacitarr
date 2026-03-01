@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io"
@@ -9,9 +10,11 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -120,21 +123,33 @@ func main() {
 	}
 
 	// Initialize background jobs
-	poller.Start(15 * time.Second) // Poll frequently to simulate active capacity ingestion
-	jobs.Start()
+	pollerStop := poller.Start(15 * time.Second) // Poll frequently to simulate active capacity ingestion
+	cronScheduler := jobs.Start()
 
 	// Initialize Echo instance
 	e := echo.New()
 
 	// Middleware
-	e.Use(middleware.Logger())
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogURI:    true,
+		LogStatus: true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			slog.Info("request",
+				"uri", v.URI,
+				"status", v.Status,
+			)
+			return nil
+		},
+	}))
 	e.Use(middleware.Recover())
 
-	// Add CORS middleware
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-	}))
+	// Add CORS middleware — only if origins are configured
+	if len(cfg.CORSOrigins) > 0 {
+		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins: cfg.CORSOrigins,
+			AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+		}))
+	}
 
 	// API Routing group mapping to /api/v1
 	// Respect configuration's BaseURL for any proxy magic
@@ -158,7 +173,31 @@ func main() {
 		e.GET("/*", spaHandler(fsys, ""))
 	}
 
-	// Start Server
-	e.Logger.Fatal(e.Start(":" + cfg.Port))
-}
+	// Graceful shutdown
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigChan
+		slog.Info("Received shutdown signal", "signal", sig)
 
+		// Stop background jobs
+		pollerStop()
+		cronScheduler.Stop()
+		poller.StopWorker()
+
+		// Shutdown HTTP server with 10s deadline
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := e.Shutdown(ctx); err != nil {
+			slog.Error("Server shutdown error", "error", err)
+		}
+	}()
+
+	// Start Server
+	if err := e.Start(":" + cfg.Port); err != nil && err != http.ErrServerClosed {
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Capacitarr shut down gracefully")
+}

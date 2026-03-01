@@ -3,9 +3,6 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -29,26 +26,7 @@ func (p *PlexClient) doRequest(endpoint string) ([]byte, error) {
 		sep = "&"
 	}
 	fullURL := p.URL + endpoint + sep + "X-Plex-Token=" + p.Token
-	req, err := http.NewRequest("GET", fullURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("unauthorized: invalid Plex token")
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	return io.ReadAll(resp.Body)
+	return DoAPIRequest(fullURL, "Accept", "application/json")
 }
 
 func (p *PlexClient) TestConnection() error {
@@ -107,8 +85,8 @@ type plexMetadata struct {
 			Size int64  `json:"size"`
 		} `json:"Part"`
 	} `json:"Media"`
-	Index       int `json:"index,omitempty"`       // season/episode number
-	LeafCount   int `json:"leafCount,omitempty"`    // episode count (for shows/seasons)
+	Index     int `json:"index,omitempty"`     // season/episode number
+	LeafCount int `json:"leafCount,omitempty"` // episode count (for shows/seasons)
 }
 
 func (p *PlexClient) GetMediaItems() ([]MediaItem, error) {
@@ -333,5 +311,8 @@ type PlexServerInfo struct {
 // Ensure PlexClient implements Integration
 var _ Integration = (*PlexClient)(nil)
 
-// Ensure unused import is used
-var _ = strconv.Itoa
+func (p *PlexClient) DeleteMediaItem(item MediaItem) error {
+	// Plex is read-only for watch history in this architecture.
+	// Actual deletion happens via Radarr/Sonarr.
+	return nil
+}

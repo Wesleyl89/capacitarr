@@ -3,6 +3,7 @@ package routes
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -67,9 +68,9 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		}
 
 		// Validate type
-		validTypes := map[string]bool{"plex": true, "sonarr": true, "radarr": true}
+		validTypes := map[string]bool{"plex": true, "sonarr": true, "radarr": true, "tautulli": true, "overseerr": true, "lidarr": true}
 		if !validTypes[config.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be plex, sonarr, or radarr"})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be plex, sonarr, radarr, lidarr, tautulli, or overseerr"})
 		}
 
 		config.ID = 0 // Ensure auto-increment
@@ -142,7 +143,37 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		}
 
-		client := createClient(req.Type, req.URL, req.APIKey)
+		// Tautulli and Overseerr don't implement the full Integration interface,
+		// so handle their test connections separately
+		if req.Type == "tautulli" {
+			tautulli := integrations.NewTautulliClient(req.URL, req.APIKey)
+			if err := tautulli.TestConnection(); err != nil {
+				return c.JSON(http.StatusOK, map[string]interface{}{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"success": true,
+				"message": "Connection successful",
+			})
+		}
+
+		if req.Type == "overseerr" {
+			overseerr := integrations.NewOverseerrClient(req.URL, req.APIKey)
+			if err := overseerr.TestConnection(); err != nil {
+				return c.JSON(http.StatusOK, map[string]interface{}{
+					"success": false,
+					"error":   err.Error(),
+				})
+			}
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"success": true,
+				"message": "Connection successful",
+			})
+		}
+
+		client := CreateClient(req.Type, req.URL, req.APIKey)
 		if client == nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown integration type"})
 		}
@@ -160,15 +191,6 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		})
 	})
 
-	// Get disk groups (aggregated disk view)
-	g.GET("/disk-groups", func(c echo.Context) error {
-		var groups []db.DiskGroup
-		if err := database.Find(&groups).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch disk groups"})
-		}
-		return c.JSON(http.StatusOK, groups)
-	})
-
 	// Sync all integrations (trigger a manual poll)
 	g.POST("/integrations/sync", func(c echo.Context) error {
 		var configs []db.IntegrationConfig
@@ -178,7 +200,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 
 		results := make([]map[string]interface{}, 0)
 		for _, cfg := range configs {
-			client := createClient(cfg.Type, cfg.URL, cfg.APIKey)
+			client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
 			if client == nil {
 				continue
 			}
@@ -227,13 +249,15 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 	})
 }
 
-// createClient creates the appropriate integration client based on type
-func createClient(intType, url, apiKey string) integrations.Integration {
+// CreateClient creates the appropriate integration client based on type
+func CreateClient(intType, url, apiKey string) integrations.Integration {
 	switch intType {
 	case "sonarr":
 		return integrations.NewSonarrClient(url, apiKey)
 	case "radarr":
 		return integrations.NewRadarrClient(url, apiKey)
+	case "lidarr":
+		return integrations.NewLidarrClient(url, apiKey)
 	case "plex":
 		return integrations.NewPlexClient(url, apiKey)
 	default:
@@ -267,5 +291,5 @@ func updateDiskGroup(database *gorm.DB, disk integrations.DiskSpace) {
 
 // ismasked checks if an API key string is a masked version (contains "...")
 func ismasked(key string) bool {
-	return len(key) > 0 && key[len(key)/2] == '.'
+	return strings.Contains(key, "...")
 }

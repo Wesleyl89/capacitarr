@@ -20,6 +20,7 @@ The engine of Capacitarr runs atop Go 1.23 using Echo. Core components include:
 - `api`: Protected REST routes utilizing strict JWT or API-Key based context injection.
 - `scheduler`: Background CRON jobs processing time-series aggregations to prevent unmanaged SQLite database bloat.
 - `config`: Handles environment-variable injected bootstrapping logic targeting standard properties like ports and DB routing. 
+- `engine`: The rule and scoring engine that evaluates media based on User Preferences and Protection Rules. (See `docs/plans/scoring_design.md`)
 
 ### Frontend (Vue 3 / Nuxt / Tailwind / ApexCharts)
 Designed to drop jaws, the Dashboard heavily utilizes high-end pre-compiled Slate and Indigo palettes spanning responsive desktop/mobile environments and providing completely reactive dark/light mode toggling out of the box. Nuxt routes respect `NUXT_APP_BASE_URL` aligning symmetrically with Go's pathing prefix parameters logic allowing true dynamic hosting locations.
@@ -43,13 +44,13 @@ If you are developing against Capacitarr, it is best to run the two servers sepa
 cd backend
 go run main.go
 ```
-*Note: The backend defaults to `http://localhost:8080` if not overridden.*
+*Note: The backend defaults to `http://localhost:2187` if not overridden.*
 
 **2. Start the Frontend Dev environment**
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ### Production Deployment (Single Static Binary)
@@ -59,7 +60,7 @@ Capacitarr's super-power is condensing the node-based frontend application into 
 **1. Build the Nuxt Frontend**
 ```bash
 cd frontend
-npm run build 
+pnpm run build 
 ```
 
 **2. Copy the Frontend assets to the Backend tree**
@@ -84,7 +85,7 @@ We've provided a highly optimized multi-stage `Dockerfile` that executes the Nux
 
 ```bash
 docker build -t capacitarr .
-docker run -p 8080:8080 capacitarr 
+docker run -p 2187:2187 capacitarr 
 ```
 
 ### Advanced Reverse Proxying (Subdirectory Deployment)
@@ -93,13 +94,13 @@ If deploying behind Nginx or similar to intercept traffic towards a specific app
 
 **Docker Execution Example:**
 ```bash
-docker run -e NUXT_APP_BASE_URL=/system/metrics/ -e BASE_URL=/system/metrics -p 8080:8080 capacitarr 
+docker run -e NUXT_APP_BASE_URL=/system/metrics/ -e BASE_URL=/system/metrics -p 2187:2187 capacitarr 
 ```
 
 **Nginx Configuration Mapping Example:**
 ```nginx
 location /system/metrics/ {
-    proxy_pass http://localhost:8080/;
+    proxy_pass http://localhost:2187/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_addrs;

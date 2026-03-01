@@ -1,11 +1,13 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
-COPY frontend/package*.json ./
-RUN npm ci
+RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
+
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 FROM golang:1.23-alpine AS backend-builder
 WORKDIR /app
@@ -27,6 +29,6 @@ RUN apk add --no-cache ca-certificates tzdata sqlite-libs
 
 COPY --from=backend-builder /app/backend/capacitarr /app/capacitarr
 
-EXPOSE 8080
+EXPOSE 2187
 
 ENTRYPOINT ["/app/capacitarr"]
