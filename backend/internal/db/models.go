@@ -93,3 +93,16 @@ type AuditLog struct {
 	SizeBytes    int64     `json:"sizeBytes"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+// EngineRunStats stores one row per engine evaluation cycle, persisting metrics
+// across container restarts so the UI always shows the latest run's stats.
+type EngineRunStats struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	RunAt         time.Time `gorm:"index;not null" json:"runAt"`
+	Evaluated     int       `gorm:"not null;default:0" json:"evaluated"`
+	Flagged       int       `gorm:"not null;default:0" json:"flagged"`
+	FreedBytes    int64     `gorm:"not null;default:0" json:"freedBytes"`
+	ExecutionMode string    `gorm:"not null;default:'dry-run'" json:"executionMode"`
+	DurationMs    int64     `gorm:"not null;default:0" json:"durationMs"`
+	ErrorMessage  string    `json:"errorMessage,omitempty"`
+}

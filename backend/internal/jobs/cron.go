@@ -53,6 +53,14 @@ func Start() *cron.Cron {
 		slog.Error("Failed to add monthly cron", "error", err)
 	}
 
+	// 5. Prune old engine run stats — keep the last 1000 rows
+	_, err = c.AddFunc("@daily", func() {
+		pruneEngineRunStats(1000)
+	})
+	if err != nil {
+		slog.Error("Failed to add engine stats cleanup cron", "error", err)
+	}
+
 	c.Start()
 	slog.Info("Cron jobs started successfully")
 	return c
@@ -106,5 +114,28 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 func pruneData(resolution string, before time.Time) {
 	if err := db.DB.Where("resolution = ? AND timestamp < ?", resolution, before).Delete(&db.LibraryHistory{}).Error; err != nil {
 		slog.Error("Failed to prune data", "error", err, "resolution", resolution)
+	}
+}
+
+// pruneEngineRunStats keeps only the most recent `keep` rows in engine_run_stats.
+func pruneEngineRunStats(keep int) {
+	var count int64
+	db.DB.Model(&db.EngineRunStats{}).Count(&count)
+	if count <= int64(keep) {
+		return
+	}
+
+	// Find the ID threshold — delete everything below the Nth newest row
+	var cutoffRow db.EngineRunStats
+	result := db.DB.Order("run_at DESC").Offset(keep).Limit(1).First(&cutoffRow)
+	if result.Error != nil {
+		return
+	}
+
+	deleted := db.DB.Where("run_at <= ?", cutoffRow.RunAt).Delete(&db.EngineRunStats{})
+	if deleted.Error != nil {
+		slog.Error("Failed to prune engine run stats", "error", deleted.Error)
+	} else if deleted.RowsAffected > 0 {
+		slog.Info("Pruned old engine run stats", "deleted", deleted.RowsAffected, "kept", keep)
 	}
 }

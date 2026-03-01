@@ -79,6 +79,13 @@ func poll() {
 	}
 	defer pollRunning.Store(false)
 
+	pollStart := time.Now()
+
+	// Reset per-run counters at the start of each poll cycle
+	atomic.StoreInt64(&lastRunEvaluated, 0)
+	atomic.StoreInt64(&lastRunFlagged, 0)
+	atomic.StoreInt64(&lastRunFreedBytes, 0)
+
 	var configs []db.IntegrationConfig
 	if err := db.DB.Where("enabled = ?", true).Find(&configs).Error; err != nil {
 		slog.Error("Poller: failed to load integrations", "error", err)
@@ -353,6 +360,19 @@ func poll() {
 			}
 		}
 	}
+
+	// Persist engine run stats to DB so they survive container restarts
+	runStats := db.EngineRunStats{
+		RunAt:         pollStart,
+		Evaluated:     int(atomic.LoadInt64(&lastRunEvaluated)),
+		Flagged:       int(atomic.LoadInt64(&lastRunFlagged)),
+		FreedBytes:    atomic.LoadInt64(&lastRunFreedBytes),
+		ExecutionMode: prefs.ExecutionMode,
+		DurationMs:    time.Since(pollStart).Milliseconds(),
+	}
+	if err := db.DB.Create(&runStats).Error; err != nil {
+		slog.Error("Poller: failed to persist engine run stats", "error", err)
+	}
 }
 
 // findMediaMounts returns only the mount paths that are the most specific match
@@ -432,23 +452,22 @@ type deleteJob struct {
 var deleteQueue = make(chan deleteJob, 500)
 
 var (
-	metricsProcessed    int64
-	metricsFailed       int64
-	metricsEvaluated    int64
-	metricsActioned     int64
-	metricsFreedBytes   int64
-	metricsLastRunEpoch int64
+	metricsProcessed int64
+	metricsFailed    int64
 
-	// Per-run metrics (reset each engine evaluation cycle)
-	lastRunEvaluated int64
-	lastRunFlagged   int64
+	// Per-run metrics (reset each engine evaluation cycle, read by GetWorkerMetrics
+	// for real-time "currently running" feedback while the poll is in progress)
+	lastRunEvaluated  int64
+	lastRunFlagged    int64
 	lastRunFreedBytes int64
 
 	// Currently-deleting item name (atomic.Value storing string)
 	currentlyDeletingVal atomic.Value
 )
 
-// GetWorkerMetrics returns the current state of the backend deletion worker
+// GetWorkerMetrics returns the current state of the backend deletion worker.
+// Per-run stats are read from the DB (persisted across container restarts);
+// real-time values (currentlyDeleting, queueDepth) come from in-memory atomics.
 func GetWorkerMetrics() map[string]interface{} {
 	var prefs db.PreferenceSet
 	db.DB.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1})
@@ -464,18 +483,44 @@ func GetWorkerMetrics() map[string]interface{} {
 		currentlyDeletion = v.(string)
 	}
 
+	// Read the latest persisted engine run stats from DB
+	var lastRun db.EngineRunStats
+	db.DB.Order("run_at DESC").First(&lastRun)
+
+	// Compute cumulative totals from all persisted runs
+	var totals struct {
+		TotalEvaluated int64
+		TotalFlagged   int64
+		TotalFreed     int64
+	}
+	db.DB.Model(&db.EngineRunStats{}).
+		Select("COALESCE(SUM(evaluated), 0) as total_evaluated, COALESCE(SUM(flagged), 0) as total_flagged, COALESCE(SUM(freed_bytes), 0) as total_freed").
+		Scan(&totals)
+
+	// If a poll is currently running, prefer the live in-memory atomics for real-time feedback
+	lastRunEval := int64(lastRun.Evaluated)
+	lastRunFlag := int64(lastRun.Flagged)
+	lastRunFreed := lastRun.FreedBytes
+	lastRunEpochVal := lastRun.RunAt.Unix()
+	if pollRunning.Load() {
+		lastRunEval = atomic.LoadInt64(&lastRunEvaluated)
+		lastRunFlag = atomic.LoadInt64(&lastRunFlagged)
+		lastRunFreed = atomic.LoadInt64(&lastRunFreedBytes)
+		lastRunEpochVal = time.Now().Unix()
+	}
+
 	return map[string]interface{}{
 		"executionMode":     mode,
-		"queueDepth":       len(deleteQueue),
-		"lastRunEvaluated":  atomic.LoadInt64(&lastRunEvaluated),
-		"lastRunFlagged":    atomic.LoadInt64(&lastRunFlagged),
-		"lastRunFreedBytes": atomic.LoadInt64(&lastRunFreedBytes),
-		"lastRunEpoch":      atomic.LoadInt64(&metricsLastRunEpoch),
+		"queueDepth":        len(deleteQueue),
+		"lastRunEvaluated":  lastRunEval,
+		"lastRunFlagged":    lastRunFlag,
+		"lastRunFreedBytes": lastRunFreed,
+		"lastRunEpoch":      lastRunEpochVal,
 		"currentlyDeleting": currentlyDeletion,
-		// Cumulative totals
-		"evaluated":  atomic.LoadInt64(&metricsEvaluated),
-		"actioned":   atomic.LoadInt64(&metricsActioned),
-		"freedBytes": atomic.LoadInt64(&metricsFreedBytes),
+		// Cumulative totals from DB
+		"evaluated":  totals.TotalEvaluated,
+		"actioned":   totals.TotalFlagged,
+		"freedBytes": totals.TotalFreed,
 		"processed":  atomic.LoadInt64(&metricsProcessed),
 		"failed":     atomic.LoadInt64(&metricsFailed),
 	}
@@ -572,16 +617,9 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 	var rules []db.ProtectionRule
 	db.DB.Find(&rules)
 
-	// Reset per-run counters
-	atomic.StoreInt64(&lastRunEvaluated, 0)
-	atomic.StoreInt64(&lastRunFlagged, 0)
-	atomic.StoreInt64(&lastRunFreedBytes, 0)
-
 	// Evaluate
 	evaluated := engine.EvaluateMedia(diskItems, prefs, rules)
-	atomic.AddInt64(&metricsEvaluated, int64(len(evaluated)))
-	atomic.StoreInt64(&lastRunEvaluated, int64(len(evaluated)))
-	atomic.StoreInt64(&metricsLastRunEpoch, time.Now().Unix())
+	atomic.AddInt64(&lastRunEvaluated, int64(len(evaluated)))
 
 	// Sort by score descending
 	sort.Slice(evaluated, func(i, j int) bool {
@@ -659,8 +697,6 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		db.DB.Create(&logEntry)
 
 		bytesFreed += ev.Item.SizeBytes
-		atomic.AddInt64(&metricsActioned, 1)
-		atomic.AddInt64(&metricsFreedBytes, ev.Item.SizeBytes)
 		atomic.AddInt64(&lastRunFlagged, 1)
 		atomic.AddInt64(&lastRunFreedBytes, ev.Item.SizeBytes)
 		slog.Info("Engine action taken", "media", ev.Item.Title, "action", actionName, "score", ev.Score, "freed", ev.Item.SizeBytes)
