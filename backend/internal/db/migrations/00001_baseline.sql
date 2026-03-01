@@ -66,7 +66,6 @@ CREATE TABLE IF NOT EXISTS preference_sets (
     time_in_library_weight   INTEGER DEFAULT 4,
     availability_weight      INTEGER DEFAULT 3,
     execution_mode           TEXT NOT NULL DEFAULT 'dry-run',
-    tiebreaker_method        TEXT NOT NULL DEFAULT 'size_desc',
     updated_at               DATETIME
 );
 
@@ -93,11 +92,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_media_name ON audit_logs(media_name);
 
--- Seed default preferences if the table is empty (fresh install)
-INSERT OR IGNORE INTO preference_sets (id, log_level, audit_log_retention_days,
-    watch_history_weight, last_watched_weight, file_size_weight, rating_weight,
-    time_in_library_weight, availability_weight, execution_mode, tiebreaker_method)
-VALUES (1, 'info', 30, 10, 8, 6, 5, 4, 3, 'dry-run', 'size_desc');
+-- Default preferences are seeded by Go code (db.Init FirstOrCreate),
+-- not by migration, to avoid column mismatch with existing databases.
 
 -- +goose Down
 DROP TABLE IF EXISTS audit_logs;
