@@ -1165,44 +1165,17 @@ const filteredGroupedPreview = computed<PreviewGroup[]>(() => {
   return sorted
 })
 
-// Start with all groups expanded so seasons are always visible
-const expandedPreviewGroups = computed(() => {
-  const expanded = new Set<string>()
-  for (const group of groupedPreview.value) {
-    if (group.seasons.length > 0) {
-      expanded.add(group.key)
-    }
-  }
-  // Merge with manually toggled state
-  for (const key of manuallyCollapsed.value) {
-    expanded.delete(key)
-  }
-  for (const key of manuallyExpanded.value) {
-    expanded.add(key)
-  }
-  return expanded
-})
-const manuallyCollapsed = ref(new Set<string>())
-const manuallyExpanded = ref(new Set<string>())
+// Seasons collapsed by default — user clicks to expand
+const expandedPreviewGroups = ref(new Set<string>())
 
 function togglePreviewGroup(key: string) {
-  if (expandedPreviewGroups.value.has(key)) {
-    // Currently expanded → collapse it
-    const nextCollapsed = new Set(manuallyCollapsed.value)
-    nextCollapsed.add(key)
-    manuallyCollapsed.value = nextCollapsed
-    const nextExpanded = new Set(manuallyExpanded.value)
-    nextExpanded.delete(key)
-    manuallyExpanded.value = nextExpanded
+  const next = new Set(expandedPreviewGroups.value)
+  if (next.has(key)) {
+    next.delete(key)
   } else {
-    // Currently collapsed → expand it
-    const nextExpanded = new Set(manuallyExpanded.value)
-    nextExpanded.add(key)
-    manuallyExpanded.value = nextExpanded
-    const nextCollapsed = new Set(manuallyCollapsed.value)
-    nextCollapsed.delete(key)
-    manuallyCollapsed.value = nextCollapsed
+    next.add(key)
   }
+  expandedPreviewGroups.value = next
 }
 
 function extractPreviewSeasonLabel(title: string): string {
