@@ -58,15 +58,114 @@
         </UiSelect>
       </div>
 
-      <!-- ④ Value -->
+      <!-- ④ Value — Dynamic input based on action type -->
       <div class="space-y-1.5">
         <UiLabel class="text-xs text-muted-foreground">Value</UiLabel>
-        <UiInput
-          v-model="form.value"
-          :disabled="!form.operator"
-          :type="selectedFieldType === 'number' ? 'number' : 'text'"
-          :placeholder="valuePlaceholder"
-        />
+
+        <!-- Loading state -->
+        <div v-if="valueLoading" class="flex items-center justify-center h-9 rounded-md border border-input bg-background px-3">
+          <span class="text-xs text-muted-foreground animate-pulse">Loading…</span>
+        </div>
+
+        <!-- Boolean toggle (monitored, is_requested) -->
+        <template v-else-if="valueInputMode === 'boolean'">
+          <div class="flex items-center gap-3 h-9">
+            <UiSwitch
+              :checked="form.value === 'true'"
+              @update:checked="(v: boolean) => form.value = String(v)"
+              :disabled="!form.operator"
+            />
+            <span class="text-sm text-muted-foreground">{{ form.value === 'true' ? 'Yes' : 'No' }}</span>
+          </div>
+        </template>
+
+        <!-- Closed-set select (quality profiles, languages, show status, media type) -->
+        <template v-else-if="valueInputMode === 'closed'">
+          <UiSelect v-model="form.value" :disabled="!form.operator">
+            <UiSelectTrigger>
+              <UiSelectValue placeholder="Select…" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem
+                v-for="opt in closedOptions"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </template>
+
+        <!-- Combobox (tags, genres — suggestions + custom input) -->
+        <template v-else-if="valueInputMode === 'combobox'">
+          <UiPopover v-model:open="comboboxOpen">
+            <UiPopoverTrigger as-child>
+              <UiButton
+                variant="outline"
+                role="combobox"
+                :aria-expanded="comboboxOpen"
+                :disabled="!form.operator"
+                class="w-full justify-between font-normal h-9"
+              >
+                <span :class="form.value ? 'text-foreground' : 'text-muted-foreground'">
+                  {{ form.value || 'Type or select…' }}
+                </span>
+                <ChevronsUpDownIcon class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </UiButton>
+            </UiPopoverTrigger>
+            <UiPopoverContent class="w-[--reka-popover-trigger-width] p-0" align="start">
+              <UiCommand>
+                <UiCommandInput
+                  v-model="comboboxSearch"
+                  placeholder="Search or type custom…"
+                />
+                <UiCommandList>
+                  <UiCommandEmpty>
+                    <button
+                      v-if="comboboxSearch"
+                      class="w-full text-left px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
+                      @click="selectComboboxValue(comboboxSearch)"
+                    >
+                      Use "{{ comboboxSearch }}"
+                    </button>
+                    <span v-else class="text-muted-foreground text-xs">No results</span>
+                  </UiCommandEmpty>
+                  <UiCommandGroup>
+                    <UiCommandItem
+                      v-for="sug in comboboxSuggestions"
+                      :key="sug.value"
+                      :value="sug.value"
+                      @select="selectComboboxValue(sug.value)"
+                    >
+                      {{ sug.label }}
+                    </UiCommandItem>
+                  </UiCommandGroup>
+                </UiCommandList>
+              </UiCommand>
+            </UiPopoverContent>
+          </UiPopover>
+        </template>
+
+        <!-- Free-text input (numbers and text) with optional suffix -->
+        <template v-else>
+          <div class="flex items-center gap-2">
+            <UiInput
+              v-model="form.value"
+              :disabled="!form.operator"
+              :type="freeInputType"
+              :placeholder="freeInputPlaceholder"
+              class="flex-1"
+            />
+            <span v-if="freeInputSuffix" class="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+              {{ freeInputSuffix }}
+            </span>
+          </div>
+          <!-- Validation warning for size field: show GB equivalent -->
+          <p v-if="form.field === 'sizebytes' && form.value" class="text-[11px] text-muted-foreground mt-1">
+            ≈ {{ (Number(form.value) / 1073741824).toFixed(2) }} GB
+          </p>
+        </template>
       </div>
 
       <!-- ⑤ Effect -->
@@ -104,6 +203,8 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronsUpDownIcon } from 'lucide-vue-next'
+
 interface Integration {
   id: number
   type: string
@@ -116,6 +217,20 @@ interface FieldDef {
   label: string
   type: string
   operators: string[]
+}
+
+interface NameValue {
+  value: string
+  label: string
+}
+
+interface RuleValuesResponse {
+  type: 'closed' | 'combobox' | 'free'
+  options?: NameValue[]
+  suggestions?: NameValue[]
+  inputType?: string
+  placeholder?: string
+  suffix?: string
 }
 
 const props = defineProps<{
@@ -175,6 +290,14 @@ const form = reactive({
 // Dynamic fields fetched based on selected service type
 const fields = ref<FieldDef[]>([])
 
+// Rule values response from API
+const ruleValues = ref<RuleValuesResponse | null>(null)
+const valueLoading = ref(false)
+
+// Combobox state
+const comboboxOpen = ref(false)
+const comboboxSearch = ref('')
+
 // Get the service type from the selected integration
 const selectedServiceType = computed(() => {
   if (!form.integrationId) return ''
@@ -198,8 +321,39 @@ const availableOperators = computed(() => {
   }))
 })
 
-// Placeholder for value input
-const valuePlaceholder = computed(() => {
+// Determine value input mode based on API response
+const valueInputMode = computed((): 'boolean' | 'closed' | 'combobox' | 'free' => {
+  // Boolean fields always use toggle
+  if (selectedFieldType.value === 'boolean') return 'boolean'
+  // After API response, use the type from the response
+  if (ruleValues.value) {
+    if (ruleValues.value.type === 'closed') return 'closed'
+    if (ruleValues.value.type === 'combobox') return 'combobox'
+    return 'free'
+  }
+  // Default to free input
+  return 'free'
+})
+
+// Closed-set options from API
+const closedOptions = computed((): NameValue[] => {
+  return ruleValues.value?.options ?? []
+})
+
+// Combobox suggestions from API
+const comboboxSuggestions = computed((): NameValue[] => {
+  return ruleValues.value?.suggestions ?? []
+})
+
+// Free input metadata from API
+const freeInputType = computed(() => {
+  if (ruleValues.value?.inputType === 'number') return 'number'
+  if (selectedFieldType.value === 'number') return 'number'
+  return 'text'
+})
+
+const freeInputPlaceholder = computed(() => {
+  if (ruleValues.value?.placeholder) return ruleValues.value.placeholder
   if (!form.field) return 'Value'
   switch (form.field) {
     case 'title': return 'e.g., Breaking Bad'
@@ -207,19 +361,23 @@ const valuePlaceholder = computed(() => {
     case 'tag': return 'e.g., anime'
     case 'genre': return 'e.g., Action'
     case 'rating': return 'e.g., 7.5'
-    case 'sizebytes': return 'Bytes'
-    case 'timeinlibrary': return 'Days'
+    case 'sizebytes': return 'e.g., 5368709120'
+    case 'timeinlibrary': return 'e.g., 30'
     case 'year': return 'e.g., 2020'
     case 'language': return 'e.g., English'
-    case 'monitored': return 'true / false'
-    case 'availability': return 'e.g., ended'
     case 'seasoncount': return 'e.g., 5'
     case 'episodecount': return 'e.g., 100'
     case 'playcount': return 'e.g., 0'
     case 'requestcount': return 'e.g., 3'
-    case 'requested': return 'true / false'
     default: return 'Value'
   }
+})
+
+const freeInputSuffix = computed(() => {
+  if (ruleValues.value?.suffix) return ruleValues.value.suffix
+  if (form.field === 'timeinlibrary') return 'days'
+  if (form.field === 'sizebytes') return 'bytes (≈ GB)'
+  return ''
 })
 
 const isFormValid = computed(() =>
@@ -236,6 +394,7 @@ async function onServiceChange() {
   form.operator = ''
   form.value = ''
   form.effect = ''
+  ruleValues.value = null
 
   if (!form.integrationId) {
     fields.value = []
@@ -250,11 +409,38 @@ async function onServiceChange() {
   }
 }
 
-// Cascade: when action (field) changes, reset operator and value
-function onFieldChange() {
+// Cascade: when action (field) changes, reset operator and value, fetch value options
+async function onFieldChange() {
   form.operator = ''
   form.value = ''
   form.effect = ''
+  ruleValues.value = null
+  comboboxSearch.value = ''
+
+  if (!form.field || !form.integrationId) return
+
+  // For boolean fields, auto-set the operator to '==' and value to 'true'
+  if (selectedFieldType.value === 'boolean') {
+    form.operator = '=='
+    form.value = 'true'
+  }
+
+  // Fetch value options from the API
+  valueLoading.value = true
+  try {
+    const data = await api(`/api/v1/rule-values?integration_id=${form.integrationId}&action=${form.field}`) as RuleValuesResponse
+    ruleValues.value = data
+  } catch {
+    ruleValues.value = null
+  } finally {
+    valueLoading.value = false
+  }
+}
+
+function selectComboboxValue(value: string) {
+  form.value = value
+  comboboxOpen.value = false
+  comboboxSearch.value = ''
 }
 
 function submitRule() {
@@ -273,5 +459,6 @@ function submitRule() {
   form.value = ''
   form.effect = ''
   fields.value = []
+  ruleValues.value = null
 }
 </script>

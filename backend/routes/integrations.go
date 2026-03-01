@@ -135,9 +135,10 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 	// Test connection
 	g.POST("/integrations/test", func(c echo.Context) error {
 		var req struct {
-			Type   string `json:"type"`
-			URL    string `json:"url"`
-			APIKey string `json:"apiKey"`
+			Type          string `json:"type"`
+			URL           string `json:"url"`
+			APIKey        string `json:"apiKey"`
+			IntegrationID *int   `json:"integrationId,omitempty"` // Optional: invalidate cache for this integration
 		}
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
@@ -185,6 +186,11 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			})
 		}
 
+		// Invalidate rule value cache for this integration on successful test
+		if req.IntegrationID != nil {
+			RuleValueCache.InvalidatePrefix(strconv.Itoa(*req.IntegrationID) + ":")
+		}
+
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"success": true,
 			"message": "Connection successful",
@@ -197,6 +203,9 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		if err := database.Where("enabled = ?", true).Find(&configs).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch integrations"})
 		}
+
+		// Invalidate all rule value caches on sync
+		RuleValueCache.InvalidateAll()
 
 		results := make([]map[string]interface{}, 0)
 		for _, cfg := range configs {
@@ -258,6 +267,8 @@ func CreateClient(intType, url, apiKey string) integrations.Integration {
 		return integrations.NewRadarrClient(url, apiKey)
 	case "lidarr":
 		return integrations.NewLidarrClient(url, apiKey)
+	case "readarr":
+		return integrations.NewReadarrClient(url, apiKey)
 	case "plex":
 		return integrations.NewPlexClient(url, apiKey)
 	default:

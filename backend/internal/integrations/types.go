@@ -91,3 +91,22 @@ const (
 	IntegrationTypeJellyfin IntegrationType = "jellyfin"
 	IntegrationTypeEmby     IntegrationType = "emby"
 )
+
+// NameValue is a simple label/value pair used for rule value options.
+type NameValue struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// RuleValueFetcher defines methods for fetching autocomplete values
+// from *arr services (quality profiles, tags, languages).
+// Not all *arr clients support all methods — callers should check errors.
+type RuleValueFetcher interface {
+	// GetQualityProfiles returns all quality profiles from the service.
+	GetQualityProfiles() ([]NameValue, error)
+	// GetTags returns all tags from the service.
+	GetTags() ([]NameValue, error)
+	// GetLanguages returns all languages from the service.
+	// Returns nil, nil if the service does not support language lookup.
+	GetLanguages() ([]NameValue, error)
+}

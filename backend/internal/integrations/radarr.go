@@ -204,6 +204,59 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
+// --- RuleValueFetcher implementation ---
+
+func (r *RadarrClient) GetQualityProfiles() ([]NameValue, error) {
+	body, err := r.doRequest("/api/v3/qualityprofile")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quality profiles: %w", err)
+	}
+	var profiles []radarrQualityProfile
+	if err := json.Unmarshal(body, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to parse quality profiles: %w", err)
+	}
+	result := make([]NameValue, len(profiles))
+	for i, p := range profiles {
+		result[i] = NameValue{Value: p.Name, Label: p.Name}
+	}
+	return result, nil
+}
+
+func (r *RadarrClient) GetTags() ([]NameValue, error) {
+	body, err := r.doRequest("/api/v3/tag")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tags: %w", err)
+	}
+	var tags []radarrTag
+	if err := json.Unmarshal(body, &tags); err != nil {
+		return nil, fmt.Errorf("failed to parse tags: %w", err)
+	}
+	result := make([]NameValue, len(tags))
+	for i, t := range tags {
+		result[i] = NameValue{Value: t.Label, Label: t.Label}
+	}
+	return result, nil
+}
+
+func (r *RadarrClient) GetLanguages() ([]NameValue, error) {
+	body, err := r.doRequest("/api/v3/language")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch languages: %w", err)
+	}
+	var langs []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &langs); err != nil {
+		return nil, fmt.Errorf("failed to parse languages: %w", err)
+	}
+	result := make([]NameValue, len(langs))
+	for i, l := range langs {
+		result[i] = NameValue{Value: l.Name, Label: l.Name}
+	}
+	return result, nil
+}
+
 func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {
 	endpoint := fmt.Sprintf("/api/v3/movie/%s?deleteFiles=true", item.ExternalID)
 	req, err := http.NewRequest("DELETE", r.URL+endpoint, nil)

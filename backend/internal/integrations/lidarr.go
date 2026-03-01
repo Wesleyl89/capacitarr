@@ -198,6 +198,45 @@ func (l *LidarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
+// --- RuleValueFetcher implementation ---
+
+func (l *LidarrClient) GetQualityProfiles() ([]NameValue, error) {
+	body, err := l.doRequest("/api/v1/qualityprofile")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quality profiles: %w", err)
+	}
+	var profiles []lidarrQualityProfile
+	if err := json.Unmarshal(body, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to parse quality profiles: %w", err)
+	}
+	result := make([]NameValue, len(profiles))
+	for i, p := range profiles {
+		result[i] = NameValue{Value: p.Name, Label: p.Name}
+	}
+	return result, nil
+}
+
+func (l *LidarrClient) GetTags() ([]NameValue, error) {
+	body, err := l.doRequest("/api/v1/tag")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tags: %w", err)
+	}
+	var tags []lidarrTag
+	if err := json.Unmarshal(body, &tags); err != nil {
+		return nil, fmt.Errorf("failed to parse tags: %w", err)
+	}
+	result := make([]NameValue, len(tags))
+	for i, t := range tags {
+		result[i] = NameValue{Value: t.Label, Label: t.Label}
+	}
+	return result, nil
+}
+
+func (l *LidarrClient) GetLanguages() ([]NameValue, error) {
+	// Lidarr does not have a language endpoint
+	return nil, nil
+}
+
 func (l *LidarrClient) DeleteMediaItem(item MediaItem) error {
 	endpoint := fmt.Sprintf("/api/v1/artist/%s?deleteFiles=true", item.ExternalID)
 	req, err := http.NewRequest("DELETE", l.URL+endpoint, nil)

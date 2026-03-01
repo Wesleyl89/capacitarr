@@ -299,7 +299,7 @@
           @cancel="showAddRule = false"
         />
 
-        <!-- Rules List — Natural Language Display -->
+        <!-- Rules List — Natural Language Display with Conflict Indicators -->
         <div v-if="rules.length === 0 && !showAddRule" class="text-center py-6 text-muted-foreground text-sm">
           No rules configured. Media will be ranked purely by preference weights.
         </div>
@@ -307,9 +307,25 @@
           <div
             v-for="rule in rules"
             :key="rule.id"
-            class="flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-muted/50"
+            class="flex items-center justify-between px-4 py-2.5 rounded-lg border bg-muted/50"
+            :class="ruleConflicts(rule).length > 0 ? 'border-amber-400/50' : 'border-border'"
           >
             <div class="flex items-center gap-2 text-sm flex-wrap">
+              <!-- Conflict indicator -->
+              <UiTooltipProvider v-if="ruleConflicts(rule).length > 0">
+                <UiTooltip>
+                  <UiTooltipTrigger as-child>
+                    <span class="inline-flex items-center shrink-0 cursor-help">
+                      <component :is="AlertTriangleIcon" class="w-4 h-4 text-amber-500" />
+                    </span>
+                  </UiTooltipTrigger>
+                  <UiTooltipContent side="top" class="max-w-xs text-xs">
+                    <p v-for="(conflict, idx) in ruleConflicts(rule)" :key="idx" class="mb-1 last:mb-0">
+                      {{ conflict }}
+                    </p>
+                  </UiTooltipContent>
+                </UiTooltip>
+              </UiTooltipProvider>
               <!-- Effect badge -->
               <UiBadge
                 :class="effectBadgeClass(rule.effect || legacyEffect(rule.type, rule.intensity))"
@@ -442,7 +458,7 @@
 </template>
 
 <script setup lang="ts">
-import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon } from 'lucide-vue-next'
+import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, SaveIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon } from 'lucide-vue-next'
 import { formatBytes } from '~/utils/format'
 
 const api = useApi()
@@ -687,6 +703,51 @@ function legacyEffect(type: string, intensity: string): string {
     return 'lean_remove'
   }
   return 'lean_keep'
+}
+
+// ─── Conflict Detection (Phase 3) ──────────────────────────────────────────────
+// Determines if a rule has opposing-direction rules on the same integration instance.
+// Returns an array of conflict description strings for the tooltip.
+const keepEffects = new Set(['always_keep', 'prefer_keep', 'lean_keep'])
+const removeEffects = new Set(['lean_remove', 'prefer_remove', 'always_remove'])
+
+function ruleEffectDirection(rule: any): 'keep' | 'remove' | 'unknown' {
+  const eff = rule.effect || legacyEffect(rule.type, rule.intensity)
+  if (keepEffects.has(eff)) return 'keep'
+  if (removeEffects.has(eff)) return 'remove'
+  return 'unknown'
+}
+
+function ruleConflicts(rule: any): string[] {
+  const direction = ruleEffectDirection(rule)
+  if (direction === 'unknown') return []
+  const eff = rule.effect || legacyEffect(rule.type, rule.intensity)
+
+  const conflicts: string[] = []
+  for (const other of rules.value) {
+    if (other.id === rule.id) continue
+    const otherDirection = ruleEffectDirection(other)
+    if (otherDirection === 'unknown' || otherDirection === direction) continue
+
+    // Check if they could overlap — same integration or one is global
+    const sameScope =
+      (!rule.integrationId && !other.integrationId) ||
+      (!rule.integrationId || !other.integrationId) ||
+      (rule.integrationId === other.integrationId)
+
+    if (!sameScope) continue
+
+    const otherEff = other.effect || legacyEffect(other.type, other.intensity)
+    const otherName = `${fieldLabel(other.field)} ${operatorLabel(other.operator)} "${other.value}" → ${effectLabel(otherEff)}`
+
+    // Determine which wins
+    if (eff === 'always_keep' || otherEff === 'always_keep') {
+      conflicts.push(`Conflicts with "${otherName}". When both match, "Always keep" wins.`)
+    } else {
+      conflicts.push(`Conflicts with "${otherName}". When both match, effects multiply together.`)
+    }
+  }
+  return conflicts
 }
 
 // Preview
