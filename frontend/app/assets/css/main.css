@@ -1126,3 +1126,15 @@ table tr {
     align-items: center;
   }
 }
+
+/* ========================================
+   Command Input Focus Override
+   Tone down the prominent focus ring on
+   Command (combobox) search inputs
+   ======================================== */
+
+[data-slot="command-input"]:focus-visible,
+[data-slot="command-input"] input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}

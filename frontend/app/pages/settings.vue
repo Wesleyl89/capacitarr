@@ -684,11 +684,66 @@
           </UiCardContent>
         </UiCard>
 
+        <!-- Log Level -->
+        <UiCard
+          v-motion
+          :initial="{ opacity: 0, y: 12 }"
+          :enter="{ opacity: 1, y: 0, transition: { delay: 50 } }"
+          class="overflow-hidden"
+        >
+          <UiCardHeader class="border-b border-border">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center">
+                <component
+                  :is="TerminalIcon"
+                  class="w-5 h-5 text-white"
+                />
+              </div>
+              <div>
+                <UiCardTitle class="text-base">
+                  {{ $t('settings.logLevel') }}
+                </UiCardTitle>
+                <UiCardDescription>{{ $t('settings.logLevelDesc') }}</UiCardDescription>
+              </div>
+            </div>
+          </UiCardHeader>
+          <UiCardContent class="pt-5">
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2">
+                <UiLabel>{{ $t('settings.logLevel') }}</UiLabel>
+                <SaveIndicator :status="saveStatus.logLevel" />
+              </div>
+              <UiSelect v-model="logLevel">
+                <UiSelectTrigger class="w-full max-w-xs">
+                  <UiSelectValue placeholder="Select log level" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="debug">
+                    Debug
+                  </UiSelectItem>
+                  <UiSelectItem value="info">
+                    Info (default)
+                  </UiSelectItem>
+                  <UiSelectItem value="warn">
+                    Warn
+                  </UiSelectItem>
+                  <UiSelectItem value="error">
+                    Error
+                  </UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
+              <p class="text-xs text-muted-foreground/70">
+                {{ $t('settings.logLevelHint') }}
+              </p>
+            </div>
+          </UiCardContent>
+        </UiCard>
+
         <!-- Data Management -->
         <UiCard
           v-motion
           :initial="{ opacity: 0, y: 12 }"
-          :enter="{ opacity: 1, y: 0, transition: { delay: 100 } }"
+          :enter="{ opacity: 1, y: 0, transition: { delay: 150 } }"
           class="overflow-hidden"
         >
           <UiCardHeader class="border-b border-border">
@@ -884,6 +939,19 @@
                   {{ $t('settings.deletionsActiveAlertDesc') }}
                 </UiAlertDescription>
               </UiAlert>
+              <!-- Current state indicator -->
+              <p
+                v-if="deletionsEnabled"
+                class="text-sm font-medium text-amber-600 dark:text-amber-400"
+              >
+                ⚠️ Actual deletions are ENABLED
+              </p>
+              <p
+                v-else
+                class="text-sm font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                ✓ Deletions are simulated (Dry-Delete)
+              </p>
               <div class="flex items-center gap-3">
                 <UiButton
                   v-if="!deletionsEnabled"
@@ -1456,7 +1524,7 @@ import {
   InboxIcon, MusicIcon, TimerIcon, ShieldIcon,
   CheckIcon, UserIcon, BookOpenIcon, MonitorPlayIcon,
   CogIcon, Trash2Icon, LogInIcon,
-  BellIcon, MessageSquareIcon, HashIcon
+  BellIcon, MessageSquareIcon, HashIcon, TerminalIcon
 } from 'lucide-vue-next'
 import { formatRelativeTime } from '~/utils/format'
 import type { IntegrationConfig, NotificationChannel, PreferenceSet, ConnectionTestResult, ApiKeyResponse, ApiError } from '~/types/api'
@@ -1519,6 +1587,7 @@ const executionModes = [
 // General settings state
 const retentionDays = ref(30)
 const pollIntervalSeconds = ref(300)
+const logLevel = ref('info')
 
 // String wrappers for UiSelect (which requires string values)
 const pollIntervalStr = computed({
@@ -1539,7 +1608,8 @@ const saveStatus = reactive<Record<string, 'idle' | 'saving' | 'saved' | 'error'
   defaultTarget: 'idle',
   executionMode: 'idle',
   tiebreaker: 'idle',
-  deletionsEnabled: 'idle'
+  deletionsEnabled: 'idle',
+  logLevel: 'idle'
 })
 
 // Password change state
@@ -1776,6 +1846,13 @@ watch(retentionDays, (newVal, oldVal) => {
   }
 })
 
+// Watch log level — immediate save on select change
+watch(logLevel, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    autoSavePreference('logLevel', 'logLevel', newVal)
+  }
+})
+
 // ─── Integrations ────────────────────────────────────────────────────────────
 async function fetchIntegrations() {
   loading.value = true
@@ -1907,6 +1984,9 @@ async function fetchPreferences() {
     }
     if (prefs?.deletionsEnabled !== undefined) {
       deletionsEnabled.value = prefs.deletionsEnabled
+    }
+    if (prefs?.logLevel) {
+      logLevel.value = prefs.logLevel
     }
   } catch {
     // Silently ignored — UI has no further handling

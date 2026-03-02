@@ -124,58 +124,82 @@
 
         <!-- Combobox (tags, genres — suggestions + custom input) -->
         <template v-else-if="valueInputMode === 'combobox'">
-          <UiPopover v-model:open="comboboxOpen">
-            <UiPopoverTrigger as-child>
-              <UiButton
-                variant="outline"
-                role="combobox"
-                :aria-expanded="comboboxOpen"
-                :disabled="!form.operator"
-                class="w-full justify-between font-normal h-9"
+          <div class="flex items-center gap-1.5">
+            <UiPopover v-model:open="comboboxOpen">
+              <UiPopoverTrigger as-child>
+                <UiButton
+                  variant="outline"
+                  role="combobox"
+                  :aria-expanded="comboboxOpen"
+                  :disabled="!form.operator"
+                  class="w-full justify-between font-normal h-9"
+                >
+                  <span :class="form.value ? 'text-foreground' : 'text-muted-foreground'">
+                    {{ form.value || 'Type or select…' }}
+                  </span>
+                  <ChevronsUpDownIcon class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </UiButton>
+              </UiPopoverTrigger>
+              <UiPopoverContent
+                class="w-[--reka-popover-trigger-width] p-0"
+                align="start"
               >
-                <span :class="form.value ? 'text-foreground' : 'text-muted-foreground'">
-                  {{ form.value || 'Type or select…' }}
-                </span>
-                <ChevronsUpDownIcon class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </UiButton>
-            </UiPopoverTrigger>
-            <UiPopoverContent
-              class="w-[--reka-popover-trigger-width] p-0"
-              align="start"
+                <UiCommand :filter-function="comboboxFilterFn">
+                  <UiCommandInput
+                    v-model="comboboxSearch"
+                    placeholder="Search or type custom…"
+                    @keydown.enter.prevent="onComboboxEnter"
+                  />
+                  <UiCommandList>
+                    <UiCommandEmpty>
+                      <button
+                        v-if="comboboxSearch"
+                        class="w-full text-left px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
+                        @click="selectComboboxValue(comboboxSearch)"
+                      >
+                        Use "{{ comboboxSearch }}"
+                      </button>
+                      <span
+                        v-else
+                        class="text-muted-foreground text-xs"
+                      >No results</span>
+                    </UiCommandEmpty>
+                    <UiCommandGroup>
+                      <UiCommandItem
+                        v-for="sug in comboboxSuggestions"
+                        :key="sug.value"
+                        :value="sug.value"
+                        @select="selectComboboxValue(sug.value)"
+                      >
+                        {{ sug.label }}
+                      </UiCommandItem>
+                    </UiCommandGroup>
+                    <!-- Custom value option at bottom when search doesn't match a suggestion -->
+                    <UiCommandGroup
+                      v-if="comboboxSearch && !comboboxSearchMatchesSuggestion"
+                    >
+                      <UiCommandItem
+                        :value="'__custom__' + comboboxSearch"
+                        class="text-primary"
+                        @select="selectComboboxValue(comboboxSearch)"
+                      >
+                        Use custom: "{{ comboboxSearch }}"
+                      </UiCommandItem>
+                    </UiCommandGroup>
+                  </UiCommandList>
+                </UiCommand>
+              </UiPopoverContent>
+            </UiPopover>
+            <!-- Clear button -->
+            <button
+              v-if="form.value"
+              class="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Clear value"
+              @click="form.value = ''"
             >
-              <UiCommand>
-                <UiCommandInput
-                  v-model="comboboxSearch"
-                  placeholder="Search or type custom…"
-                />
-                <UiCommandList>
-                  <UiCommandEmpty>
-                    <button
-                      v-if="comboboxSearch"
-                      class="w-full text-left px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
-                      @click="selectComboboxValue(comboboxSearch)"
-                    >
-                      Use "{{ comboboxSearch }}"
-                    </button>
-                    <span
-                      v-else
-                      class="text-muted-foreground text-xs"
-                    >No results</span>
-                  </UiCommandEmpty>
-                  <UiCommandGroup>
-                    <UiCommandItem
-                      v-for="sug in comboboxSuggestions"
-                      :key="sug.value"
-                      :value="sug.value"
-                      @select="selectComboboxValue(sug.value)"
-                    >
-                      {{ sug.label }}
-                    </UiCommandItem>
-                  </UiCommandGroup>
-                </UiCommandList>
-              </UiCommand>
-            </UiPopoverContent>
-          </UiPopover>
+              <XIcon class="w-4 h-4" />
+            </button>
+          </div>
         </template>
 
         <!-- Free-text input (numbers and text) with optional suffix -->
@@ -260,7 +284,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronsUpDownIcon } from 'lucide-vue-next'
+import { ChevronsUpDownIcon, XIcon } from 'lucide-vue-next'
 
 interface Integration {
   id: number
@@ -519,6 +543,31 @@ function selectComboboxValue(value: string) {
   form.value = value
   comboboxOpen.value = false
   comboboxSearch.value = ''
+}
+
+// Check if current search text exactly matches a suggestion
+const comboboxSearchMatchesSuggestion = computed(() => {
+  if (!comboboxSearch.value) return false
+  const needle = comboboxSearch.value.toLowerCase()
+  return comboboxSuggestions.value.some(
+    s => s.value.toLowerCase() === needle || s.label.toLowerCase() === needle
+  )
+})
+
+// Custom filter that always shows all items (let UiCommand handle display)
+// but doesn't auto-select, allowing free-text input
+function comboboxFilterFn(list: string[], term: string): string[] {
+  if (!term) return list
+  const needle = term.toLowerCase()
+  const filtered = list.filter(item => item.toLowerCase().includes(needle))
+  return filtered
+}
+
+// Accept custom value on Enter
+function onComboboxEnter() {
+  if (comboboxSearch.value) {
+    selectComboboxValue(comboboxSearch.value)
+  }
 }
 
 function submitRule() {
