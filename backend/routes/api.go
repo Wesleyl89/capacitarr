@@ -3,6 +3,7 @@ package routes
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -54,17 +55,36 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 
 		var user db.AuthConfig
 		if err := database.Where("username = ?", req.Username).First(&user).Error; err != nil {
-			// If no user exists in DB at all, bootstrap the first user
-			var count int64
-			database.Model(&db.AuthConfig{}).Count(&count)
-			if count == 0 {
+			// If no user exists in DB at all, bootstrap the first user.
+			// Use a transaction to prevent a race condition where two concurrent
+			// requests both see count==0 and create duplicate users. The unique
+			// index on username provides an additional safety net.
+			var bootstrapped bool
+			txErr := database.Transaction(func(tx *gorm.DB) error {
+				var count int64
+				if err := tx.Model(&db.AuthConfig{}).Count(&count).Error; err != nil {
+					return err
+				}
+				if count > 0 {
+					return nil // Another request already created the first user
+				}
 				hashed, hashErr := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
 				if hashErr != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
+					return hashErr
 				}
 				user = db.AuthConfig{Username: req.Username, Password: string(hashed)}
-				database.Create(&user)
-			} else {
+				if err := tx.Create(&user).Error; err != nil {
+					return err
+				}
+				bootstrapped = true
+				slog.Info("First user bootstrapped", "username", req.Username)
+				return nil
+			})
+			if txErr != nil {
+				slog.Error("First-user bootstrap failed", "error", txErr)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create initial user"})
+			}
+			if !bootstrapped {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 			}
 		}
