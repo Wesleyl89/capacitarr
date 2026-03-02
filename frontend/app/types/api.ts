@@ -250,16 +250,6 @@ export interface ApiError {
 }
 
 // ---------------------------------------------------------------------------
-// Cleanup History
-// ---------------------------------------------------------------------------
-
-export interface CleanupHistoryItem {
-  timestamp: string
-  itemsDeleted: number
-  bytesReclaimed: number
-}
-
-// ---------------------------------------------------------------------------
 // Sparkline tooltip opts shape (from ApexCharts)
 // ---------------------------------------------------------------------------
 

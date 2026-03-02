@@ -237,16 +237,6 @@
           </div>
         </div>
 
-        <!-- Cleanup sparkline -->
-        <div class="mb-3">
-          <div class="flex items-center gap-1 mb-1">
-            <span class="text-[11px] text-muted-foreground/70">
-              Cleanup Events · {{ dateRangeLabel }}
-            </span>
-          </div>
-          <CleanupSparkline :range="cleanupRange" />
-        </div>
-
         <!-- Footer link -->
         <NuxtLink
           to="/audit"
@@ -567,19 +557,6 @@ const enabledIntegrations = computed(() => allIntegrations.value.filter(i => i.e
 const dateRangeLabel = computed(() => {
   const match = dateRangeOptions.find(o => o.value === dateRange.value)
   return match?.label ?? dateRange.value
-})
-
-/** Map the dashboard time range to the cleanup-history API range param */
-const cleanupRange = computed<'24h' | '7d' | '30d' | '90d'>(() => {
-  const map: Record<string, '24h' | '7d' | '30d' | '90d'> = {
-    '1h': '24h',
-    '6h': '24h',
-    '24h': '24h',
-    '7d': '7d',
-    '30d': '30d',
-    'all': '90d',
-  }
-  return map[dateRange.value] ?? '24h'
 })
 
 const totalCapacity = computed(() =>

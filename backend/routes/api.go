@@ -187,9 +187,6 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 	// Audit routes
 	RegisterAuditRoutes(protected, database)
 
-	// Cleanup history (sparkline charts)
-	RegisterCleanupRoutes(protected, database)
-
 	// Data management routes (reset/clear)
 	RegisterDataRoutes(protected, database)
 }
