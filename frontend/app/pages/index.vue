@@ -268,7 +268,7 @@
           </div>
           <div class="text-3xl font-bold tabular-nums">{{ enabledIntegrations.length }}</div>
           <p class="text-sm text-muted-foreground mt-1">
-            {{ enabledIntegrations.filter((i: any) => i.lastSync).length }} synced recently
+            {{ enabledIntegrations.filter(i => i.lastSync).length }} synced recently
           </p>
         </UiCardContent>
       </UiCard>
@@ -387,6 +387,7 @@
 <script setup lang="ts">
 import { ServerIcon, ChartPieIcon, HardDriveIcon, LoaderCircleIcon, RefreshCwIcon, ActivityIcon, PlayIcon, CheckCircle2Icon, Trash2Icon, ShieldCheckIcon, TrendingUpIcon } from 'lucide-vue-next'
 import { formatBytes, formatRelativeTime } from '~/utils/format'
+import type { DiskGroup, IntegrationConfig, DashboardStats, SparklineTooltipOpts } from '~/types/api'
 
 const api = useApi()
 const { primaryColor, destructiveColor } = useThemeColors()
@@ -442,18 +443,11 @@ const chartMode = ref('percentage')
 const dateRange = ref('24h')
 const refreshIntervalStr = ref('15000')
 const refreshInterval = computed(() => Number(refreshIntervalStr.value))
-const diskGroups = ref<any[]>([])
-const allIntegrations = ref<any[]>([])
+const diskGroups = ref<DiskGroup[]>([])
+const allIntegrations = ref<IntegrationConfig[]>([])
 const flaggedSeries = ref<{ x: string; y: number }[]>([])
 const deletedSeries = ref<{ x: string; y: number }[]>([])
-const dashboardStats = ref<{
-  totalBytesReclaimed: number
-  totalItemsRemoved: number
-  totalEngineRuns: number
-  protectedCount: number
-  growthBytesPerWeek: number
-  hasGrowthData: boolean
-} | null>(null)
+const dashboardStats = ref<DashboardStats | null>(null)
 const loading = ref(true)
 const lastUpdated = ref<Date | null>(null)
 const isAutoRefreshing = ref(false)
@@ -462,7 +456,7 @@ const refreshKey = ref(0)
 // Engine stats — alias from shared composable
 const engineStats = computed(() => engineControlStats.value)
 
-const enabledIntegrations = computed(() => allIntegrations.value.filter((i: any) => i.enabled))
+const enabledIntegrations = computed(() => allIntegrations.value.filter(i => i.enabled))
 
 const dateRangeLabel = computed(() => {
   const match = dateRangeOptions.find(o => o.value === dateRange.value)
@@ -470,11 +464,11 @@ const dateRangeLabel = computed(() => {
 })
 
 const totalCapacity = computed(() =>
-  diskGroups.value.reduce((sum: number, g: any) => sum + (g.totalBytes || 0), 0)
+  diskGroups.value.reduce((sum, g) => sum + (g.totalBytes || 0), 0)
 )
 
 const totalUsed = computed(() =>
-  diskGroups.value.reduce((sum: number, g: any) => sum + (g.usedBytes || 0), 0)
+  diskGroups.value.reduce((sum, g) => sum + (g.usedBytes || 0), 0)
 )
 
 const formattedGrowthRate = computed(() => {
@@ -580,9 +574,9 @@ async function fetchDashboardData(silent = false) {
     engineFetchStats()
     // Fetch sparkline activity data in parallel (non-blocking)
     fetchActivityData()
-    diskGroups.value = groups as any[]
-    allIntegrations.value = integrations as any[]
-    if (dStats) dashboardStats.value = dStats as any
+    diskGroups.value = groups as DiskGroup[]
+    allIntegrations.value = integrations as IntegrationConfig[]
+    if (dStats) dashboardStats.value = dStats as DashboardStats
     lastUpdated.value = new Date()
   } catch (e) {
     console.error('Failed to fetch dashboard data:', e)
@@ -626,7 +620,7 @@ const sparklineOptions = computed(() => ({
     shared: true,
     x: { show: true },
     y: {
-      formatter: (val: number, opts: any) => {
+      formatter: (val: number, opts: SparklineTooltipOpts) => {
         const label = opts?.seriesIndex === 1 ? 'deleted' : 'flagged'
         return `${val} ${label}`
       }

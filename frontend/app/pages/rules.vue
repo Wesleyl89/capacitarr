@@ -233,7 +233,7 @@
               :max="10"
               :step="1"
               class="w-full"
-              @update:model-value="(v: number[] | undefined) => { if (v) (prefs as any)[slider.key] = v[0] }"
+              @update:model-value="(v: number[] | undefined) => { if (v) Object.assign(prefs, { [slider.key]: v[0] }) }"
             />
             <p class="text-xs text-muted-foreground">{{ slider.description }}</p>
           </div>
@@ -589,6 +589,7 @@ import {
   diskStatusTextClass,
   diskStatusFillColor,
 } from '~/utils/format'
+import type { DiskGroup, IntegrationConfig, ProtectionRule, PreferenceSet, EvaluatedItem, PreviewResponse, SelectedDetailItem, ApiError } from '~/types/api'
 
 const api = useApi()
 const config = useRuntimeConfig()
@@ -596,7 +597,7 @@ const apiBase = `${config.public.apiBaseUrl}/api/v1`
 const { addToast } = useToast()
 
 // Disk Groups
-const diskGroups = ref<any[]>([])
+const diskGroups = ref<DiskGroup[]>([])
 
 // Per-disk-group threshold editing state
 const thresholdEdits = reactive<Record<number, {
@@ -607,12 +608,12 @@ const thresholdEdits = reactive<Record<number, {
   success: boolean
 }>>({})
 
-function diskUsagePct(dg: any): number {
+function diskUsagePct(dg: DiskGroup): number {
   if (!dg.totalBytes || dg.totalBytes === 0) return 0
   return (dg.usedBytes / dg.totalBytes) * 100
 }
 
-function ensureThresholdEdit(dgId: number, dg: any) {
+function ensureThresholdEdit(dgId: number, dg: DiskGroup) {
   if (!thresholdEdits[dgId]) {
     thresholdEdits[dgId] = {
       threshold: dg.thresholdPct,
@@ -627,7 +628,7 @@ function ensureThresholdEdit(dgId: number, dg: any) {
 // Debounce timers for auto-save per disk group
 const debounceTimers: Record<number, ReturnType<typeof setTimeout>> = {}
 
-function updateThresholdEdit(dgId: number, field: 'threshold' | 'target', value: number, dg: any) {
+function updateThresholdEdit(dgId: number, field: 'threshold' | 'target', value: number, dg: DiskGroup) {
   ensureThresholdEdit(dgId, dg)
   const edit = thresholdEdits[dgId]!
   edit[field] = value
@@ -647,7 +648,7 @@ function updateThresholdEdit(dgId: number, field: 'threshold' | 'target', value:
   }, 1000)
 }
 
-function thresholdValidation(dgId: number, dg: any): string {
+function thresholdValidation(dgId: number, dg: DiskGroup): string {
   const edit = thresholdEdits[dgId]
   const t = edit?.threshold ?? dg.thresholdPct
   const g = edit?.target ?? dg.targetPct
@@ -657,7 +658,7 @@ function thresholdValidation(dgId: number, dg: any): string {
   return ''
 }
 
-async function saveThresholds(dg: any) {
+async function saveThresholds(dg: DiskGroup) {
   ensureThresholdEdit(dg.id, dg)
   const edit = thresholdEdits[dg.id]!
   if (thresholdValidation(dg.id, dg)) return
@@ -673,13 +674,13 @@ async function saveThresholds(dg: any) {
         thresholdPct: edit.threshold,
         targetPct: edit.target,
       },
-    }) as any
+    }) as DiskGroup
 
     edit.success = true
     edit.message = 'Saved'
 
     // Update local diskGroups array with canonical values from the API response
-    const idx = diskGroups.value.findIndex((g: any) => g.id === dg.id)
+    const idx = diskGroups.value.findIndex(g => g.id === dg.id)
     if (idx !== -1 && updated) {
       diskGroups.value[idx] = { ...diskGroups.value[idx], ...updated }
     } else if (idx !== -1) {
@@ -688,10 +689,11 @@ async function saveThresholds(dg: any) {
     }
 
     setTimeout(() => { edit.message = ''; edit.success = false }, 2500)
-  } catch (err: any) {
+  } catch (err: unknown) {
     edit.success = false
-    edit.message = err.message || 'Failed to save thresholds'
-    addToast('Failed to save: ' + (err.message || 'Unknown error'), 'error')
+    const errMsg = (err as ApiError)?.message || 'Failed to save thresholds'
+    edit.message = errMsg
+    addToast('Failed to save: ' + errMsg, 'error')
   } finally {
     edit.saving = false
   }
@@ -748,9 +750,9 @@ const activePresetDescription = computed(() => {
 // ---------------------------------------------------------------------------
 // Custom Rules (Cascading Rule Builder)
 // ---------------------------------------------------------------------------
-const rules = ref<any[]>([])
+const rules = ref<ProtectionRule[]>([])
 const showAddRule = ref(false)
-const allIntegrations = ref<any[]>([])
+const allIntegrations = ref<IntegrationConfig[]>([])
 
 // Operator label mapping for natural-language display
 const operatorLabelMap: Record<string, string> = {
@@ -830,7 +832,7 @@ function fieldLabel(field: string): string {
 }
 
 function integrationName(id: number): string {
-  const svc = allIntegrations.value.find((i: any) => i.id === id)
+  const svc = allIntegrations.value.find(i => i.id === id)
   if (!svc) return `Integration #${id}`
   const typeName = svc.type ? svc.type.charAt(0).toUpperCase() + svc.type.slice(1) : ''
   return typeName ? `${typeName}: ${svc.name}` : svc.name
@@ -857,14 +859,14 @@ function legacyEffect(type: string, intensity: string): string {
 const keepEffects = new Set(['always_keep', 'prefer_keep', 'lean_keep'])
 const removeEffects = new Set(['lean_remove', 'prefer_remove', 'always_remove'])
 
-function ruleEffectDirection(rule: any): 'keep' | 'remove' | 'unknown' {
+function ruleEffectDirection(rule: ProtectionRule): 'keep' | 'remove' | 'unknown' {
   const eff = rule.effect || legacyEffect(rule.type, rule.intensity)
   if (keepEffects.has(eff)) return 'keep'
   if (removeEffects.has(eff)) return 'remove'
   return 'unknown'
 }
 
-function ruleConflicts(rule: any): string[] {
+function ruleConflicts(rule: ProtectionRule): string[] {
   const direction = ruleEffectDirection(rule)
   if (direction === 'unknown') return []
   const eff = rule.effect || legacyEffect(rule.type, rule.intensity)
@@ -897,10 +899,10 @@ function ruleConflicts(rule: any): string[] {
 }
 
 // Preview
-const preview = ref<any[]>([])
+const preview = ref<EvaluatedItem[]>([])
 const previewLoading = ref(false)
 const previewFetchedAt = ref<string>('')
-const selectedPreviewItem = ref<any | null>(null)
+const selectedPreviewItem = ref<SelectedDetailItem | null>(null)
 const diskContext = ref<{ totalBytes: number; usedBytes: number; targetPct: number; thresholdPct: number; bytesToFree: number } | null>(null)
 
 // Preview filters
@@ -924,7 +926,7 @@ function togglePreviewSort(column: PreviewSortColumn) {
 
 const previewMediaTypes = ['movie', 'show', 'season', 'artist', 'book'] as const
 
-function selectPreviewItem(entry: any) {
+function selectPreviewItem(entry: EvaluatedItem) {
   // Preview API returns `factors` as a JSON array; ScoreDetailModal expects `scoreDetails` as a JSON string
   let scoreDetails = ''
   if (entry.factors && Array.isArray(entry.factors)) {
@@ -949,7 +951,7 @@ onMounted(async () => {
 
 async function fetchDiskGroups() {
   try {
-    diskGroups.value = await api('/api/v1/disk-groups') as any[]
+    diskGroups.value = await api('/api/v1/disk-groups') as DiskGroup[]
   } catch (e) {
     console.error('Failed to fetch disk groups', e)
   }
@@ -957,7 +959,7 @@ async function fetchDiskGroups() {
 
 async function fetchIntegrations() {
   try {
-    allIntegrations.value = await api('/api/v1/integrations') as any[]
+    allIntegrations.value = await api('/api/v1/integrations') as IntegrationConfig[]
   } catch (e) {
     console.error('Failed to fetch integrations', e)
   }
@@ -965,7 +967,7 @@ async function fetchIntegrations() {
 
 async function fetchPreferences() {
   try {
-    const data = await api('/api/v1/preferences') as any
+    const data = await api('/api/v1/preferences') as PreferenceSet
     if (data?.id) {
       Object.assign(prefs, data)
     }
@@ -991,7 +993,7 @@ function applyPreset(values: Record<string, number>) {
 
 async function fetchRules() {
   try {
-    rules.value = await api('/api/v1/protections') as any[]
+    rules.value = await api('/api/v1/protections') as ProtectionRule[]
   } catch (e) {
     console.error('Failed to fetch rules', e)
   }
@@ -1025,7 +1027,7 @@ async function deleteRule(id: number) {
 async function fetchPreview() {
   previewLoading.value = true
   try {
-    const data = await api('/api/v1/preview') as { items: any[]; diskContext: any }
+    const data = await api('/api/v1/preview') as PreviewResponse
     preview.value = data.items || []
     diskContext.value = data.diskContext || null
     previewFetchedAt.value = new Date().toISOString()
@@ -1046,8 +1048,8 @@ function scoreColor(score: number) {
 // ─── Preview Show/Season Grouping ─────────────────────────────────────────────
 interface PreviewGroup {
   key: string
-  entry: any
-  seasons: any[]
+  entry: EvaluatedItem
+  seasons: EvaluatedItem[]
 }
 
 const groupedPreview = computed<PreviewGroup[]>(() => {
@@ -1120,7 +1122,7 @@ const filteredGroupedPreview = computed<PreviewGroup[]>(() => {
 
       // For show groups, also check if any seasons match
       if (group.seasons.length > 0) {
-        const filteredSeasons = group.seasons.filter((s: any) => {
+        const filteredSeasons = group.seasons.filter((s) => {
           const sTitle = (s.item?.title || '').toLowerCase()
           const sType = s.item?.type
           const sProtected = !!s.isProtected

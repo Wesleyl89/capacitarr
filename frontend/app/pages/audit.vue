@@ -191,6 +191,7 @@
 <script setup lang="ts">
 import { useInfiniteScroll } from '@vueuse/core'
 import { RefreshCwIcon, LoaderCircleIcon, ClockIcon, ChevronRightIcon, SearchIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon } from 'lucide-vue-next'
+import type { AuditLog, AuditResponse, SelectedDetailItem } from '~/types/api'
 
 const api = useApi()
 const { formatTimestamp } = useDisplayPrefs()
@@ -200,12 +201,12 @@ const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () =
   await resetAndFetch()
 })
 
-const logs = ref<any[]>([])
+const logs = ref<AuditLog[]>([])
 const total = ref(0)
 const pending = ref(false)
 const loadingMore = ref(false)
 const batchSize = 100
-const selectedItem = ref<any | null>(null)
+const selectedItem = ref<SelectedDetailItem | null>(null)
 
 // Audit filters
 const auditSearch = ref('')
@@ -228,10 +229,18 @@ function toggleAuditSort(column: AuditSortColumn) {
   resetAndFetch()
 }
 
-function selectItem(entry: any) {
+function selectItem(entry: AuditLog) {
   const scoreMatch = entry.reason?.match(/^Score:\s*([\d.]+)/)
   const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0
-  selectedItem.value = { ...entry, _score: score }
+  selectedItem.value = {
+    mediaName: entry.mediaName,
+    mediaType: entry.mediaType,
+    _score: score,
+    scoreDetails: entry.scoreDetails || '',
+    sizeBytes: entry.sizeBytes,
+    action: entry.action,
+    createdAt: entry.createdAt,
+  }
 }
 
 // ─── Data Fetching (Infinite Scroll) ──────────────────────────────────────────
@@ -254,7 +263,7 @@ async function fetchLogs(append = false) {
     }
     params.set('sort_by', auditSortBy.value)
     params.set('sort_dir', auditSortDir.value)
-    const data = await api(`/api/v1/audit?${params.toString()}`) as any
+    const data = await api(`/api/v1/audit?${params.toString()}`) as AuditResponse
     if (data?.data) {
       if (append) {
         logs.value = [...logs.value, ...data.data]
@@ -293,14 +302,14 @@ function toggleActionFilter(action: string) {
 onMounted(() => fetchLogs(false))
 
 // ─── Show/Season Grouping ─────────────────────────────────────────────────────
-interface AuditGroup {
+interface AuditGroupItem {
   key: string
-  entry: any
-  seasons: any[]
+  entry: AuditLog
+  seasons: AuditLog[]
 }
 
-const groupedLogs = computed<AuditGroup[]>(() => {
-  const groups: AuditGroup[] = []
+const groupedLogs = computed<AuditGroupItem[]>(() => {
+  const groups: AuditGroupItem[] = []
   const showMap = new Map<string, number>()
 
   for (const log of logs.value) {

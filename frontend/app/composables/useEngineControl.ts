@@ -2,11 +2,13 @@
  * Engine control composable — shared state for execution mode and run status.
  * Used by the navbar engine popover and dashboard engine activity section.
  */
+import type { WorkerStats, PreferenceSet } from '~/types/api'
+
 export function useEngineControl() {
   const api = useApi()
   const { addToast } = useToast()
 
-  const workerStats = useState<any>('engineWorkerStats', () => null)
+  const workerStats = useState<WorkerStats | null>('engineWorkerStats', () => null)
   const runNowLoading = ref(false)
   const changingMode = ref(false)
 
@@ -32,16 +34,16 @@ export function useEngineControl() {
 
   async function fetchStats() {
     try {
-      const stats = await api('/api/v1/worker/stats')
+      const stats = await api('/api/v1/worker/stats') as WorkerStats
       if (stats) {
         const wasRunning = prevIsRunning.value
         workerStats.value = stats
-        const nowRunning = (stats as any).isRunning === true
+        const nowRunning = stats.isRunning === true
 
         // Detect run completion: was running → now idle
         if (wasRunning && !nowRunning) {
-          const evaluated = (stats as any).lastRunEvaluated ?? 0
-          const flagged = (stats as any).lastRunFlagged ?? 0
+          const evaluated = stats.lastRunEvaluated ?? 0
+          const flagged = stats.lastRunFlagged ?? 0
           addToast(
             `Engine run complete — evaluated ${evaluated.toLocaleString()} items, flagged ${flagged.toLocaleString()}`,
             'success',
@@ -58,7 +60,7 @@ export function useEngineControl() {
   async function setMode(mode: string) {
     changingMode.value = true
     try {
-      const currentPrefs = await api('/api/v1/preferences') as any
+      const currentPrefs = await api('/api/v1/preferences') as PreferenceSet
       await api('/api/v1/preferences', {
         method: 'PUT',
         body: { ...currentPrefs, executionMode: mode }
@@ -66,8 +68,7 @@ export function useEngineControl() {
       // Refresh stats to pick up the new mode
       await fetchStats()
       addToast(`Execution mode set to ${modeLabel(mode)}`, 'success')
-    } catch (e) {
-      console.error('Failed to set execution mode:', e)
+    } catch {
       addToast('Failed to change execution mode', 'error')
     } finally {
       changingMode.value = false
@@ -82,8 +83,7 @@ export function useEngineControl() {
       // Give the engine a moment, then refresh stats
       await new Promise(r => setTimeout(r, 2000))
       await fetchStats()
-    } catch (e) {
-      console.error('Failed to trigger engine run:', e)
+    } catch {
       addToast('Failed to trigger engine run', 'error')
     } finally {
       runNowLoading.value = false

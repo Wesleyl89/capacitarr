@@ -27,6 +27,7 @@
 <script setup lang="ts">
 import { LoaderCircleIcon, AlertTriangleIcon, BarChart3Icon } from 'lucide-vue-next'
 import { formatBytes } from '~/utils/format'
+import type { MetricsHistoryResponse, LibraryHistoryRow } from '~/types/api'
 
 const props = defineProps<{
   mode: string
@@ -124,7 +125,7 @@ async function fetchMetrics() {
     if (props.diskGroupId) query.disk_group_id = props.diskGroupId
     if (props.since && props.since !== 'all') query.since = props.since
 
-    const res = await api('/api/v1/metrics/history', { query }) as any
+    const res = await api('/api/v1/metrics/history', { query }) as MetricsHistoryResponse
 
     if (res.status === 'success' && res.data?.length > 0) {
       const isPercent = props.mode === 'percentage'
@@ -136,7 +137,7 @@ async function fetchMetrics() {
         totalCapacity.value = lastRow.TotalCapacity
       }
 
-      const usedData = res.data.map((row: any) => {
+      const usedData = res.data.map((row: LibraryHistoryRow) => {
         const ts = new Date(row.Timestamp).getTime()
         if (isPercent) {
           const pct = row.TotalCapacity > 0 ? (row.UsedCapacity / row.TotalCapacity) * 100 : 0
@@ -151,7 +152,7 @@ async function fetchMetrics() {
         // Raw mode: only show Used series; y-axis max is set to totalCapacity
         series.value = [{ name: 'Used', data: usedData }]
       } else {
-        const totalData = res.data.map((row: any) => [
+        const totalData = res.data.map((row: LibraryHistoryRow) => [
           new Date(row.Timestamp).getTime(),
           row.TotalCapacity
         ])

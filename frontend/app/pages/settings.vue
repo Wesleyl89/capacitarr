@@ -45,7 +45,7 @@
             <!-- Timezone -->
             <div class="space-y-1.5">
               <UiLabel>Timezone</UiLabel>
-              <UiSelect :model-value="displayTimezone" @update:model-value="(v: any) => setTimezone(String(v))">
+              <UiSelect :model-value="displayTimezone" @update:model-value="(v: string) => setTimezone(String(v))">
                 <UiSelectTrigger class="w-full max-w-xs">
                   <UiSelectValue placeholder="Select timezone" />
                 </UiSelectTrigger>
@@ -715,6 +715,7 @@ import {
   CogIcon
 } from 'lucide-vue-next'
 import { formatRelativeTime } from '~/utils/format'
+import type { IntegrationConfig, PreferenceSet, ConnectionTestResult, ApiKeyResponse, ApiError } from '~/types/api'
 
 // ─── SaveIndicator functional component ──────────────────────────────────────
 const SaveIndicator = defineComponent({
@@ -748,9 +749,9 @@ const { timezone: displayTimezone, clockFormat: displayClockFormat, setTimezone,
 const { theme: currentTheme, setTheme, themes: themeList } = useTheme()
 
 const loading = ref(true)
-const integrations = ref<any[]>([])
+const integrations = ref<IntegrationConfig[]>([])
 const showModal = ref(false)
-const editingIntegration = ref<any>(null)
+const editingIntegration = ref<IntegrationConfig | null>(null)
 const saving = ref(false)
 const formError = ref('')
 const { addToast } = useToast()
@@ -921,10 +922,10 @@ function showSaveStatus(field: string, status: 'saving' | 'saved' | 'error') {
   }
 }
 
-async function autoSavePreference(field: string, key: string, value: any) {
+async function autoSavePreference(field: string, key: string, value: string | number) {
   showSaveStatus(field, 'saving')
   try {
-    const currentPrefs = await api('/api/v1/preferences') as any
+    const currentPrefs = await api('/api/v1/preferences') as PreferenceSet
     await api('/api/v1/preferences', {
       method: 'PUT',
       body: { ...currentPrefs, [key]: value }
@@ -955,7 +956,7 @@ watch(retentionDays, (newVal, oldVal) => {
 async function fetchIntegrations() {
   loading.value = true
   try {
-    integrations.value = await api('/api/v1/integrations') as any[]
+    integrations.value = await api('/api/v1/integrations') as IntegrationConfig[]
   } catch (e) {
     console.error('Failed to fetch integrations:', e)
     addToast('Failed to load integrations', 'error')
@@ -974,7 +975,7 @@ function openAddModal() {
   showModal.value = true
 }
 
-function openEditModal(integration: any) {
+function openEditModal(integration: IntegrationConfig) {
   editingIntegration.value = integration
   formState.type = integration.type
   formState.name = integration.name
@@ -1002,15 +1003,15 @@ async function onSubmit() {
     showModal.value = false
     addToast('Integration saved', 'success')
     await fetchIntegrations()
-  } catch (e: any) {
-    formError.value = e?.data?.error || 'Failed to save integration'
+  } catch (e: unknown) {
+    formError.value = (e as ApiError)?.data?.error || 'Failed to save integration'
     addToast(formError.value, 'error')
   } finally {
     saving.value = false
   }
 }
 
-async function deleteIntegration(integration: any) {
+async function deleteIntegration(integration: IntegrationConfig) {
   if (!confirm(`Delete ${integration.name}? This cannot be undone.`)) return
   try {
     await api(`/api/v1/integrations/${integration.id}`, { method: 'DELETE' })
@@ -1022,12 +1023,12 @@ async function deleteIntegration(integration: any) {
   }
 }
 
-async function testConnection(integration: any) {
+async function testConnection(integration: IntegrationConfig) {
   try {
     const result = await api('/api/v1/integrations/test', {
       method: 'POST',
       body: { type: integration.type, url: integration.url, apiKey: integration.apiKey }
-    }) as any
+    }) as ConnectionTestResult
     addToast(result.success ? 'Connection successful!' : `Connection failed: ${result.error}`, result.success ? 'success' : 'error')
   } catch {
     addToast('Connection test failed', 'error')
@@ -1039,7 +1040,7 @@ async function testFormConnection() {
     const result = await api('/api/v1/integrations/test', {
       method: 'POST',
       body: { type: formState.type, url: formState.url, apiKey: formState.apiKey }
-    }) as any
+    }) as ConnectionTestResult
     if (result.success) {
       formError.value = ''
       addToast('Connection successful!', 'success')
@@ -1056,7 +1057,7 @@ async function testFormConnection() {
 // ─── General Settings ────────────────────────────────────────────────────────
 async function fetchPreferences() {
   try {
-    const prefs = await api('/api/v1/preferences') as any
+    const prefs = await api('/api/v1/preferences') as PreferenceSet
     if (prefs?.auditLogRetentionDays !== undefined) {
       retentionDays.value = prefs.auditLogRetentionDays
     }
@@ -1118,8 +1119,8 @@ async function changePassword() {
     passwordForm.confirmPassword = ''
     // Redirect to login after short delay
     setTimeout(() => { navigateTo('/login') }, 1500)
-  } catch (e: any) {
-    passwordError.value = e?.data?.error || 'Failed to change password'
+  } catch (e: unknown) {
+    passwordError.value = (e as ApiError)?.data?.error || 'Failed to change password'
     addToast(passwordError.value, 'error')
   } finally {
     savingPassword.value = false
@@ -1156,8 +1157,8 @@ async function changeUsername() {
     usernameForm.newUsername = ''
     usernameForm.password = ''
     setTimeout(() => { navigateTo('/login') }, 1500)
-  } catch (e: any) {
-    usernameError.value = e?.data?.error || 'Failed to change username'
+  } catch (e: unknown) {
+    usernameError.value = (e as ApiError)?.data?.error || 'Failed to change username'
     addToast(usernameError.value, 'error')
   } finally {
     savingUsername.value = false
@@ -1168,7 +1169,7 @@ async function changeUsername() {
 async function generateApiKey() {
   generatingApiKey.value = true
   try {
-    const result = await api('/api/v1/auth/apikey', { method: 'POST' }) as any
+    const result = await api('/api/v1/auth/apikey', { method: 'POST' }) as ApiKeyResponse
     apiKey.value = result.api_key
     addToast('API key generated', 'success')
   } catch (e) {
@@ -1181,7 +1182,7 @@ async function generateApiKey() {
 
 async function fetchApiKey() {
   try {
-    const result = await api('/api/v1/auth/apikey') as any
+    const result = await api('/api/v1/auth/apikey') as ApiKeyResponse
     if (result?.api_key) {
       apiKey.value = result.api_key
     }
@@ -1199,14 +1200,13 @@ function copyApiKey() {
 async function confirmResetData() {
   resettingData.value = true
   try {
-    const result = await api('/api/v1/data/reset', { method: 'DELETE' }) as any
+    await api('/api/v1/data/reset', { method: 'DELETE' })
     showResetDialog.value = false
     addToast('All scraped data has been cleared', 'success')
     // Refresh page data so the UI reflects the cleared state
     await fetchIntegrations()
-  } catch (e: any) {
-    console.error('Failed to reset data:', e)
-    addToast(e?.data?.error || 'Failed to clear data', 'error')
+  } catch (e: unknown) {
+    addToast((e as ApiError)?.data?.error || 'Failed to clear data', 'error')
   } finally {
     resettingData.value = false
   }
