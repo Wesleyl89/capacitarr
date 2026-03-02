@@ -386,11 +386,16 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 	protected.POST("/protections", func(c echo.Context) error {
 		var newRule db.ProtectionRule
 		if err := c.Bind(&newRule); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+			slog.Error("Failed to bind rule payload", "component", "api", "operation", "create_rule", "error", err)
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload: " + err.Error()})
 		}
+
+		// Ensure new rules are enabled by default
+		newRule.Enabled = true
 
 		// Validate required fields for the new payload shape
 		if newRule.Field == "" || newRule.Operator == "" || newRule.Value == "" {
+			slog.Warn("Rule creation missing required fields", "component", "api", "field", newRule.Field, "operator", newRule.Operator, "value", newRule.Value, "effect", newRule.Effect)
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Field, Operator, and Value are required"})
 		}
 
