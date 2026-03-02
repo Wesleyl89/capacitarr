@@ -527,7 +527,7 @@ function submitRule() {
     integrationId: Number(form.integrationId),
     field: form.field,
     operator: form.operator,
-    value: form.value,
+    value: String(form.value),
     effect: form.effect
   })
   // Reset form
