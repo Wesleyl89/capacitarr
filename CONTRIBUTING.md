@@ -48,6 +48,44 @@ By submitting a pull request or otherwise contributing to this project, you agre
 - **Commits**: Use Conventional Commits format (required for changelog generation)
 - **Documentation**: Update relevant docs when changing user-facing behavior
 
+### Testing
+
+All changes must pass the existing test suites:
+
+**Go backend tests** (uses the standard `testing` package):
+```bash
+cd backend && go test ./... -race -count=1
+```
+
+**Frontend tests** (uses Vitest):
+```bash
+cd frontend && pnpm test
+```
+
+**Linting:**
+```bash
+cd backend && golangci-lint run ./...
+cd frontend && pnpm lint
+```
+
+**Full build verification via Docker:**
+```bash
+docker compose up --build
+```
+
+> **Note:** Do not run the backend or frontend directly for testing. Use Docker Compose to ensure the build matches the production environment.
+
+### CI/CD Pipeline
+
+Every push and merge request triggers a GitLab CI pipeline with these stages:
+
+1. **Lint** — `golangci-lint` (Go) and ESLint (frontend)
+2. **Test** — `go test` with race detection and Vitest for the frontend
+3. **Build** — Docker image build verification
+4. **Security** — `govulncheck` (Go) and `pnpm audit` (frontend)
+
+Ensure all CI checks pass before requesting review.
+
 ### Pull Request Guidelines
 
 - Keep PRs focused — one logical change per PR
