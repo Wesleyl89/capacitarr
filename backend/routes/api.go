@@ -64,6 +64,9 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 		})
 	})
 
+	// Rate-limit login endpoint: 10 attempts per IP per 15-minute window
+	loginRL := newLoginRateLimiter(10, 15*time.Minute)
+
 	// Public Auth
 	g.POST("/auth/login", func(c echo.Context) error {
 		var req LoginRequest
@@ -148,7 +151,7 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 		})
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "success", "token": tokenString})
-	})
+	}, LoginRateLimit(loginRL))
 
 	// Protected Routes
 	protected := g.Group("")

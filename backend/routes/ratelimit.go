@@ -1,0 +1,110 @@
+package routes
+
+import (
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/labstack/echo/v4"
+)
+
+// loginRateLimiter is a simple in-memory sliding-window rate limiter for the
+// login endpoint. It tracks per-IP attempt timestamps and rejects requests
+// that exceed the configured limit within the window.
+//
+// This is intentionally simple — it lives in process memory and resets on
+// restart. For a self-hosted single-instance tool this is sufficient to
+// prevent automated brute-force attacks without requiring Redis or external
+// storage.
+type loginRateLimiter struct {
+	mu       sync.Mutex
+	attempts map[string][]time.Time
+	window   time.Duration
+	limit    int
+}
+
+// newLoginRateLimiter creates a rate limiter that allows `limit` attempts per
+// `window` duration from any single IP address.
+func newLoginRateLimiter(limit int, window time.Duration) *loginRateLimiter {
+	rl := &loginRateLimiter{
+		attempts: make(map[string][]time.Time),
+		window:   window,
+		limit:    limit,
+	}
+	// Background goroutine to periodically evict stale entries and prevent
+	// unbounded memory growth from IPs that stop sending requests.
+	go rl.cleanup()
+	return rl
+}
+
+// allow checks whether the given IP is within the rate limit. Returns true if
+// the request should proceed, false if it should be rejected.
+func (rl *loginRateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+
+	// Prune expired timestamps for this IP
+	timestamps := rl.attempts[ip]
+	valid := timestamps[:0]
+	for _, t := range timestamps {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= rl.limit {
+		rl.attempts[ip] = valid
+		return false
+	}
+
+	rl.attempts[ip] = append(valid, now)
+	return true
+}
+
+// cleanup runs every 5 minutes and removes entries for IPs that have no
+// recent attempts, preventing unbounded memory growth.
+func (rl *loginRateLimiter) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		cutoff := now.Add(-rl.window)
+		for ip, timestamps := range rl.attempts {
+			valid := timestamps[:0]
+			for _, t := range timestamps {
+				if t.After(cutoff) {
+					valid = append(valid, t)
+				}
+			}
+			if len(valid) == 0 {
+				delete(rl.attempts, ip)
+			} else {
+				rl.attempts[ip] = valid
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+// LoginRateLimit returns Echo middleware that rate-limits the wrapped handler.
+// Requests exceeding the limit receive a 429 Too Many Requests response.
+func LoginRateLimit(rl *loginRateLimiter) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			ip := c.RealIP()
+			if !rl.allow(ip) {
+				slog.Warn("Login rate limit exceeded", "ip", ip)
+				return c.JSON(http.StatusTooManyRequests, map[string]string{
+					"error": "Too many login attempts. Please try again later.",
+				})
+			}
+			return next(c)
+		}
+	}
+}
