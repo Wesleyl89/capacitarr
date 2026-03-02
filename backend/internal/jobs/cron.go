@@ -13,44 +13,44 @@ func Start() *cron.Cron {
 
 	// 1. Rollup "raw" to "hourly" every hour at minute 0
 	_, err := c.AddFunc("@hourly", func() {
-		slog.Info("Running hourly rollup")
+		slog.Info("Running hourly rollup", "component", "jobs")
 		rollupData("raw", "hourly", time.Now().Add(-time.Hour).Truncate(time.Hour), time.Now().Truncate(time.Hour))
 		// Keep raw data for 2 hours (enough for real-time zooming)
 		pruneData("raw", time.Now().Add(-2*time.Hour))
 	})
 	if err != nil {
-		slog.Error("Failed to add hourly cron", "error", err)
+		slog.Error("Failed to add hourly cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	// 2. Rollup "hourly" to "daily" every day at midnight
 	_, err = c.AddFunc("@daily", func() {
-		slog.Info("Running daily rollup")
+		slog.Info("Running daily rollup", "component", "jobs")
 		rollupData("hourly", "daily", time.Now().Add(-24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
 		// Keep hourly snapshots for 7 days
 		pruneData("hourly", time.Now().Add(-7*24*time.Hour))
 	})
 	if err != nil {
-		slog.Error("Failed to add daily cron", "error", err)
+		slog.Error("Failed to add daily cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	// 3. Rollup "daily" to "weekly" every week on Sunday at midnight
 	_, err = c.AddFunc("@weekly", func() {
-		slog.Info("Running weekly rollup")
+		slog.Info("Running weekly rollup", "component", "jobs")
 		rollupData("daily", "weekly", time.Now().Add(-7*24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
 		// Keep daily snapshots for 30 days
 		pruneData("daily", time.Now().Add(-30*24*time.Hour))
 	})
 	if err != nil {
-		slog.Error("Failed to add weekly cron", "error", err)
+		slog.Error("Failed to add weekly cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	// 4. Prune "weekly" data older than 1 year
 	_, err = c.AddFunc("@monthly", func() {
-		slog.Info("Running pruning of old data")
+		slog.Info("Running pruning of old data", "component", "jobs")
 		pruneData("weekly", time.Now().Add(-365*24*time.Hour))
 	})
 	if err != nil {
-		slog.Error("Failed to add monthly cron", "error", err)
+		slog.Error("Failed to add monthly cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	// 5. Prune old engine run stats — keep the last 1000 rows
@@ -58,11 +58,11 @@ func Start() *cron.Cron {
 		pruneEngineRunStats(1000)
 	})
 	if err != nil {
-		slog.Error("Failed to add engine stats cleanup cron", "error", err)
+		slog.Error("Failed to add engine stats cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	c.Start()
-	slog.Info("Cron jobs started successfully")
+	slog.Info("Cron jobs started successfully", "component", "jobs")
 	return c
 }
 
@@ -74,7 +74,7 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 		Distinct("disk_group_id").
 		Pluck("disk_group_id", &groupIDs).Error
 	if err != nil {
-		slog.Error("Failed to query distinct disk group IDs for rollup", "error", err, "from", fromRes)
+		slog.Error("Failed to query distinct disk group IDs for rollup", "component", "jobs", "operation", "rollup_query", "from", fromRes, "error", err)
 		return
 	}
 
@@ -91,7 +91,7 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 			Scan(&avgResult).Error
 
 		if err != nil {
-			slog.Error("Failed to calculate average for rollup", "error", err, "from", fromRes, "disk_group_id", gid)
+			slog.Error("Failed to calculate average for rollup", "component", "jobs", "operation", "rollup_calculate", "from", fromRes, "diskGroupId", gid, "error", err)
 			continue
 		}
 
@@ -105,7 +105,7 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 				DiskGroupID:   &diskGroupID,
 			}
 			if err := db.DB.Create(&record).Error; err != nil {
-				slog.Error("Failed to save rollup record", "error", err, "to", toRes, "disk_group_id", gid)
+				slog.Error("Failed to save rollup record", "component", "jobs", "operation", "rollup_save", "to", toRes, "diskGroupId", gid, "error", err)
 			}
 		}
 	}
@@ -113,7 +113,7 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 
 func pruneData(resolution string, before time.Time) {
 	if err := db.DB.Where("resolution = ? AND timestamp < ?", resolution, before).Delete(&db.LibraryHistory{}).Error; err != nil {
-		slog.Error("Failed to prune data", "error", err, "resolution", resolution)
+		slog.Error("Failed to prune data", "component", "jobs", "operation", "prune", "resolution", resolution, "error", err)
 	}
 }
 
@@ -134,8 +134,8 @@ func pruneEngineRunStats(keep int) {
 
 	deleted := db.DB.Where("run_at <= ?", cutoffRow.RunAt).Delete(&db.EngineRunStats{})
 	if deleted.Error != nil {
-		slog.Error("Failed to prune engine run stats", "error", deleted.Error)
+		slog.Error("Failed to prune engine run stats", "component", "jobs", "operation", "prune_engine_stats", "error", deleted.Error)
 	} else if deleted.RowsAffected > 0 {
-		slog.Info("Pruned old engine run stats", "deleted", deleted.RowsAffected, "kept", keep)
+		slog.Info("Pruned old engine run stats", "component", "jobs", "deleted", deleted.RowsAffected, "kept", keep)
 	}
 }

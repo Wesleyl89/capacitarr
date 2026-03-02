@@ -42,7 +42,7 @@ func Start() func() {
 				poll()
 				timer.Reset(getPollInterval())
 			case <-RunNowCh:
-				slog.Info("Poller: manual run triggered via API")
+				slog.Info("Manual run triggered via API", "component", "poller")
 				poll()
 				// Don't reset the timer — let the next scheduled tick proceed normally
 			case <-done:
@@ -76,7 +76,7 @@ func StopWorker() {
 
 func poll() {
 	if !pollRunning.CompareAndSwap(false, true) {
-		slog.Info("Poller: skipping — previous run still in progress")
+		slog.Info("Skipping poll — previous run still in progress", "component", "poller")
 		return
 	}
 	defer pollRunning.Store(false)
@@ -95,22 +95,28 @@ func poll() {
 
 	var configs []db.IntegrationConfig
 	if err := db.DB.Where("enabled = ?", true).Find(&configs).Error; err != nil {
-		slog.Error("Poller: failed to load integrations", "error", err)
+		slog.Error("Failed to load integrations", "component", "poller", "operation", "load_integrations", "error", err)
 		return
 	}
 
 	var prefs db.PreferenceSet
 	db.DB.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1})
 
+	slog.Debug("Poll cycle starting", "component", "poller",
+		"enabledIntegrations", len(configs),
+		"pollInterval", prefs.PollIntervalSeconds,
+		"executionMode", prefs.ExecutionMode)
+
 	// Prune old audit logs
 	if prefs.AuditLogRetentionDays > 0 {
 		cutoff := time.Now().AddDate(0, 0, -prefs.AuditLogRetentionDays)
 		if err := db.DB.Where("created_at < ?", cutoff).Delete(&db.AuditLog{}).Error; err != nil {
-			slog.Error("Poller: failed to prune old audit logs", "error", err)
+			slog.Error("Failed to prune old audit logs", "component", "poller", "operation", "prune_audit_logs", "error", err)
 		}
 	}
 
 	if len(configs) == 0 {
+		slog.Debug("No enabled integrations, skipping poll", "component", "poller")
 		return
 	}
 
@@ -128,12 +134,14 @@ func poll() {
 	var embyClient *integrations.EmbyClient
 
 	for _, cfg := range configs {
+		fetchStart := time.Now()
+
 		// Tautulli is an enrichment-only service, not a full Integration
 		if cfg.Type == "tautulli" {
 			tautulliClient = integrations.NewTautulliClient(cfg.URL, cfg.APIKey)
 			now := time.Now()
 			if err := tautulliClient.TestConnection(); err != nil {
-				slog.Warn("Poller: Tautulli connection failed", "error", err)
+				slog.Warn("Tautulli connection failed", "component", "poller", "operation", "tautulli_connect", "integration", cfg.Name, "error", err)
 				db.DB.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
@@ -142,6 +150,7 @@ func poll() {
 					"last_sync":  &now,
 					"last_error": "",
 				})
+				slog.Debug("Tautulli connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
 		}
@@ -151,7 +160,7 @@ func poll() {
 			overseerrClient = integrations.NewOverseerrClient(cfg.URL, cfg.APIKey)
 			now := time.Now()
 			if err := overseerrClient.TestConnection(); err != nil {
-				slog.Warn("Poller: Overseerr connection failed", "error", err)
+				slog.Warn("Overseerr connection failed", "component", "poller", "operation", "overseerr_connect", "integration", cfg.Name, "error", err)
 				db.DB.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
@@ -160,6 +169,7 @@ func poll() {
 					"last_sync":  &now,
 					"last_error": "",
 				})
+				slog.Debug("Overseerr connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
 		}
@@ -169,7 +179,7 @@ func poll() {
 			jellyfinClient = integrations.NewJellyfinClient(cfg.URL, cfg.APIKey)
 			now := time.Now()
 			if err := jellyfinClient.TestConnection(); err != nil {
-				slog.Warn("Poller: Jellyfin connection failed", "error", err)
+				slog.Warn("Jellyfin connection failed", "component", "poller", "operation", "jellyfin_connect", "integration", cfg.Name, "error", err)
 				db.DB.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
@@ -178,6 +188,7 @@ func poll() {
 					"last_sync":  &now,
 					"last_error": "",
 				})
+				slog.Debug("Jellyfin connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
 		}
@@ -187,7 +198,7 @@ func poll() {
 			embyClient = integrations.NewEmbyClient(cfg.URL, cfg.APIKey)
 			now := time.Now()
 			if err := embyClient.TestConnection(); err != nil {
-				slog.Warn("Poller: Emby connection failed", "error", err)
+				slog.Warn("Emby connection failed", "component", "poller", "operation", "emby_connect", "integration", cfg.Name, "error", err)
 				db.DB.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
@@ -196,12 +207,14 @@ func poll() {
 					"last_sync":  &now,
 					"last_error": "",
 				})
+				slog.Debug("Emby connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
 		}
 
 		client := createClient(cfg.Type, cfg.URL, cfg.APIKey)
 		if client == nil {
+			slog.Debug("No client for integration type", "component", "poller", "type", cfg.Type, "integration", cfg.Name)
 			continue
 		}
 		serviceClients[cfg.ID] = client
@@ -213,13 +226,15 @@ func poll() {
 				"last_sync":  &now,
 				"last_error": "",
 			})
+			slog.Debug("Plex synced (protection rules only)", "component", "poller", "integration", cfg.Name)
 			continue
 		}
 
 		// Fetch media items for per-integration usage tracking (Sonarr/Radarr only)
+		slog.Debug("Fetching media items", "component", "poller", "integration", cfg.Name, "type", cfg.Type)
 		items, err := client.GetMediaItems()
 		if err != nil {
-			slog.Warn("Poller: media items fetch failed",
+			slog.Warn("Media items fetch failed", "component", "poller", "operation", "fetch_media",
 				"integration", cfg.Name, "type", cfg.Type, "error", err)
 		} else {
 			for i := range items {
@@ -249,24 +264,27 @@ func poll() {
 				"media_size_bytes": totalSize,
 				"media_count":      mediaCount,
 			})
+			slog.Debug("Media items fetched", "component", "poller",
+				"integration", cfg.Name, "type", cfg.Type,
+				"itemCount", len(items), "duration", time.Since(fetchStart).String())
 		}
 
 		// Get root folders (Sonarr/Radarr only)
 		folders, err := client.GetRootFolders()
 		if err != nil {
-			slog.Warn("Poller: root folder fetch failed",
+			slog.Warn("Root folder fetch failed", "component", "poller", "operation", "fetch_root_folders",
 				"integration", cfg.Name, "type", cfg.Type, "error", err)
 		}
 		for _, f := range folders {
 			rootFolders[f] = true
-			slog.Info("Poller: root folder found",
+			slog.Debug("Root folder found", "component", "poller",
 				"integration", cfg.Name, "path", f)
 		}
 
 		// Get disk space
 		disks, err := client.GetDiskSpace()
 		if err != nil {
-			slog.Warn("Poller: disk space fetch failed",
+			slog.Warn("Disk space fetch failed", "component", "poller", "operation", "fetch_disk_space",
 				"integration", cfg.Name, "type", cfg.Type, "error", err)
 			db.DB.Model(&cfg).Updates(map[string]interface{}{
 				"last_error": err.Error(),
@@ -298,7 +316,7 @@ func poll() {
 
 	// ─── Enrichment: Tautulli watch history ──────────────────────────────────
 	if tautulliClient != nil && len(allItems) > 0 {
-		slog.Info("Poller: enriching items with Tautulli watch data")
+		slog.Info("Enriching items with Tautulli watch data", "component", "poller", "itemCount", len(allItems))
 		for i := range allItems {
 			item := &allItems[i]
 			if item.ExternalID == "" {
@@ -312,7 +330,7 @@ func poll() {
 				watchData, err = tautulliClient.GetWatchHistory(item.ExternalID)
 			}
 			if err != nil {
-				slog.Debug("Poller: Tautulli enrichment failed", "title", item.Title, "error", err)
+				slog.Debug("Tautulli enrichment failed", "component", "poller", "title", item.Title, "error", err)
 				continue
 			}
 			if watchData != nil {
@@ -324,16 +342,17 @@ func poll() {
 
 	// ─── Enrichment: Overseerr request data ──────────────────────────────────
 	if overseerrClient != nil && len(allItems) > 0 {
-		slog.Info("Poller: enriching items with Overseerr request data")
+		slog.Info("Enriching items with Overseerr request data", "component", "poller", "itemCount", len(allItems))
 		requests, err := overseerrClient.GetRequestedMedia()
 		if err != nil {
-			slog.Warn("Poller: failed to fetch Overseerr requests", "error", err)
+			slog.Warn("Failed to fetch Overseerr requests", "component", "poller", "operation", "fetch_overseerr", "error", err)
 		} else {
 			// Build lookup by TMDb ID
 			requestMap := make(map[int]integrations.OverseerrMediaRequest)
 			for _, req := range requests {
 				requestMap[req.TMDbID] = req
 			}
+			matched := 0
 			for i := range allItems {
 				item := &allItems[i]
 				if item.TMDbID > 0 {
@@ -341,22 +360,24 @@ func poll() {
 						item.IsRequested = true
 						item.RequestedBy = req.RequestedBy
 						item.RequestCount = 1
+						matched++
 					}
 				}
 			}
+			slog.Debug("Overseerr enrichment complete", "component", "poller", "requests", len(requests), "matched", matched)
 		}
 	}
 
 	// ─── Enrichment: Jellyfin watch history ─────────────────────────────────
 	if jellyfinClient != nil && len(allItems) > 0 {
-		slog.Info("Poller: enriching items with Jellyfin watch data")
+		slog.Info("Enriching items with Jellyfin watch data", "component", "poller", "itemCount", len(allItems))
 		userID, err := jellyfinClient.GetAdminUserID()
 		if err != nil {
-			slog.Warn("Poller: failed to get Jellyfin admin user", "error", err)
+			slog.Warn("Failed to get Jellyfin admin user", "component", "poller", "operation", "jellyfin_admin_user", "error", err)
 		} else {
 			watchMap, err := jellyfinClient.GetBulkWatchData(userID)
 			if err != nil {
-				slog.Warn("Poller: failed to fetch Jellyfin watch data", "error", err)
+				slog.Warn("Failed to fetch Jellyfin watch data", "component", "poller", "operation", "fetch_jellyfin_watch", "error", err)
 			} else {
 				matched := 0
 				for i := range allItems {
@@ -375,21 +396,21 @@ func poll() {
 						}
 					}
 				}
-				slog.Info("Poller: Jellyfin enrichment complete", "libraryItems", len(watchMap), "matched", matched)
+				slog.Info("Jellyfin enrichment complete", "component", "poller", "libraryItems", len(watchMap), "matched", matched)
 			}
 		}
 	}
 
 	// ─── Enrichment: Emby watch history ─────────────────────────────────────
 	if embyClient != nil && len(allItems) > 0 {
-		slog.Info("Poller: enriching items with Emby watch data")
+		slog.Info("Enriching items with Emby watch data", "component", "poller", "itemCount", len(allItems))
 		userID, err := embyClient.GetAdminUserID()
 		if err != nil {
-			slog.Warn("Poller: failed to get Emby admin user", "error", err)
+			slog.Warn("Failed to get Emby admin user", "component", "poller", "operation", "emby_admin_user", "error", err)
 		} else {
 			watchMap, err := embyClient.GetBulkWatchData(userID)
 			if err != nil {
-				slog.Warn("Poller: failed to fetch Emby watch data", "error", err)
+				slog.Warn("Failed to fetch Emby watch data", "component", "poller", "operation", "fetch_emby_watch", "error", err)
 			} else {
 				matched := 0
 				for i := range allItems {
@@ -408,7 +429,7 @@ func poll() {
 						}
 					}
 				}
-				slog.Info("Poller: Emby enrichment complete", "libraryItems", len(watchMap), "matched", matched)
+				slog.Info("Emby enrichment complete", "component", "poller", "libraryItems", len(watchMap), "matched", matched)
 			}
 		}
 	}
@@ -450,7 +471,7 @@ func poll() {
 			DiskGroupID:   &group.ID,
 		}
 		if err := db.DB.Create(&record).Error; err != nil {
-			slog.Error("Poller: failed to save capacity record",
+			slog.Error("Failed to save capacity record", "component", "poller", "operation", "save_capacity",
 				"mount", mountPath, "error", err)
 		}
 
@@ -464,7 +485,7 @@ func poll() {
 		db.DB.Find(&allGroups)
 		for _, g := range allGroups {
 			if !mediaMounts[g.MountPath] {
-				slog.Info("Poller: removing orphaned disk group",
+				slog.Info("Removing orphaned disk group", "component", "poller",
 					"mount", g.MountPath, "id", g.ID)
 				db.DB.Where("disk_group_id = ?", g.ID).Delete(&db.LibraryHistory{})
 				db.DB.Delete(&g)
@@ -482,8 +503,15 @@ func poll() {
 		DurationMs:    time.Since(pollStart).Milliseconds(),
 	}
 	if err := db.DB.Create(&runStats).Error; err != nil {
-		slog.Error("Poller: failed to persist engine run stats", "error", err)
+		slog.Error("Failed to persist engine run stats", "component", "poller", "operation", "persist_stats", "error", err)
 	}
+
+	slog.Debug("Poll cycle complete", "component", "poller",
+		"duration", time.Since(pollStart).String(),
+		"totalItems", len(allItems),
+		"evaluated", atomic.LoadInt64(&lastRunEvaluated),
+		"flagged", atomic.LoadInt64(&lastRunFlagged),
+		"protected", atomic.LoadInt64(&lastRunProtected))
 }
 
 // findMediaMounts returns only the mount paths that are the most specific match
@@ -517,8 +545,8 @@ func findMediaMounts(diskMap map[string]integrations.DiskSpace, rootFolders map[
 
 		if bestMount != "" {
 			mediaMounts[bestMount] = true
-			slog.Info("Poller: matched root folder to mount",
-				"root_folder", rf, "mount", bestMount)
+			slog.Debug("Matched root folder to mount", "component", "poller",
+				"rootFolder", rf, "mount", bestMount)
 		}
 	}
 
@@ -528,7 +556,7 @@ func findMediaMounts(diskMap map[string]integrations.DiskSpace, rootFolders map[
 	if len(mediaMounts) > 1 {
 		for m := range mediaMounts {
 			if strings.TrimRight(m, "/") == "" {
-				slog.Info("Poller: dropping root mount '/' since more specific mounts exist")
+				slog.Debug("Dropping root mount '/' since more specific mounts exist", "component", "poller")
 				delete(mediaMounts, m)
 			}
 		}
@@ -662,6 +690,7 @@ func deletionWorker() {
 		// ║  Remove this block when ready for production testing.   ║
 		// ╚══════════════════════════════════════════════════════════╝
 		slog.Warn("SAFETY GUARD: Delete skipped (deletions disabled in codebase)",
+			"component", "poller",
 			"item", job.item.Title,
 			"type", job.item.Type,
 			"size", job.item.SizeBytes,
@@ -684,7 +713,7 @@ func deletionWorker() {
 
 		/* DISABLED: Actual deletion — uncomment when ready for production testing
 		if err := job.client.DeleteMediaItem(job.item); err != nil {
-			slog.Error("Background deletion failed", "item", job.item.Title, "error", err)
+			slog.Error("Background deletion failed", "component", "poller", "operation", "delete_media", "item", job.item.Title, "error", err)
 			atomic.AddInt64(&metricsFailed, 1)
 			currentlyDeletingVal.Store("")
 			continue
@@ -713,7 +742,8 @@ func deletionWorker() {
 		*/
 		db.DB.Create(&logEntry)
 
-		slog.Info("Background engine action completed", "media", job.item.Title, "action", "Deleted", "freed", job.item.SizeBytes)
+		slog.Info("Background engine action completed", "component", "poller",
+			"media", job.item.Title, "action", "Deleted", "freed", job.item.SizeBytes)
 	}
 }
 
@@ -723,10 +753,14 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 
 	currentPct := float64(group.UsedBytes) / float64(group.TotalBytes) * 100
 	if currentPct < group.ThresholdPct {
+		slog.Debug("Disk within threshold, no action needed", "component", "poller",
+			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
+			"threshold", group.ThresholdPct)
 		return
 	}
 
-	slog.Info("Disk threshold breached, evaluating media for deletion", "mount", group.MountPath, "currentPct", currentPct, "threshold", group.ThresholdPct)
+	slog.Info("Disk threshold breached, evaluating media for deletion", "component", "poller",
+		"mount", group.MountPath, "currentPct", fmt.Sprintf("%.1f", currentPct), "threshold", group.ThresholdPct)
 
 	// Filter items on this mount
 	var diskItems []integrations.MediaItem
@@ -736,6 +770,9 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		}
 	}
 
+	slog.Debug("Items on disk mount", "component", "poller",
+		"mount", group.MountPath, "itemCount", len(diskItems))
+
 	var rules []db.ProtectionRule
 	db.DB.Find(&rules)
 
@@ -744,9 +781,11 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 	atomic.AddInt64(&lastRunEvaluated, int64(len(evaluated)))
 
 	// Count protected items for dashboard stats
+	protectedCount := 0
 	for _, ev := range evaluated {
 		if ev.IsProtected {
 			atomic.AddInt64(&lastRunProtected, 1)
+			protectedCount++
 		}
 	}
 
@@ -759,6 +798,12 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 	if targetBytesToFree <= 0 {
 		return
 	}
+
+	slog.Debug("Evaluation summary", "component", "poller",
+		"mount", group.MountPath,
+		"evaluated", len(evaluated),
+		"protected", protectedCount,
+		"targetBytesToFree", targetBytesToFree)
 
 	var bytesFreed int64
 
@@ -788,6 +833,10 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 			}
 		}
 
+		slog.Debug("Deletion candidate", "component", "poller",
+			"media", ev.Item.Title, "score", fmt.Sprintf("%.4f", ev.Score),
+			"size", ev.Item.SizeBytes, "reason", ev.Reason)
+
 		actionName := "Dry-Run"
 		if prefs.ExecutionMode == "auto" {
 			client, ok := serviceClients[ev.Item.IntegrationID]
@@ -805,11 +854,12 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 					bytesFreed += ev.Item.SizeBytes
 					continue // Skip the synchronous DB insert below, worker handles it
 				default:
-					slog.Warn("Deletion queue full, skipping item", "item", ev.Item.Title)
+					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", ev.Item.Title)
 					continue
 				}
 			} else {
-				slog.Error("Integration client not found for deletion", "itemID", ev.Item.IntegrationID)
+				slog.Error("Integration client not found for deletion", "component", "poller",
+					"operation", "resolve_client", "integrationId", ev.Item.IntegrationID)
 				continue
 			}
 		} else if prefs.ExecutionMode == "approval" {
@@ -853,6 +903,7 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		bytesFreed += ev.Item.SizeBytes
 		atomic.AddInt64(&lastRunFlagged, 1)
 		atomic.AddInt64(&lastRunFreedBytes, ev.Item.SizeBytes)
-		slog.Info("Engine action taken", "media", ev.Item.Title, "action", actionName, "score", ev.Score, "freed", ev.Item.SizeBytes)
+		slog.Info("Engine action taken", "component", "poller",
+			"media", ev.Item.Title, "action", actionName, "score", ev.Score, "freed", ev.Item.SizeBytes)
 	}
 }

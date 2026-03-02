@@ -47,16 +47,16 @@ func Load() *Config {
 	if jwtSecret == "" {
 		if debug {
 			jwtSecret = "development_secret_do_not_use_in_production"
-			slog.Warn("Using default JWT secret — this is only acceptable in debug mode")
+			slog.Warn("Using default JWT secret — this is only acceptable in debug mode", "component", "config")
 		} else {
 			// Generate a random secret for this run and warn the user
 			bytes := make([]byte, 32)
 			if _, err := rand.Read(bytes); err != nil {
-				slog.Error("Failed to generate random JWT secret", "error", err)
+				slog.Error("Failed to generate random JWT secret", "component", "config", "operation", "generate_jwt_secret", "error", err)
 				os.Exit(1)
 			}
 			jwtSecret = hex.EncodeToString(bytes)
-			slog.Warn("No JWT_SECRET set — generated a random secret for this session. Sessions will not persist across restarts. Set JWT_SECRET environment variable for persistent sessions.")
+			slog.Warn("No JWT_SECRET set — generated a random secret for this session. Sessions will not persist across restarts. Set JWT_SECRET environment variable for persistent sessions.", "component", "config")
 		}
 	}
 
@@ -79,14 +79,14 @@ func Load() *Config {
 
 	authHeader := strings.TrimSpace(os.Getenv("AUTH_HEADER"))
 	if authHeader != "" {
-		slog.Info("Trusted reverse proxy auth header configured", "header", authHeader)
+		slog.Info("Trusted reverse proxy auth header configured", "component", "config", "header", authHeader)
 		// SECURITY: When AUTH_HEADER is set, the server trusts that header
 		// unconditionally for authentication. If the server is directly
 		// exposed to the internet (not behind a reverse proxy), any client
 		// can spoof this header and gain access. Only use this setting when
 		// Capacitarr is behind a trusted reverse proxy (Authelia, Authentik,
 		// Organizr, Caddy, Traefik, etc.) that strips and re-sets the header.
-		slog.Warn("SECURITY: AUTH_HEADER is set — ensure Capacitarr is behind a trusted reverse proxy. If exposed directly, any client can spoof this header and bypass authentication.", "header", authHeader)
+		slog.Warn("SECURITY: AUTH_HEADER is set — ensure Capacitarr is behind a trusted reverse proxy. If exposed directly, any client can spoof this header and bypass authentication.", "component", "config", "header", authHeader)
 	}
 
 	return &Config{

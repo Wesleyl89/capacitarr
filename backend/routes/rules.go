@@ -30,7 +30,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		var pref db.PreferenceSet
 		// Always return the first/only record, or implicitly create default
 		if err := database.FirstOrCreate(&pref, db.PreferenceSet{ID: 1}).Error; err != nil {
-			slog.Error("Failed to fetch preferences", "error", err)
+			slog.Error("Failed to fetch preferences", "component", "api", "operation", "fetch_preferences", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch preferences"})
 		}
 		return c.JSON(http.StatusOK, pref)
@@ -83,7 +83,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		}
 
 		if err := database.Save(&payload).Error; err != nil {
-			slog.Error("Failed to update preferences", "error", err)
+			slog.Error("Failed to update preferences", "component", "api", "operation", "update_preferences", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update preferences"})
 		}
 
@@ -339,7 +339,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		case "quality":
 			profiles, err := fetcher.GetQualityProfiles()
 			if err != nil {
-				slog.Warn("Failed to fetch quality profiles for rule values", "integration_id", integrationID, "error", err)
+				slog.Warn("Failed to fetch quality profiles for rule values", "component", "api", "integrationId", integrationID, "error", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch quality profiles"})
 			}
 			result = map[string]interface{}{"type": "closed", "options": profiles}
@@ -347,7 +347,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		case "tag":
 			tags, err := fetcher.GetTags()
 			if err != nil {
-				slog.Warn("Failed to fetch tags for rule values", "integration_id", integrationID, "error", err)
+				slog.Warn("Failed to fetch tags for rule values", "component", "api", "integrationId", integrationID, "error", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch tags"})
 			}
 			result = map[string]interface{}{"type": "combobox", "suggestions": tags}
@@ -376,7 +376,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		case "language":
 			langs, err := fetcher.GetLanguages()
 			if err != nil {
-				slog.Warn("Failed to fetch languages for rule values", "integration_id", integrationID, "error", err)
+				slog.Warn("Failed to fetch languages for rule values", "component", "api", "integrationId", integrationID, "error", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch languages"})
 			}
 			if langs == nil {
@@ -447,7 +447,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		}
 
 		if err := database.Create(&newRule).Error; err != nil {
-			slog.Error("Failed to create custom rule", "error", err)
+			slog.Error("Failed to create custom rule", "component", "api", "operation", "create_rule", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create rule"})
 		}
 		return c.JSON(http.StatusCreated, newRule)
@@ -456,7 +456,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 	protected.DELETE("/protections/:id", func(c echo.Context) error {
 		id := c.Param("id")
 		if err := database.Delete(&db.ProtectionRule{}, id).Error; err != nil {
-			slog.Error("Failed to delete custom rule", "id", id, "error", err)
+			slog.Error("Failed to delete custom rule", "component", "api", "operation", "delete_rule", "id", id, "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete rule"})
 		}
 		return c.NoContent(http.StatusNoContent)
@@ -472,30 +472,30 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		}
 
 		var allItems []integrations.MediaItem
-		slog.Info("Preview: fetching media from integrations", "configCount", len(configs))
+		slog.Debug("Preview: fetching media from integrations", "component", "api", "configCount", len(configs))
 		for _, cfg := range configs {
-			slog.Info("Preview: checking integration", "name", cfg.Name, "type", cfg.Type, "enabled", cfg.Enabled)
+			slog.Debug("Preview: checking integration", "component", "api", "name", cfg.Name, "type", cfg.Type)
 			if cfg.Type == "plex" || cfg.Type == "tautulli" || cfg.Type == "overseerr" || cfg.Type == "jellyfin" || cfg.Type == "emby" {
-				slog.Info("Preview: skipping non-arr integration", "type", cfg.Type)
+				slog.Debug("Preview: skipping non-arr integration", "component", "api", "type", cfg.Type)
 				continue
 			}
 			client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
 			if client == nil {
-				slog.Warn("Preview: CreateClient returned nil", "type", cfg.Type)
+				slog.Warn("Preview: CreateClient returned nil", "component", "api", "type", cfg.Type)
 				continue
 			}
 			items, err := client.GetMediaItems()
 			if err != nil {
-				slog.Warn("Preview: media fetch failed", "integration", cfg.Name, "type", cfg.Type, "error", err)
+				slog.Warn("Preview: media fetch failed", "component", "api", "integration", cfg.Name, "type", cfg.Type, "error", err)
 				continue
 			}
-			slog.Info("Preview: fetched items", "integration", cfg.Name, "type", cfg.Type, "count", len(items))
+			slog.Debug("Preview: fetched items", "component", "api", "integration", cfg.Name, "type", cfg.Type, "count", len(items))
 			for i := range items {
 				items[i].IntegrationID = cfg.ID
 			}
 			allItems = append(allItems, items...)
 		}
-		slog.Info("Preview: total items collected", "count", len(allItems))
+		slog.Debug("Preview: total items collected", "component", "api", "count", len(allItems))
 
 		var prefs db.PreferenceSet
 		database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1})
@@ -504,7 +504,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		database.Find(&rules)
 
 		evaluated := engine.EvaluateMedia(allItems, prefs, rules)
-		slog.Info("Preview: evaluated items", "count", len(evaluated))
+		slog.Debug("Preview: evaluated items", "component", "api", "count", len(evaluated))
 
 		// Sort by score descending with tiebreaker
 		engine.SortEvaluated(evaluated, prefs.TiebreakerMethod)
@@ -555,7 +555,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			}
 		}
 
-		slog.Info("Preview: returning all evaluated items", "evaluatedCount", len(evaluated))
+		slog.Debug("Preview: returning all evaluated items", "component", "api", "evaluatedCount", len(evaluated))
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"items":       evaluated,

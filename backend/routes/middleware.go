@@ -30,7 +30,7 @@ func validateAPIKey(database *gorm.DB, plaintextKey string) *db.AuthConfig {
 	if err := database.Where("api_key = ?", plaintextKey).First(&auth).Error; err == nil {
 		if !IsHashedAPIKey(auth.APIKey) {
 			database.Model(&auth).Update("api_key", hashedKey)
-			slog.Info("Upgraded legacy plaintext API key to SHA-256 hash", "username", auth.Username)
+			slog.Info("Upgraded legacy plaintext API key to SHA-256 hash", "component", "middleware", "username", auth.Username)
 		}
 		return &auth
 	}
@@ -55,7 +55,7 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 							Password: string(placeholder),
 						}
 						database.Create(&auth)
-						slog.Info("Auto-created user from proxy auth header", "username", headerUser)
+						slog.Info("Auto-created user from proxy auth header", "component", "middleware", "username", headerUser)
 					}
 					c.Set("user", headerUser)
 					return next(c)

@@ -27,6 +27,6 @@ func RunMigrations(sqlDB *sql.DB) error {
 		return fmt.Errorf("goose up: %w", err)
 	}
 
-	slog.Info("Database migrations applied successfully")
+	slog.Info("Database migrations applied successfully", "component", "db")
 	return nil
 }

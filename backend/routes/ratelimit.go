@@ -99,7 +99,7 @@ func LoginRateLimit(rl *loginRateLimiter) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			ip := c.RealIP()
 			if !rl.allow(ip) {
-				slog.Warn("Login rate limit exceeded", "ip", ip)
+				slog.Warn("Login rate limit exceeded", "component", "ratelimit", "ip", ip)
 				return c.JSON(http.StatusTooManyRequests, map[string]string{
 					"error": "Too many login attempts. Please try again later.",
 				})

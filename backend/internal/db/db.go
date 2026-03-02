@@ -22,18 +22,18 @@ func Init(cfg *config.Config) error {
 		Logger: gormlogger.Default.LogMode(logLevel),
 	})
 	if err != nil {
-		slog.Error("Failed to connect to database", "error", err)
+		slog.Error("Failed to connect to database", "component", "db", "operation", "connect", "error", err)
 		return err
 	}
 
 	// Run Goose migrations (sole schema management — no AutoMigrate)
 	sqlDB, err := db.DB()
 	if err != nil {
-		slog.Error("Failed to get underlying sql.DB for migrations", "error", err)
+		slog.Error("Failed to get underlying sql.DB for migrations", "component", "db", "operation", "get_sql_db", "error", err)
 		return err
 	}
 	if err := RunMigrations(sqlDB); err != nil {
-		slog.Error("Failed to run database migrations", "error", err)
+		slog.Error("Failed to run database migrations", "component", "db", "operation", "migrate", "error", err)
 		return err
 	}
 
@@ -51,13 +51,13 @@ func Init(cfg *config.Config) error {
 		TimeInLibraryWeight:   4,
 		AvailabilityWeight:    3,
 	}).Error; err != nil {
-		slog.Error("Failed to seed default preferences", "error", err)
+		slog.Error("Failed to seed default preferences", "component", "db", "operation", "seed_preferences", "error", err)
 	}
 
 	// Apply dynamic log level from preferences
 	logger.SetLevel(pref.LogLevel)
 
-	slog.Info("Database initialized successfully", "path", cfg.Database)
+	slog.Info("Database initialized successfully", "component", "db", "path", cfg.Database)
 	DB = db
 	return nil
 }

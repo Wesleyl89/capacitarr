@@ -22,7 +22,7 @@ func handleDataReset(database *gorm.DB) echo.HandlerFunc {
 		// 1. Delete all audit_logs
 		res := database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.AuditLog{})
 		if res.Error != nil {
-			slog.Error("Failed to clear audit logs", "error", res.Error)
+			slog.Error("Failed to clear audit logs", "component", "api", "operation", "clear_audit_logs", "error", res.Error)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear audit logs"})
 		}
 		summary["auditLogs"] = res.RowsAffected
@@ -30,7 +30,7 @@ func handleDataReset(database *gorm.DB) echo.HandlerFunc {
 		// 2. Delete all library_histories
 		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.LibraryHistory{})
 		if res.Error != nil {
-			slog.Error("Failed to clear library history", "error", res.Error)
+			slog.Error("Failed to clear library history", "component", "api", "operation", "clear_library_history", "error", res.Error)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear library history"})
 		}
 		summary["libraryHistories"] = res.RowsAffected
@@ -38,7 +38,7 @@ func handleDataReset(database *gorm.DB) echo.HandlerFunc {
 		// 3. Delete all engine_run_stats
 		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.EngineRunStats{})
 		if res.Error != nil {
-			slog.Error("Failed to clear engine run stats", "error", res.Error)
+			slog.Error("Failed to clear engine run stats", "component", "api", "operation", "clear_engine_stats", "error", res.Error)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear engine run stats"})
 		}
 		summary["engineRunStats"] = res.RowsAffected
@@ -46,7 +46,7 @@ func handleDataReset(database *gorm.DB) echo.HandlerFunc {
 		// 4. Delete all disk_groups
 		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.DiskGroup{})
 		if res.Error != nil {
-			slog.Error("Failed to clear disk groups", "error", res.Error)
+			slog.Error("Failed to clear disk groups", "component", "api", "operation", "clear_disk_groups", "error", res.Error)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear disk groups"})
 		}
 		summary["diskGroups"] = res.RowsAffected
@@ -59,7 +59,7 @@ func handleDataReset(database *gorm.DB) echo.HandlerFunc {
 			"last_error":      "",
 		})
 		if res.Error != nil {
-			slog.Error("Failed to reset integration stats", "error", res.Error)
+			slog.Error("Failed to reset integration stats", "component", "api", "operation", "reset_integration_stats", "error", res.Error)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reset integration stats"})
 		}
 		summary["integrationsReset"] = res.RowsAffected

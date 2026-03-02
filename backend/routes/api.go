@@ -102,11 +102,11 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 					return err
 				}
 				bootstrapped = true
-				slog.Info("First user bootstrapped", "username", req.Username)
+				slog.Info("First user bootstrapped", "component", "auth", "username", req.Username)
 				return nil
 			})
 			if txErr != nil {
-				slog.Error("First-user bootstrap failed", "error", txErr)
+				slog.Error("First-user bootstrap failed", "component", "auth", "operation", "bootstrap_user", "error", txErr)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create initial user"})
 			}
 			if !bootstrapped {
