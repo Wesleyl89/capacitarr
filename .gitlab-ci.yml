@@ -7,6 +7,7 @@ stages:
   - build
   - security
   - release
+  - pages
 
 # ── Shared variables ──────────────────────────────────────────────────────────
 
@@ -165,3 +166,18 @@ release:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG
       when: never
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
+
+pages:
+  stage: pages
+  image: python:3.12-alpine
+  before_script:
+    - pip install mkdocs-material mkdocs-exclude
+  script:
+    - cd capacitarr && mkdocs build --strict --site-dir ../public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
