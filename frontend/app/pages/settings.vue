@@ -954,22 +954,15 @@
               </p>
               <div class="flex items-center gap-3">
                 <UiButton
-                  v-if="!deletionsEnabled"
-                  variant="destructive"
-                  @click="onDeletionToggle(true)"
+                  :variant="deletionsEnabled ? 'outline' : 'destructive'"
+                  @click="onDeletionToggle(!deletionsEnabled)"
                 >
                   <component
+                    v-if="!deletionsEnabled"
                     :is="Trash2Icon"
                     class="w-4 h-4"
                   />
-                  {{ $t('settings.enableDeletions') }}
-                </UiButton>
-                <UiButton
-                  v-else
-                  variant="outline"
-                  @click="onDeletionToggle(false)"
-                >
-                  {{ $t('settings.disableDeletions') }}
+                  {{ deletionsEnabled ? $t('settings.disableDeletions') : $t('settings.enableDeletions') }}
                 </UiButton>
                 <SaveIndicator :status="saveStatus.deletionsEnabled" />
               </div>
