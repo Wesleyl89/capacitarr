@@ -1,0 +1,2111 @@
+openapi: 3.1.0
+info:
+  title: Capacitarr API
+  version: 1.0.0
+  description: |
+    Capacitarr is a capacity management tool for media servers. It monitors disk
+    usage across Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Tautulli,
+    and Overseerr integrations, scores media items for potential cleanup based on
+    configurable weights and rules, and can automatically (or via approval) free
+    disk space when thresholds are breached.
+
+    ## Authentication
+
+    Most endpoints require authentication via one of:
+    - **JWT cookie** (`jwt`) — set automatically on login
+    - **Bearer token** — `Authorization: Bearer <token>` header
+    - **API key** — `X-Api-Key: <key>` header
+
+    The `/health`, `/version`, and `/auth/login` endpoints are public.
+  license:
+    name: GPL-3.0-or-later
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+
+servers:
+  - url: http://localhost:2187/api/v1
+    description: Local development server
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+  - apiKey: []
+
+tags:
+  - name: Health
+    description: Health and version checks (public)
+  - name: Auth
+    description: Authentication, password/username management, API key management
+  - name: Metrics
+    description: Capacity history and worker metrics
+  - name: Dashboard
+    description: Aggregated dashboard and lifetime statistics
+  - name: Disk Groups
+    description: Disk group listing and threshold configuration
+  - name: Engine
+    description: Trigger engine evaluation cycles
+  - name: Integrations
+    description: CRUD and connection testing for service integrations
+  - name: Rules
+    description: Protection/targeting rules and rule field metadata
+  - name: Preferences
+    description: Global preference management (weights, execution mode, etc.)
+  - name: Preview
+    description: Score preview with evaluated items and disk context
+  - name: Audit
+    description: Audit log listing, activity summary, and grouped view
+  - name: Data
+    description: Data reset / clear operations
+
+paths:
+  # ===========================================================================
+  # Health & Version
+  # ===========================================================================
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Health check
+      description: Returns "OK" if the server is running. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /version:
+    get:
+      operationId: getVersion
+      tags: [Health]
+      summary: Get application version
+      description: Returns the build version, git commit hash, and build date. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionInfo"
+
+  # ===========================================================================
+  # Auth
+  # ===========================================================================
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Log in
+      description: |
+        Authenticate with username and password. Returns a JWT token in both the
+        response body and as an HttpOnly `jwt` cookie. On first call with no
+        existing users, the provided credentials bootstrap the initial admin user.
+        Rate-limited to 10 attempts per IP per 15-minute window.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: HttpOnly JWT cookie and `authenticated=true` indicator cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/password:
+    put:
+      operationId: changePassword
+      tags: [Auth]
+      summary: Change password
+      description: Change the current user's password. Requires the current password for verification. New password must be at least 8 characters.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/username:
+    put:
+      operationId: changeUsername
+      tags: [Auth]
+      summary: Change username
+      description: Change the current user's username. Requires the current password for verification. New username must be at least 3 characters and not already taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeUsernameRequest"
+      responses:
+        "200":
+          description: Username changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/apikey:
+    get:
+      operationId: getApiKeyStatus
+      tags: [Auth]
+      summary: Check API key status
+      description: Returns whether the current user has an API key configured. Never returns the actual key.
+      responses:
+        "200":
+          description: API key status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyStatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      operationId: generateApiKey
+      tags: [Auth]
+      summary: Generate a new API key
+      description: |
+        Generates a new 256-bit random API key. The plaintext key is returned
+        **once** in the response and is never stored — only a SHA-256 hash is
+        persisted. Any previously existing key is replaced.
+      responses:
+        "200":
+          description: New API key generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Metrics
+  # ===========================================================================
+  /metrics/history:
+    get:
+      operationId: getMetricsHistory
+      tags: [Metrics]
+      summary: Get capacity history
+      description: |
+        Returns historical capacity data points for charting. Results are ordered
+        by timestamp ascending and limited to 1000 records.
+      parameters:
+        - name: resolution
+          in: query
+          description: Data resolution granularity
+          schema:
+            type: string
+            enum: [raw, hourly, daily, weekly]
+            default: raw
+        - name: disk_group_id
+          in: query
+          description: Filter by disk group ID
+          schema:
+            type: integer
+        - name: since
+          in: query
+          description: Time range filter
+          schema:
+            type: string
+            enum: ["1h", "24h", "7d", "30d"]
+          example: "24h"
+      responses:
+        "200":
+          description: Metrics history data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsHistoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /metrics/worker:
+    get:
+      operationId: getWorkerMetrics
+      tags: [Metrics]
+      summary: Get worker metrics
+      description: Returns the current state of the backend polling/deletion worker, including per-run and cumulative statistics.
+      responses:
+        "200":
+          description: Worker metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ===========================================================================
+  # Worker Stats (alias)
+  # ===========================================================================
+  /worker/stats:
+    get:
+      operationId: getWorkerStats
+      tags: [Metrics]
+      summary: Get worker stats (alias)
+      description: Alias for `GET /metrics/worker`. Returns identical data. Provided for dashboard consumption convenience.
+      responses:
+        "200":
+          description: Worker metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ===========================================================================
+  # Dashboard & Lifetime Stats
+  # ===========================================================================
+  /dashboard-stats:
+    get:
+      operationId: getDashboardStats
+      tags: [Dashboard]
+      summary: Get aggregated dashboard statistics
+      description: |
+        Returns combined statistics for the dashboard: lifetime totals (bytes
+        reclaimed, items removed, engine runs), current protected count, and
+        7-day library growth rate.
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /lifetime-stats:
+    get:
+      operationId: getLifetimeStats
+      tags: [Dashboard]
+      summary: Get cumulative lifetime statistics
+      description: |
+        Returns the cumulative lifetime counters. These persist across container
+        restarts and are **not** cleared by the data reset action.
+      responses:
+        "200":
+          description: Lifetime statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifetimeStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Disk Groups
+  # ===========================================================================
+  /disk-groups:
+    get:
+      operationId: listDiskGroups
+      tags: [Disk Groups]
+      summary: List all disk groups
+      description: Returns all discovered disk groups (mount points) with their current capacity and threshold settings.
+      responses:
+        "200":
+          description: List of disk groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiskGroup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /disk-groups/{id}:
+    put:
+      operationId: updateDiskGroup
+      tags: [Disk Groups]
+      summary: Update disk group thresholds
+      description: |
+        Update the threshold and target percentages for a disk group.
+        Both values must be between 1 and 99, and threshold must be greater
+        than target.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiskGroupThresholdUpdate"
+      responses:
+        "200":
+          description: Updated disk group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiskGroup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Disk group not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Engine
+  # ===========================================================================
+  /engine/run:
+    post:
+      operationId: triggerEngineRun
+      tags: [Engine]
+      summary: Trigger an engine evaluation
+      description: |
+        Triggers an immediate evaluation cycle. If a run is already pending
+        (queued but not started), returns `"already_pending"` instead.
+      responses:
+        "200":
+          description: Engine run triggered or already pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [triggered, already_pending]
+                example:
+                  status: triggered
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ===========================================================================
+  # Integrations
+  # ===========================================================================
+  /integrations:
+    get:
+      operationId: listIntegrations
+      tags: [Integrations]
+      summary: List all integrations
+      description: Returns all configured integrations. API keys are masked in the response (first 4 + last 4 characters shown).
+      responses:
+        "200":
+          description: List of integrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IntegrationConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      operationId: createIntegration
+      tags: [Integrations]
+      summary: Create a new integration
+      description: |
+        Creates a new integration configuration. The `type`, `name`, `url`, and
+        `apiKey` fields are required. The URL must use HTTP or HTTPS scheme.
+        Valid types: `plex`, `sonarr`, `radarr`, `lidarr`, `readarr`, `tautulli`,
+        `overseerr`, `jellyfin`, `emby`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationConfigCreate"
+      responses:
+        "201":
+          description: Integration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /integrations/{id}:
+    get:
+      operationId: getIntegration
+      tags: [Integrations]
+      summary: Get a single integration
+      description: Returns a single integration by ID. API key is masked.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: Integration details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      operationId: updateIntegration
+      tags: [Integrations]
+      summary: Update an integration
+      description: |
+        Updates an existing integration. Only provided fields are updated.
+        If the `apiKey` field contains a masked value (with `...`), it is
+        ignored and the existing key is preserved.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationConfigUpdate"
+      responses:
+        "200":
+          description: Updated integration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      operationId: deleteIntegration
+      tags: [Integrations]
+      summary: Delete an integration
+      description: Permanently deletes an integration configuration.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: Integration deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /integrations/test:
+    post:
+      operationId: testIntegrationConnection
+      tags: [Integrations]
+      summary: Test integration connection
+      description: |
+        Tests connectivity to a service using the provided credentials.
+        Returns `success: true` on success, or `success: false` with an
+        error message on failure. Note: the HTTP status is always 200 —
+        the `success` field indicates the test result.
+        Optionally pass `integrationId` to invalidate the rule value cache
+        for that integration on successful test.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionTestRequest"
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /integrations/sync:
+    post:
+      operationId: syncIntegrations
+      tags: [Integrations]
+      summary: Sync all integrations
+      description: |
+        Triggers a manual synchronization of all enabled integrations.
+        Tests each connection, fetches disk space and media item counts,
+        and updates disk groups. Invalidates all rule value caches.
+      responses:
+        "200":
+          description: Sync results for each integration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Preferences
+  # ===========================================================================
+  /preferences:
+    get:
+      operationId: getPreferences
+      tags: [Preferences]
+      summary: Get preferences
+      description: Returns the global preference singleton. If no preferences exist yet, returns defaults.
+      responses:
+        "200":
+          description: Current preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    put:
+      operationId: updatePreferences
+      tags: [Preferences]
+      summary: Update preferences
+      description: |
+        Updates the global preferences. All weight values must be between 0 and
+        10. The log level is applied immediately. If `pollIntervalSeconds` is
+        less than 30, it defaults to 300.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferenceSet"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Rule Fields & Rule Values
+  # ===========================================================================
+  /rule-fields:
+    get:
+      operationId: getRuleFields
+      tags: [Rules]
+      summary: Get available rule fields
+      description: |
+        Returns the list of available fields for building protection/targeting
+        rules. Fields are dynamic based on which integrations are enabled.
+        For example, Sonarr-specific fields (season count, episode count) only
+        appear when Sonarr is enabled.
+      parameters:
+        - name: service_type
+          in: query
+          description: Filter fields for a specific integration type
+          schema:
+            type: string
+            enum: [sonarr, radarr, lidarr, readarr]
+      responses:
+        "200":
+          description: List of rule fields
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RuleField"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /rule-values:
+    get:
+      operationId: getRuleValues
+      tags: [Rules]
+      summary: Get autocomplete values for a rule field
+      description: |
+        Returns value options for a given rule field and integration. Depending
+        on the field, returns either a closed set of options, a combobox with
+        suggestions, or free-form input metadata. Results are cached for 5 minutes.
+      parameters:
+        - name: integration_id
+          in: query
+          required: true
+          description: ID of the integration to fetch values from
+          schema:
+            type: integer
+        - name: action
+          in: query
+          required: true
+          description: |
+            The rule field name to get values for (e.g., `quality`, `tag`,
+            `genre`, `language`, `title`, `rating`, `sizebytes`, `timeinlibrary`,
+            `year`, `monitored`, `requested`, `type`, `availability`,
+            `seasoncount`, `episodecount`, `playcount`, `requestcount`)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: |
+            Rule value options. Shape varies by field type:
+            - **closed**: `{ type: "closed", options: NameValue[] }`
+            - **combobox**: `{ type: "combobox", suggestions: NameValue[] }`
+            - **free**: `{ type: "free", inputType: string, placeholder: string, suffix: string }`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleValueResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Integration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Protection Rules
+  # ===========================================================================
+  /protections:
+    get:
+      operationId: listProtectionRules
+      tags: [Rules]
+      summary: List all protection/targeting rules
+      description: Returns all configured protection and targeting rules.
+      responses:
+        "200":
+          description: List of rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProtectionRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      operationId: createProtectionRule
+      tags: [Rules]
+      summary: Create a protection/targeting rule
+      description: |
+        Creates a new rule. The `field`, `operator`, and `value` fields are
+        always required. Additionally, either `effect` must be provided, or
+        both legacy `type` and `intensity` fields (which are auto-mapped to
+        the new effect system).
+
+        Valid effects: `always_keep`, `prefer_keep`, `lean_keep`,
+        `lean_remove`, `prefer_remove`, `always_remove`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProtectionRuleCreate"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtectionRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /protections/{id}:
+    delete:
+      operationId: deleteProtectionRule
+      tags: [Rules]
+      summary: Delete a protection/targeting rule
+      description: Permanently deletes a rule.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "204":
+          description: Rule deleted (no content)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Preview
+  # ===========================================================================
+  /preview:
+    get:
+      operationId: getPreview
+      tags: [Preview]
+      summary: Preview scoring
+      description: |
+        Fetches all media items from enabled *arr integrations, evaluates them
+        against the current preferences and rules, and returns the scored list
+        along with disk context information. Items are sorted by score
+        descending (highest deletion priority first) with the configured
+        tiebreaker method applied.
+      responses:
+        "200":
+          description: Preview of scored items with disk context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Audit
+  # ===========================================================================
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [Audit]
+      summary: List audit logs
+      description: |
+        Returns paginated audit logs with optional filtering and sorting.
+        The default sort is by `created_at` descending (newest first).
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of records to return (max 1000)
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Number of records to skip for pagination
+          schema:
+            type: integer
+            default: 0
+        - name: search
+          in: query
+          description: Filter by media name (substring match)
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: Filter by action type
+          schema:
+            type: string
+            enum: [Deleted, Dry-Run]
+        - name: sort_by
+          in: query
+          description: Column to sort by
+          schema:
+            type: string
+            enum: [created_at, media_name, size_bytes, action]
+            default: created_at
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          description: Paginated audit log response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /audit/activity:
+    get:
+      operationId: getAuditActivity
+      tags: [Audit]
+      summary: Get activity summary
+      description: |
+        Returns audit log counts grouped by time buckets, split by
+        flagged (Dry-Run) and deleted actions. Bucket size auto-adjusts
+        based on the time range.
+      parameters:
+        - name: since
+          in: query
+          description: |
+            Time range for the activity summary. Supports shorthand like
+            `1h`, `6h`, `24h`, `7d`, `30d`.
+          schema:
+            type: string
+            default: "24h"
+            example: "24h"
+      responses:
+        "200":
+          description: Activity data points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityPoint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /audit/grouped:
+    get:
+      operationId: getAuditGrouped
+      tags: [Audit]
+      summary: Get grouped audit logs
+      description: |
+        Returns audit logs grouped by TV show title for season/episode entries.
+        Non-TV entries are returned as standalone items. Useful for a tree-style
+        audit view.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of raw records to fetch before grouping (max 2000)
+          schema:
+            type: integer
+            default: 200
+            maximum: 2000
+      responses:
+        "200":
+          description: Grouped audit results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupedAuditResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # Data
+  # ===========================================================================
+  /data/reset:
+    delete:
+      operationId: resetData
+      tags: [Data]
+      summary: Reset all scraped data
+      description: |
+        Clears all audit logs, library history, engine run stats, and disk
+        groups. Resets transient fields on integrations (media size, count,
+        last sync, last error). **Lifetime stats are NOT cleared.** This
+        action is irreversible.
+      responses:
+        "200":
+          description: Data reset summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataResetResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+# =============================================================================
+# Components
+# =============================================================================
+components:
+  # ---------------------------------------------------------------------------
+  # Security Schemes
+  # ---------------------------------------------------------------------------
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: API key generated via `POST /auth/apikey`
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from login response
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwt
+      description: HttpOnly JWT cookie set on login
+
+  # ---------------------------------------------------------------------------
+  # Reusable Parameters
+  # ---------------------------------------------------------------------------
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: Resource ID
+      schema:
+        type: integer
+
+  # ---------------------------------------------------------------------------
+  # Reusable Responses
+  # ---------------------------------------------------------------------------
+  responses:
+    BadRequest:
+      description: Bad request — invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  # ---------------------------------------------------------------------------
+  # Schemas
+  # ---------------------------------------------------------------------------
+  schemas:
+    # ---- Generic ----
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+      required: [error]
+      example:
+        error: "Invalid request body"
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+      example:
+        message: "Password changed successfully"
+
+    # ---- Health / Version ----
+    VersionInfo:
+      type: object
+      properties:
+        version:
+          type: string
+          example: "1.2.0"
+        commit:
+          type: string
+          example: "abc1234"
+        buildDate:
+          type: string
+          example: "2026-03-01T12:00:00Z"
+      required: [version, commit, buildDate]
+
+    # ---- Auth ----
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+          example: mypassword
+      required: [username, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: success
+        token:
+          type: string
+          description: JWT token (also set as HttpOnly cookie)
+      required: [message, token]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+      required: [currentPassword, newPassword]
+
+    ChangeUsernameRequest:
+      type: object
+      properties:
+        newUsername:
+          type: string
+          minLength: 3
+        currentPassword:
+          type: string
+          format: password
+      required: [newUsername, currentPassword]
+
+    ApiKeyStatusResponse:
+      type: object
+      properties:
+        has_key:
+          type: boolean
+          description: Whether the user has an API key configured
+      required: [has_key]
+      example:
+        has_key: true
+
+    ApiKeyResponse:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: |
+            The plaintext API key. This is shown **once** and never stored.
+            Save it securely.
+          example: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+      required: [api_key]
+
+    # ---- Disk Group ----
+    DiskGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        mountPath:
+          type: string
+          example: "/media"
+        totalBytes:
+          type: integer
+          format: int64
+          example: 1099511627776
+        usedBytes:
+          type: integer
+          format: int64
+          example: 879609302221
+        thresholdPct:
+          type: number
+          format: double
+          description: Cleanup triggers when usage exceeds this percentage
+          example: 85.0
+        targetPct:
+          type: number
+          format: double
+          description: Cleanup frees space down to this percentage
+          example: 75.0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, mountPath, totalBytes, usedBytes, thresholdPct, targetPct]
+
+    DiskGroupThresholdUpdate:
+      type: object
+      properties:
+        thresholdPct:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 99
+          description: Cleanup triggers when usage exceeds this percentage
+          example: 85.0
+        targetPct:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 99
+          description: Cleanup frees space down to this percentage
+          example: 75.0
+      required: [thresholdPct, targetPct]
+
+    # ---- Integration ----
+    IntegrationConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        type:
+          type: string
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, overseerr, jellyfin, emby]
+          example: sonarr
+        name:
+          type: string
+          example: "Sonarr (TV)"
+        url:
+          type: string
+          format: uri
+          example: "http://sonarr:8989"
+        apiKey:
+          type: string
+          description: Masked API key (first 4 + last 4 characters)
+          example: "abcd...wxyz"
+        enabled:
+          type: boolean
+          example: true
+        mediaSizeBytes:
+          type: integer
+          format: int64
+          example: 549755813888
+        mediaCount:
+          type: integer
+          example: 150
+        lastSync:
+          type: ["string", "null"]
+          format: date-time
+        lastError:
+          type: string
+          example: ""
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, type, name, url, apiKey, enabled]
+
+    IntegrationConfigCreate:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, overseerr, jellyfin, emby]
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Must use HTTP or HTTPS scheme
+        apiKey:
+          type: string
+          description: Plaintext API key or token for the service
+      required: [type, name, url, apiKey]
+
+    IntegrationConfigUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        apiKey:
+          type: string
+          description: New API key, or masked value to keep existing
+        enabled:
+          type: boolean
+
+    ConnectionTestRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, overseerr, jellyfin, emby]
+        url:
+          type: string
+          format: uri
+        apiKey:
+          type: string
+        integrationId:
+          type: ["integer", "null"]
+          description: Optional — invalidates rule value cache for this integration on success
+      required: [type, url, apiKey]
+
+    ConnectionTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          description: Present on success
+        error:
+          type: string
+          description: Present on failure
+      required: [success]
+      example:
+        success: true
+        message: "Connection successful"
+
+    SyncResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [ok, error]
+        error:
+          type: string
+          description: Present if status is error
+        diskError:
+          type: string
+        diskSpace:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiskSpace"
+        mediaError:
+          type: string
+        mediaCount:
+          type: integer
+      required: [id, name, type, status]
+
+    DiskSpace:
+      type: object
+      properties:
+        path:
+          type: string
+          example: "/media"
+        totalBytes:
+          type: integer
+          format: int64
+        freeBytes:
+          type: integer
+          format: int64
+      required: [path, totalBytes, freeBytes]
+
+    # ---- Preferences ----
+    PreferenceSet:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        logLevel:
+          type: string
+          enum: [debug, info, warn, error]
+          default: info
+        auditLogRetentionDays:
+          type: integer
+          description: Days to retain audit logs (0 = forever)
+          default: 30
+          example: 30
+        pollIntervalSeconds:
+          type: integer
+          description: Polling interval in seconds (minimum 30, default 300)
+          minimum: 30
+          default: 300
+          example: 300
+        watchHistoryWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 10
+        lastWatchedWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 8
+        fileSizeWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 6
+        ratingWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 5
+        timeInLibraryWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 4
+        availabilityWeight:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 3
+        executionMode:
+          type: string
+          enum: [dry-run, approval, auto]
+          default: dry-run
+        tiebreakerMethod:
+          type: string
+          enum: [size_desc, size_asc, name_asc, oldest_first, newest_first]
+          default: size_desc
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - logLevel
+        - executionMode
+        - tiebreakerMethod
+
+    # ---- Rules ----
+    ProtectionRule:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        integrationId:
+          type: ["integer", "null"]
+          description: FK to IntegrationConfig; null for legacy global rules
+        field:
+          type: string
+          description: "The field to match (e.g., quality, tag, rating, genre)"
+          example: quality
+        operator:
+          type: string
+          description: "Comparison operator (e.g., ==, !=, contains, >, <)"
+          example: "=="
+        value:
+          type: string
+          description: "Value to compare against"
+          example: "4K"
+        effect:
+          type: string
+          enum: [always_keep, prefer_keep, lean_keep, lean_remove, prefer_remove, always_remove]
+          example: always_keep
+        type:
+          type: string
+          description: "Deprecated: legacy rule type"
+          deprecated: true
+        intensity:
+          type: string
+          description: "Deprecated: legacy rule intensity"
+          deprecated: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, field, operator, value, effect]
+
+    ProtectionRuleCreate:
+      type: object
+      properties:
+        integrationId:
+          type: ["integer", "null"]
+        field:
+          type: string
+          example: genre
+        operator:
+          type: string
+          example: contains
+        value:
+          type: string
+          example: "Anime"
+        effect:
+          type: string
+          enum: [always_keep, prefer_keep, lean_keep, lean_remove, prefer_remove, always_remove]
+          description: |
+            Required unless both `type` and `intensity` are provided (legacy
+            format). The effect determines how strongly the rule influences
+            scoring.
+        type:
+          type: string
+          description: "Deprecated: use `effect` instead. Legacy values: protect, target"
+          deprecated: true
+        intensity:
+          type: string
+          description: "Deprecated: use `effect` instead. Legacy values: absolute, strong, moderate"
+          deprecated: true
+      required: [field, operator, value]
+
+    RuleField:
+      type: object
+      properties:
+        field:
+          type: string
+          example: quality
+        label:
+          type: string
+          example: "Quality Profile"
+        type:
+          type: string
+          enum: [string, number, boolean]
+        operators:
+          type: array
+          items:
+            type: string
+          example: ["==", "!="]
+      required: [field, label, type, operators]
+
+    RuleValueResult:
+      type: object
+      description: |
+        Polymorphic response — shape depends on the field type:
+        - **closed**: `{ type: "closed", options: NameValue[] }`
+        - **combobox**: `{ type: "combobox", suggestions: NameValue[] }`
+        - **free**: `{ type: "free", inputType: string, placeholder: string, suffix: string }`
+      properties:
+        type:
+          type: string
+          enum: [closed, combobox, free]
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/NameValue"
+          description: Present when type is "closed"
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NameValue"
+          description: Present when type is "combobox"
+        inputType:
+          type: string
+          description: Present when type is "free" (e.g., "text", "number")
+        placeholder:
+          type: string
+          description: Present when type is "free"
+        suffix:
+          type: string
+          description: Present when type is "free" (e.g., "days", "bytes")
+      required: [type]
+
+    NameValue:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required: [value, label]
+      example:
+        value: "4K"
+        label: "4K"
+
+    # ---- Media / Scoring ----
+    MediaItem:
+      type: object
+      properties:
+        externalId:
+          type: string
+          description: ID from the source service
+          example: "42"
+        integrationId:
+          type: integer
+          description: FK to IntegrationConfig
+          example: 1
+        type:
+          type: string
+          enum: [movie, show, season, episode, artist, book]
+          example: movie
+        title:
+          type: string
+          example: "The Shawshank Redemption"
+        year:
+          type: integer
+          example: 1994
+        sizeBytes:
+          type: integer
+          format: int64
+          example: 5368709120
+        path:
+          type: string
+          example: "/media/movies/The Shawshank Redemption (1994)"
+        seasonNumber:
+          type: integer
+          description: TV-specific
+        episodeCount:
+          type: integer
+          description: TV-specific
+        showTitle:
+          type: string
+          description: TV-specific — parent show title
+        showStatus:
+          type: string
+          description: "TV-specific — e.g., continuing, ended"
+        qualityProfile:
+          type: string
+          example: "HD-1080p"
+        rating:
+          type: number
+          format: double
+          example: 9.3
+        genre:
+          type: string
+          example: "Drama"
+        monitored:
+          type: boolean
+        playCount:
+          type: integer
+          description: Watch data from Plex/Tautulli/media servers
+        lastPlayed:
+          type: ["string", "null"]
+          format: date-time
+          description: Last play date from watch history
+        addedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: Date when item was added to the library
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["anime", "4k"]
+        isRequested:
+          type: boolean
+          description: Whether this item was user-requested (Overseerr)
+        requestedBy:
+          type: string
+          description: Who requested the item (Overseerr)
+        requestCount:
+          type: integer
+          description: Number of requests (Overseerr)
+        tmdbId:
+          type: integer
+          description: TMDb ID for cross-referencing
+        language:
+          type: string
+          description: Original language
+          example: "English"
+      required: [externalId, integrationId, type, title, sizeBytes, path, monitored]
+
+    ScoreFactor:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "Factor name (e.g., Watch History, File Size, Rule: ...)"
+          example: "Watch History"
+        rawScore:
+          type: number
+          format: double
+          description: Raw score before weighting (0.0–1.0)
+          example: 0.85
+        weight:
+          type: integer
+          description: Weight applied (0–10)
+          example: 10
+        contribution:
+          type: number
+          format: double
+          description: Normalized contribution to the final score
+          example: 0.34
+        type:
+          type: string
+          enum: [weight, rule]
+          description: Whether this factor comes from a weight or a rule
+      required: [name, rawScore, weight, contribution, type]
+
+    EvaluatedItem:
+      type: object
+      properties:
+        item:
+          $ref: "#/components/schemas/MediaItem"
+        score:
+          type: number
+          format: double
+          description: Final deletion score (higher = more likely to be deleted)
+          example: 0.72
+        isProtected:
+          type: boolean
+          description: Whether the item is protected by an `always_keep` rule
+        reason:
+          type: string
+          description: Human-readable reason for the score or protection
+          example: "Rule: quality == 4K → always_keep"
+        factors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreFactor"
+      required: [item, score, isProtected, reason, factors]
+
+    DiskContext:
+      type: object
+      description: Disk usage context for the most relevant disk group
+      properties:
+        totalBytes:
+          type: integer
+          format: int64
+          example: 1099511627776
+        usedBytes:
+          type: integer
+          format: int64
+          example: 934361657140
+        targetPct:
+          type: number
+          format: double
+          example: 75.0
+        thresholdPct:
+          type: number
+          format: double
+          example: 85.0
+        bytesToFree:
+          type: integer
+          format: int64
+          description: Bytes that need to be freed to reach target (0 if below threshold)
+          example: 109951162777
+      required: [totalBytes, usedBytes, targetPct, thresholdPct, bytesToFree]
+
+    PreviewResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatedItem"
+        diskContext:
+          oneOf:
+            - $ref: "#/components/schemas/DiskContext"
+            - type: "null"
+          description: Disk context for the most relevant disk group, or null if no disk groups exist
+      required: [items, diskContext]
+
+    # ---- Metrics History ----
+    LibraryHistory:
+      type: object
+      description: |
+        Historical capacity snapshot. Note: field names use Go's default
+        capitalized JSON serialization (no json tags on this struct).
+      properties:
+        ID:
+          type: integer
+        Timestamp:
+          type: string
+          format: date-time
+        TotalCapacity:
+          type: integer
+          format: int64
+        UsedCapacity:
+          type: integer
+          format: int64
+        Resolution:
+          type: string
+          enum: [raw, hourly, daily, weekly]
+        DiskGroupID:
+          type: ["integer", "null"]
+          description: Optional FK to DiskGroup
+        CreatedAt:
+          type: string
+          format: date-time
+      required: [ID, Timestamp, TotalCapacity, UsedCapacity, Resolution]
+
+    MetricsHistoryResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryHistory"
+      required: [status, data]
+
+    # ---- Worker Stats ----
+    WorkerStats:
+      type: object
+      properties:
+        executionMode:
+          type: string
+          enum: [dry-run, approval, auto]
+          example: dry-run
+        isRunning:
+          type: boolean
+          description: Whether the poller is currently executing
+        pollIntervalSeconds:
+          type: integer
+          example: 300
+        queueDepth:
+          type: integer
+          description: Number of items in the deletion queue
+        lastRunEvaluated:
+          type: integer
+          format: int64
+          description: Items evaluated in the last (or current) run
+        lastRunFlagged:
+          type: integer
+          format: int64
+          description: Items flagged for deletion in the last (or current) run
+        lastRunFreedBytes:
+          type: integer
+          format: int64
+          description: Bytes freed in the last (or current) run
+        lastRunEpoch:
+          type: integer
+          format: int64
+          description: Unix timestamp of the last run start
+        currentlyDeleting:
+          type: string
+          description: Title of the item currently being deleted (empty if idle)
+        protectedCount:
+          type: integer
+          format: int64
+          description: Number of protected items in the last run
+        evaluated:
+          type: integer
+          format: int64
+          description: Cumulative total items evaluated across all runs
+        actioned:
+          type: integer
+          format: int64
+          description: Cumulative total items actioned (flagged/deleted) across all runs
+        freedBytes:
+          type: integer
+          format: int64
+          description: Cumulative total bytes freed across all runs
+        processed:
+          type: integer
+          format: int64
+          description: Total items processed by the deletion worker
+        failed:
+          type: integer
+          format: int64
+          description: Total items that failed during deletion
+      required:
+        - executionMode
+        - isRunning
+        - pollIntervalSeconds
+        - queueDepth
+        - lastRunEvaluated
+        - lastRunFlagged
+        - lastRunFreedBytes
+        - lastRunEpoch
+        - currentlyDeleting
+        - protectedCount
+        - evaluated
+        - actioned
+        - freedBytes
+        - processed
+        - failed
+
+    # ---- Dashboard Stats ----
+    DashboardStats:
+      type: object
+      properties:
+        totalBytesReclaimed:
+          type: integer
+          format: int64
+          description: Lifetime total bytes reclaimed
+          example: 549755813888
+        totalItemsRemoved:
+          type: integer
+          description: Lifetime total items removed
+          example: 42
+        totalEngineRuns:
+          type: integer
+          description: Lifetime total engine evaluation cycles
+          example: 150
+        protectedCount:
+          type: integer
+          format: int64
+          description: Current number of protected items (from worker metrics)
+          example: 12
+        growthBytesPerWeek:
+          type: integer
+          format: int64
+          description: Library growth rate in bytes over the last 7 days
+          example: 10737418240
+        hasGrowthData:
+          type: boolean
+          description: Whether growth data is available (need at least 7 days of history)
+      required:
+        - totalBytesReclaimed
+        - totalItemsRemoved
+        - totalEngineRuns
+        - protectedCount
+        - growthBytesPerWeek
+        - hasGrowthData
+
+    # ---- Lifetime Stats ----
+    LifetimeStats:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        totalBytesReclaimed:
+          type: integer
+          format: int64
+          example: 549755813888
+        totalItemsRemoved:
+          type: integer
+          example: 42
+        totalEngineRuns:
+          type: integer
+          example: 150
+        CreatedAt:
+          type: string
+          format: date-time
+        UpdatedAt:
+          type: string
+          format: date-time
+      required: [id, totalBytesReclaimed, totalItemsRemoved, totalEngineRuns]
+
+    # ---- Audit ----
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        mediaName:
+          type: string
+          example: "Breaking Bad - Season 1"
+        mediaType:
+          type: string
+          example: season
+        reason:
+          type: string
+          description: Human-readable score summary (legacy format)
+          example: "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
+        scoreDetails:
+          type: string
+          description: JSON-encoded array of ScoreFactor objects
+          example: '[{"name":"Watch History","rawScore":1.0,"weight":10,"contribution":0.4,"type":"weight"}]'
+        action:
+          type: string
+          enum: [Deleted, Dry-Run]
+          example: Dry-Run
+        sizeBytes:
+          type: integer
+          format: int64
+          example: 5368709120
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, mediaName, mediaType, reason, action, sizeBytes, createdAt]
+
+    AuditResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        total:
+          type: integer
+          description: Total number of records matching the filter
+          example: 150
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+      required: [data, total, limit, offset]
+
+    ActivityPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: Bucket timestamp (YYYY-MM-DD HH:MM format)
+          example: "2026-03-01 14:00"
+        flagged:
+          type: integer
+          description: Count of Dry-Run actions in this bucket
+          example: 5
+        deleted:
+          type: integer
+          description: Count of Deleted actions in this bucket
+          example: 2
+      required: [timestamp, flagged, deleted]
+
+    GroupedAuditResult:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [group, single]
+          description: Whether this is a grouped TV entry or a standalone item
+        group:
+          $ref: "#/components/schemas/AuditGroup"
+        entry:
+          $ref: "#/components/schemas/AuditLog"
+
+    AuditGroup:
+      type: object
+      description: A group of audit entries belonging to the same TV show
+      properties:
+        showTitle:
+          type: string
+          example: "Breaking Bad"
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        totalSize:
+          type: integer
+          format: int64
+          description: Combined size of all children
+        action:
+          type: string
+          description: Action of the first child (representative)
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp of the first child (representative)
+      required: [showTitle, children, totalSize, action, createdAt]
+
+    # ---- Data Reset ----
+    DataResetResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: "All scraped data has been cleared"
+        cleared:
+          type: object
+          description: Count of records cleared per table
+          properties:
+            auditLogs:
+              type: integer
+              format: int64
+            libraryHistories:
+              type: integer
+              format: int64
+            engineRunStats:
+              type: integer
+              format: int64
+            diskGroups:
+              type: integer
+              format: int64
+            integrationsReset:
+              type: integer
+              format: int64
+      required: [status, message, cleared]
