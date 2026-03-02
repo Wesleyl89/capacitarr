@@ -150,13 +150,17 @@ func TestListIntegrations(t *testing.T) {
 		t.Fatalf("Expected 2 integrations, got %d", len(configs))
 	}
 
-	// API keys should be masked
+	// API keys should be masked with bullet characters
 	for _, c := range configs {
 		if c.APIKey == "secret12345678" {
 			t.Error("API key should be masked in list response")
 		}
-		if !strings.Contains(c.APIKey, "...") {
-			t.Errorf("Expected masked API key containing '...', got %q", c.APIKey)
+		if !strings.HasPrefix(c.APIKey, "•") {
+			t.Errorf("Expected masked API key starting with '•', got %q", c.APIKey)
+		}
+		// Last 4 chars should be visible
+		if !strings.HasSuffix(c.APIKey, "5678") {
+			t.Errorf("Expected masked API key ending with '5678', got %q", c.APIKey)
 		}
 	}
 }

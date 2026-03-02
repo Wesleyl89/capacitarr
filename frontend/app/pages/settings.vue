@@ -1369,7 +1369,7 @@
             <UiInput
               v-model="formState.apiKey"
               type="password"
-              placeholder="Enter API key or token"
+              :placeholder="editingIntegration ? 'Enter new API key to change, or leave as-is' : 'Enter API key or token'"
             />
 
             <!-- Plex OAuth Sign-in Button -->
@@ -1802,7 +1802,7 @@ function openEditModal(integration: IntegrationConfig) {
   formState.type = integration.type
   formState.name = integration.name
   formState.url = integration.url
-  formState.apiKey = ''
+  formState.apiKey = integration.apiKey
   formError.value = ''
   showModal.value = true
 }
@@ -1848,7 +1848,7 @@ async function testConnection(integration: IntegrationConfig) {
   try {
     const result = await api('/api/v1/integrations/test', {
       method: 'POST',
-      body: { type: integration.type, url: integration.url, apiKey: integration.apiKey }
+      body: { type: integration.type, url: integration.url, apiKey: integration.apiKey, integrationId: integration.id }
     }) as ConnectionTestResult
     addToast(result.success ? 'Connection successful!' : `Connection failed: ${result.error}`, result.success ? 'success' : 'error')
   } catch {
@@ -1858,9 +1858,13 @@ async function testConnection(integration: IntegrationConfig) {
 
 async function testFormConnection() {
   try {
+    const body: Record<string, unknown> = { type: formState.type, url: formState.url, apiKey: formState.apiKey }
+    if (editingIntegration.value) {
+      body.integrationId = editingIntegration.value.id
+    }
     const result = await api('/api/v1/integrations/test', {
       method: 'POST',
-      body: { type: formState.type, url: formState.url, apiKey: formState.apiKey }
+      body
     }) as ConnectionTestResult
     if (result.success) {
       formError.value = ''

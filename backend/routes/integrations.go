@@ -37,11 +37,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 
 		// Mask API keys in response
 		for i := range configs {
-			if len(configs[i].APIKey) > 8 {
-				configs[i].APIKey = configs[i].APIKey[:4] + "..." + configs[i].APIKey[len(configs[i].APIKey)-4:]
-			} else {
-				configs[i].APIKey = "****"
-			}
+			configs[i].APIKey = maskAPIKey(configs[i].APIKey)
 		}
 
 		return c.JSON(http.StatusOK, configs)
@@ -60,11 +56,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		}
 
 		// Mask API key
-		if len(config.APIKey) > 8 {
-			config.APIKey = config.APIKey[:4] + "..." + config.APIKey[len(config.APIKey)-4:]
-		} else {
-			config.APIKey = "****"
-		}
+		config.APIKey = maskAPIKey(config.APIKey)
 
 		return c.JSON(http.StatusOK, config)
 	})
@@ -103,6 +95,8 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create integration"})
 		}
 
+		// Mask API key in response
+		config.APIKey = maskAPIKey(config.APIKey)
 		return c.JSON(http.StatusCreated, config)
 	})
 
@@ -135,7 +129,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			}
 			existing.URL = update.URL
 		}
-		if update.APIKey != "" && !ismasked(update.APIKey) {
+		if update.APIKey != "" && !isMaskedKey(update.APIKey) {
 			existing.APIKey = update.APIKey
 		}
 		existing.Enabled = update.Enabled
@@ -144,6 +138,8 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update integration"})
 		}
 
+		// Mask API key in response
+		existing.APIKey = maskAPIKey(existing.APIKey)
 		return c.JSON(http.StatusOK, existing)
 	})
 
@@ -171,6 +167,14 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		}
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		}
+
+		// If the API key is masked and we have an integration ID, look up the real key
+		if (req.APIKey == "" || isMaskedKey(req.APIKey)) && req.IntegrationID != nil {
+			var existing db.IntegrationConfig
+			if err := database.First(&existing, *req.IntegrationID).Error; err == nil {
+				req.APIKey = existing.APIKey
+			}
 		}
 
 		// Tautulli and Overseerr don't implement the full Integration interface,
@@ -329,7 +333,15 @@ func updateDiskGroup(database *gorm.DB, disk integrations.DiskSpace) {
 	}
 }
 
-// ismasked checks if an API key string is a masked version (contains "...")
-func ismasked(key string) bool {
-	return strings.Contains(key, "...")
+// maskAPIKey returns a masked version of the key, showing only the last 4 characters.
+func maskAPIKey(key string) string {
+	if len(key) <= 4 {
+		return "••••"
+	}
+	return strings.Repeat("•", len(key)-4) + key[len(key)-4:]
+}
+
+// isMaskedKey checks if an API key string is a masked version (starts with "•").
+func isMaskedKey(key string) bool {
+	return strings.HasPrefix(key, "•")
 }
