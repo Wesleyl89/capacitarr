@@ -89,6 +89,7 @@
       <UiCardContent class="pt-5">
         <!-- Status banner -->
         <div
+          aria-live="polite"
           class="rounded-lg px-3 py-2 mb-4 flex items-center gap-2 text-sm font-medium"
           :class="engineStatusBannerClass"
         >

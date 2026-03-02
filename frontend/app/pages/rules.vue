@@ -87,6 +87,11 @@
               <!-- Usage fill bar -->
               <div
                 data-slot="progress-bar-fill"
+                role="progressbar"
+                :aria-valuenow="Math.round(diskUsagePct(dg))"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-label="`Disk usage: ${Math.round(diskUsagePct(dg))}%`"
                 :data-status="diskUsageStatus(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct)"
                 class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
                 :style="{ width: Math.min(diskUsagePct(dg), 100) + '%', backgroundColor: diskStatusFillColor(diskUsagePct(dg), thresholdEdits[dg.id]?.target ?? dg.targetPct, thresholdEdits[dg.id]?.threshold ?? dg.thresholdPct) }"
@@ -342,12 +347,38 @@
           <div
             v-for="(rule, ruleIdx) in rules"
             :key="rule.id"
-            class="flex items-center justify-between px-4 py-2.5 rounded-lg border bg-muted/50"
-            :class="ruleConflicts(rule).length > 0 ? 'border-amber-400/50' : 'border-border'"
+            draggable="true"
+            class="flex items-center justify-between px-4 py-2.5 rounded-lg border bg-muted/50 transition-opacity duration-200"
+            :class="[
+              ruleConflicts(rule).length > 0 ? 'border-amber-400/50' : 'border-border',
+              rule.enabled === false ? 'opacity-50' : '',
+              dragOverIdx === ruleIdx ? 'border-primary border-dashed' : '',
+              dragSourceIdx === ruleIdx ? 'opacity-30' : ''
+            ]"
+            @dragstart="onDragStart($event, ruleIdx)"
+            @dragover.prevent="onDragOver($event, ruleIdx)"
+            @dragleave="onDragLeave"
+            @drop.prevent="onDrop($event, ruleIdx)"
+            @dragend="onDragEnd"
           >
             <div class="flex items-center gap-2 text-sm flex-wrap">
+              <!-- Drag handle -->
+              <span
+                role="button"
+                aria-label="Drag to reorder"
+                class="inline-flex items-center shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <GripVerticalIcon class="w-4 h-4" />
+              </span>
               <!-- Rule number -->
               <span class="text-xs font-mono tabular-nums text-muted-foreground w-5 shrink-0">{{ ruleIdx + 1 }}.</span>
+              <!-- Enable/Disable toggle -->
+              <UiSwitch
+                :checked="rule.enabled !== false"
+                :aria-label="rule.enabled !== false ? 'Disable rule' : 'Enable rule'"
+                class="shrink-0"
+                @update:checked="(v: boolean) => toggleRuleEnabled(rule, v)"
+              />
               <!-- Conflict indicator -->
               <UiTooltipProvider v-if="ruleConflicts(rule).length > 0">
                 <UiTooltip>
@@ -391,13 +422,14 @@
                 {{ integrationName(rule.integrationId) }} ·
               </span>
               <!-- Human-readable condition -->
-              <span class="text-foreground">{{ fieldLabel(rule.field) }}</span>
+              <span :class="rule.enabled === false ? 'text-muted-foreground' : 'text-foreground'">{{ fieldLabel(rule.field) }}</span>
               <span class="text-muted-foreground">{{ operatorLabel(rule.operator) }}</span>
-              <span class="font-medium">"{{ rule.value }}"</span>
+              <span :class="rule.enabled === false ? 'text-muted-foreground' : 'font-medium'">"{{ rule.value }}"</span>
             </div>
             <UiButton
               variant="ghost"
               size="icon-sm"
+              aria-label="Delete rule"
               class="text-muted-foreground hover:text-red-500 shrink-0"
               @click="deleteRule(rule.id)"
             >
@@ -473,6 +505,7 @@
               <SearchIcon class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <UiInput
                 v-model="previewSearch"
+                aria-label="Search deletion priority by title"
                 placeholder="Search by title…"
                 class="pl-8"
               />
@@ -779,7 +812,7 @@
 
 <script setup lang="ts">
 import { useInfiniteScroll } from '@vueuse/core'
-import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon, SearchIcon, ShieldCheckIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon } from 'lucide-vue-next'
+import { PlusIcon, XIcon, RefreshCwIcon, LoaderCircleIcon, CheckIcon, ChevronRightIcon, HardDriveIcon, AlertTriangleIcon, SearchIcon, ShieldCheckIcon, ArrowUpIcon, ArrowDownIcon, ArrowUpDownIcon, GripVerticalIcon } from 'lucide-vue-next'
 import {
   formatBytes,
   diskUsageStatus,
@@ -1217,6 +1250,76 @@ async function deleteRule(id: number) {
     await fetchPreview()
   } catch {
     addToast('Failed to delete rule', 'error')
+  }
+}
+
+// ─── Rule Enable/Disable Toggle ────────────────────────────────────────────────
+async function toggleRuleEnabled(rule: ProtectionRule, enabled: boolean) {
+  // Optimistically update local state
+  rule.enabled = enabled
+  try {
+    await api(`/api/v1/protections/${rule.id}`, {
+      method: 'PUT',
+      body: { ...rule, enabled }
+    })
+    addToast(enabled ? 'Rule enabled' : 'Rule disabled', 'success')
+  } catch {
+    // Revert on failure
+    rule.enabled = !enabled
+    addToast('Failed to update rule', 'error')
+  }
+}
+
+// ─── Drag-to-Reorder ───────────────────────────────────────────────────────────
+const dragSourceIdx = ref<number | null>(null)
+const dragOverIdx = ref<number | null>(null)
+
+function onDragStart(event: DragEvent, idx: number) {
+  dragSourceIdx.value = idx
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(idx))
+  }
+}
+
+function onDragOver(_event: DragEvent, idx: number) {
+  dragOverIdx.value = idx
+}
+
+function onDragLeave() {
+  dragOverIdx.value = null
+}
+
+function onDragEnd() {
+  dragSourceIdx.value = null
+  dragOverIdx.value = null
+}
+
+async function onDrop(_event: DragEvent, targetIdx: number) {
+  const sourceIdx = dragSourceIdx.value
+  dragSourceIdx.value = null
+  dragOverIdx.value = null
+
+  if (sourceIdx === null || sourceIdx === targetIdx) return
+
+  // Reorder local array
+  const reordered = [...rules.value]
+  const [moved] = reordered.splice(sourceIdx, 1)
+  reordered.splice(targetIdx, 0, moved)
+  rules.value = reordered
+
+  // Send new order to backend
+  const order = reordered.map(r => r.id)
+  try {
+    await api('/api/v1/protections/reorder', {
+      method: 'PUT',
+      body: { order }
+    })
+    addToast('Rules reordered', 'success')
+  } catch {
+    // Revert — re-fetch from server
+    await fetchRules()
+    addToast('Failed to reorder rules', 'error')
   }
 }
 

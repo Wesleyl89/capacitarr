@@ -34,7 +34,10 @@
           </NuxtLink>
 
           <!-- Nav Links -->
-          <nav class="hidden sm:flex items-center gap-1">
+          <nav
+            aria-label="Main navigation"
+            class="hidden sm:flex items-center gap-1"
+          >
             <NuxtLink
               v-for="link in navLinks"
               :key="link.to"

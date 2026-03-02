@@ -94,6 +94,7 @@
             <UiSwitch
               :checked="form.value === 'true'"
               :disabled="!form.operator"
+              aria-label="Rule value toggle"
               @update:checked="(v: boolean) => form.value = String(v)"
             />
             <span class="text-sm text-muted-foreground">{{ form.value === 'true' ? 'Yes' : 'No' }}</span>
@@ -200,6 +201,13 @@
             class="text-[11px] text-muted-foreground mt-1"
           >
             ≈ {{ (Number(form.value) / 1073741824).toFixed(2) }} GB
+          </p>
+          <!-- Non-blocking warning when free-text value doesn't match known options -->
+          <p
+            v-if="showFreeTextWarning"
+            class="text-[11px] text-amber-500 mt-1"
+          >
+            ⚠ Value not found in known options
           </p>
         </template>
       </div>
@@ -432,6 +440,22 @@ const freeInputSuffix = computed(() => {
   if (form.field === 'timeinlibrary') return 'days'
   if (form.field === 'sizebytes') return 'bytes (≈ GB)'
   return ''
+})
+
+// Show a non-blocking warning when free-text input doesn't match any known option/suggestion
+const showFreeTextWarning = computed(() => {
+  if (valueInputMode.value !== 'free') return false
+  if (!form.value) return false
+  if (!ruleValues.value) return false
+
+  const knownOptions = [
+    ...(ruleValues.value.options ?? []),
+    ...(ruleValues.value.suggestions ?? [])
+  ]
+  if (knownOptions.length === 0) return false
+
+  const lower = form.value.toLowerCase()
+  return !knownOptions.some(opt => opt.value.toLowerCase() === lower)
 })
 
 const isFormValid = computed(() =>

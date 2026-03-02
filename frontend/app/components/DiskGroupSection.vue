@@ -63,6 +63,11 @@
           <!-- Usage fill bar (on top of zones) -->
           <div
             data-slot="progress-bar-fill"
+            role="progressbar"
+            :aria-valuenow="usagePercent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-label="`Disk usage: ${usagePercent}%`"
             :data-status="diskUsageStatus(rawUsagePct, group.targetPct, group.thresholdPct)"
             class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
             :style="{ width: usagePercent + '%', backgroundColor: barFillColor }"

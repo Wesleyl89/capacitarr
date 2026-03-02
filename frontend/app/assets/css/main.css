@@ -236,6 +236,21 @@ body:where(.dark *) {
 }
 
 /* ========================================
+   Accessible Focus Indicators
+   Visible outline for keyboard navigation,
+   hidden for mouse/touch users
+   ======================================== */
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ========================================
    Typography Hierarchy
    Consistent heading sizes and weights
    ======================================== */

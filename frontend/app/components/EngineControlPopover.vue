@@ -15,6 +15,8 @@
         />
         <!-- Health status dot -->
         <span
+          aria-live="polite"
+          :aria-label="isRunning ? 'Engine running' : 'Engine idle'"
           class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-background"
           :class="[statusDotColor, (isRunning || runNowLoading) ? 'animate-pulse' : '']"
         />

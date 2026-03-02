@@ -48,6 +48,7 @@
             <SearchIcon class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <UiInput
               :model-value="auditSearch"
+              aria-label="Search audit logs by media name"
               placeholder="Search by media name…"
               class="pl-8"
               @update:model-value="onSearchInput"
@@ -195,6 +196,8 @@
                     <span class="truncate">{{ group.entry.mediaName }}</span>
                     <button
                       v-if="group.seasons.length > 0"
+                      :aria-label="expandedGroups.has(group.key) ? 'Collapse seasons' : 'Expand seasons'"
+                      :aria-expanded="expandedGroups.has(group.key)"
                       class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
                       @click.stop="toggleGroup(group.key)"
                     >
