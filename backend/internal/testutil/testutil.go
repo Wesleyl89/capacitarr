@@ -1,0 +1,147 @@
+// Package testutil provides helpers for integration tests that require
+// an in-memory SQLite database with Goose migrations applied, an Echo
+// server with routes registered, and authenticated HTTP requests with
+// valid JWT tokens.
+package testutil
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
+	"capacitarr/internal/config"
+	"capacitarr/internal/db"
+	"capacitarr/routes"
+)
+
+// TestJWTSecret is the secret used for signing JWT tokens in tests.
+const TestJWTSecret = "test-jwt-secret-for-unit-tests"
+
+// TestUsername is the default username used in authenticated requests.
+const TestUsername = "testadmin"
+
+// SetupTestDB creates an in-memory SQLite database with all Goose
+// migrations applied and the default PreferenceSet seeded. It calls
+// t.Fatal if anything fails.
+func SetupTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to open in-memory SQLite: %v", err)
+	}
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("Failed to get underlying sql.DB: %v", err)
+	}
+
+	if err := db.RunMigrations(sqlDB); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// Seed default preferences (mirrors db.Init behaviour)
+	pref := db.PreferenceSet{
+		ID:                    1,
+		ExecutionMode:         "dry-run",
+		LogLevel:              "info",
+		AuditLogRetentionDays: 30,
+		PollIntervalSeconds:   300,
+		WatchHistoryWeight:    10,
+		LastWatchedWeight:     8,
+		FileSizeWeight:        6,
+		RatingWeight:          5,
+		TimeInLibraryWeight:   4,
+		AvailabilityWeight:    3,
+		TiebreakerMethod:      "size_desc",
+	}
+	if err := database.FirstOrCreate(&pref, db.PreferenceSet{ID: 1}).Error; err != nil {
+		t.Fatalf("Failed to seed preferences: %v", err)
+	}
+
+	return database
+}
+
+// TestConfig returns a Config suitable for tests with a known JWT secret.
+func TestConfig() *config.Config {
+	return &config.Config{
+		Port:          "0",
+		BaseURL:       "/",
+		Database:      ":memory:",
+		Debug:         true,
+		JWTSecret:     TestJWTSecret,
+		CORSOrigins:   []string{"*"},
+		SecureCookies: false,
+		AuthHeader:    "",
+	}
+}
+
+// SetupTestServer creates an Echo instance with auth, preferences,
+// integrations, and rule routes registered. It uses the test config
+// with a known JWT secret.
+func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
+	t.Helper()
+
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	cfg := TestConfig()
+	api := e.Group("/api")
+
+	// Public routes
+	api.GET("/health", func(c echo.Context) error {
+		return c.String(http.StatusOK, "OK")
+	})
+
+	// Protected routes
+	protected := api.Group("")
+	protected.Use(routes.RequireAuth(database, cfg))
+
+	routes.RegisterAuthRoutes(api, protected, database, cfg)
+	routes.RegisterIntegrationRoutes(protected, database)
+	routes.RegisterRuleRoutes(protected, database)
+
+	return e
+}
+
+// GenerateTestJWT creates a valid JWT token string signed with TestJWTSecret
+// and the given subject (username). The token expires in 24 hours.
+func GenerateTestJWT(t *testing.T, username string) string {
+	t.Helper()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": username,
+		"exp": time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(TestJWTSecret))
+	if err != nil {
+		t.Fatalf("Failed to sign JWT: %v", err)
+	}
+	return tokenString
+}
+
+// AuthenticatedRequest creates an *http.Request with a valid JWT Bearer token
+// in the Authorization header. Uses TestUsername as the subject.
+func AuthenticatedRequest(t *testing.T, method, path string, body io.Reader) *http.Request {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(context.Background(), method, path, body)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+GenerateTestJWT(t, TestUsername))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
