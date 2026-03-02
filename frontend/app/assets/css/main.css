@@ -568,12 +568,12 @@ html {
    ======================================== */
 
 @media (hover: hover) {
-  [data-slot="table-row"]:hover {
-    background-color: oklch(from var(--color-primary) l c h / 0.04) !important;
+  tr[data-slot="table-row"]:hover {
+    background-color: oklch(from var(--color-primary) l c h / 0.04);
   }
 
-  .dark [data-slot="table-row"]:hover {
-    background-color: oklch(from var(--color-primary) l c h / 0.06) !important;
+  .dark tr[data-slot="table-row"]:hover {
+    background-color: oklch(from var(--color-primary) l c h / 0.06);
   }
 }
 
