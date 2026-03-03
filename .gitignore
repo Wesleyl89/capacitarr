@@ -4,6 +4,9 @@ backend/server
 backend/frontend/dist/
 dist/
 
+# CI artifacts
+release_notes.md
+
 # Database files
 *.db
 *.db-shm
