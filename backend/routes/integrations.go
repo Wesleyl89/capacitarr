@@ -26,6 +26,12 @@ const (
 	intTypeEmby      = "emby"
 )
 
+// URL scheme constants for webhook/URL validation.
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
+
 // RegisterIntegrationRoutes adds integration management endpoints
 func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 	// List all integrations
@@ -75,7 +81,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 
 		// Validate URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		parsedURL, err := url.Parse(config.URL)
-		if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+		if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "url must be a valid HTTP or HTTPS URL"})
 		}
 

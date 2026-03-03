@@ -221,10 +221,10 @@ func TestCalculateScore_TimeInLibrary(t *testing.T) {
 
 func TestCalculateScore_SeriesStatus(t *testing.T) {
 	tests := []struct {
-		name       string
-		mediaType  integrations.MediaType
+		name         string
+		mediaType    integrations.MediaType
 		seriesStatus string
-		expected   float64
+		expected     float64
 	}{
 		{"ended show = 1.0", integrations.MediaTypeShow, "ended", 1.0},
 		{"Ended show (mixed case) = 1.0", integrations.MediaTypeShow, "Ended", 1.0},
@@ -240,7 +240,7 @@ func TestCalculateScore_SeriesStatus(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			item := integrations.MediaItem{
-				Type:       tc.mediaType,
+				Type:         tc.mediaType,
 				SeriesStatus: tc.seriesStatus,
 			}
 			prefs := isolatedPrefs("Series Status", 10)
@@ -260,10 +260,10 @@ func TestCalculateScore_SeriesStatus(t *testing.T) {
 
 func TestCalculateScore_CombinedWeights(t *testing.T) {
 	item := integrations.MediaItem{
-		PlayCount:  0,                       // worst watch score = 1.0
-		SizeBytes:  50 * 1024 * 1024 * 1024, // max file size score = 1.0
-		Rating:     1.0,                     // worst rating score = 0.9
-		Type:       integrations.MediaTypeShow,
+		PlayCount:    0,                       // worst watch score = 1.0
+		SizeBytes:    50 * 1024 * 1024 * 1024, // max file size score = 1.0
+		Rating:       1.0,                     // worst rating score = 0.9
+		Type:         integrations.MediaTypeShow,
 		SeriesStatus: "ended", // seriesstatus = 1.0
 	}
 
@@ -302,8 +302,8 @@ func TestCalculateScore_CombinedWeights(t *testing.T) {
 
 func TestCalculateScoreReasonFormat(t *testing.T) {
 	item := integrations.MediaItem{
-		PlayCount:  0,
-		Type:       integrations.MediaTypeShow,
+		PlayCount:    0,
+		Type:         integrations.MediaTypeShow,
 		SeriesStatus: "ended",
 	}
 	prefs := db.PreferenceSet{
@@ -332,10 +332,10 @@ func TestCalculateScoreReasonFormat(t *testing.T) {
 
 func TestCalculateScore_FactorContributionsNormalized(t *testing.T) {
 	item := integrations.MediaItem{
-		PlayCount:  3,
-		SizeBytes:  20 * 1024 * 1024 * 1024,
-		Rating:     7.0,
-		Type:       integrations.MediaTypeShow,
+		PlayCount:    3,
+		SizeBytes:    20 * 1024 * 1024 * 1024,
+		Rating:       7.0,
+		Type:         integrations.MediaTypeShow,
 		SeriesStatus: "ended",
 	}
 	prefs := db.PreferenceSet{

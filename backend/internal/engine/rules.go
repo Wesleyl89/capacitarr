@@ -1,3 +1,4 @@
+// Package engine implements the capacity management scoring and rule evaluation logic.
 package engine
 
 import (
@@ -47,77 +48,77 @@ func applyRules(item integrations.MediaItem, rules []db.CustomRule) (bool, float
 			}
 
 			switch effect {
-		case "always_keep":
-			// Immune to deletion — absolute override
-			factor := ScoreFactor{
-				Name:         fmt.Sprintf("Always keep: %s", ruleName),
-				RawScore:     0.0,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			}
-			return true, 0.0, fmt.Sprintf("Always keep: %s", ruleName), []ScoreFactor{factor}
+			case "always_keep":
+				// Immune to deletion — absolute override
+				factor := ScoreFactor{
+					Name:         fmt.Sprintf("Always keep: %s", ruleName),
+					RawScore:     0.0,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				}
+				return true, 0.0, fmt.Sprintf("Always keep: %s", ruleName), []ScoreFactor{factor}
 
-		case "prefer_keep":
-			modifier *= 0.2
-			reasons = append(reasons, fmt.Sprintf("Prefer to keep (%s %s)", rule.Field, rule.Value))
-			ruleFactors = append(ruleFactors, ScoreFactor{
-				Name:         fmt.Sprintf("Prefer keep: %s", ruleName),
-				RawScore:     0.2,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			})
+			case "prefer_keep":
+				modifier *= 0.2
+				reasons = append(reasons, fmt.Sprintf("Prefer to keep (%s %s)", rule.Field, rule.Value))
+				ruleFactors = append(ruleFactors, ScoreFactor{
+					Name:         fmt.Sprintf("Prefer keep: %s", ruleName),
+					RawScore:     0.2,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				})
 
-		case "lean_keep":
-			modifier *= 0.5
-			reasons = append(reasons, fmt.Sprintf("Lean toward keeping (%s %s)", rule.Field, rule.Value))
-			ruleFactors = append(ruleFactors, ScoreFactor{
-				Name:         fmt.Sprintf("Lean keep: %s", ruleName),
-				RawScore:     0.5,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			})
+			case "lean_keep":
+				modifier *= 0.5
+				reasons = append(reasons, fmt.Sprintf("Lean toward keeping (%s %s)", rule.Field, rule.Value))
+				ruleFactors = append(ruleFactors, ScoreFactor{
+					Name:         fmt.Sprintf("Lean keep: %s", ruleName),
+					RawScore:     0.5,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				})
 
-		case "lean_remove":
-			modifier *= 1.5
-			reasons = append(reasons, fmt.Sprintf("Lean toward removing (%s %s)", rule.Field, rule.Value))
-			ruleFactors = append(ruleFactors, ScoreFactor{
-				Name:         fmt.Sprintf("Lean remove: %s", ruleName),
-				RawScore:     1.5,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			})
+			case "lean_remove":
+				modifier *= 1.5
+				reasons = append(reasons, fmt.Sprintf("Lean toward removing (%s %s)", rule.Field, rule.Value))
+				ruleFactors = append(ruleFactors, ScoreFactor{
+					Name:         fmt.Sprintf("Lean remove: %s", ruleName),
+					RawScore:     1.5,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				})
 
-		case "prefer_remove":
-			modifier *= 3.0
-			reasons = append(reasons, fmt.Sprintf("Prefer to remove (%s %s)", rule.Field, rule.Value))
-			ruleFactors = append(ruleFactors, ScoreFactor{
-				Name:         fmt.Sprintf("Prefer remove: %s", ruleName),
-				RawScore:     3.0,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			})
+			case "prefer_remove":
+				modifier *= 3.0
+				reasons = append(reasons, fmt.Sprintf("Prefer to remove (%s %s)", rule.Field, rule.Value))
+				ruleFactors = append(ruleFactors, ScoreFactor{
+					Name:         fmt.Sprintf("Prefer remove: %s", ruleName),
+					RawScore:     3.0,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				})
 
-		case "always_remove":
-			modifier *= 100.0 // Ensure it hits the ceiling
-			reasons = append(reasons, fmt.Sprintf("Always remove (%s %s)", rule.Field, rule.Value))
-			ruleFactors = append(ruleFactors, ScoreFactor{
-				Name:         fmt.Sprintf("Always remove: %s", ruleName),
-				RawScore:     100.0,
-				Weight:       0,
-				Contribution: 0.0,
-				Type:         "rule",
-				MatchedValue: matchedValue,
-			})
+			case "always_remove":
+				modifier *= 100.0 // Ensure it hits the ceiling
+				reasons = append(reasons, fmt.Sprintf("Always remove (%s %s)", rule.Field, rule.Value))
+				ruleFactors = append(ruleFactors, ScoreFactor{
+					Name:         fmt.Sprintf("Always remove: %s", ruleName),
+					RawScore:     100.0,
+					Weight:       0,
+					Contribution: 0.0,
+					Type:         "rule",
+					MatchedValue: matchedValue,
+				})
 			}
 		}
 	}

@@ -210,7 +210,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 				EpisodeCount:   season.Statistics.EpisodeFileCount,
 				SizeBytes:      season.Statistics.SizeOnDisk,
 				Path:           show.Path,
-				SeriesStatus:     show.Status,
+				SeriesStatus:   show.Status,
 				QualityProfile: profileMap[show.QualityProfileID],
 				Rating:         show.Ratings.Value,
 				Genre:          strings.Join(show.Genres, ", "),
@@ -228,7 +228,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			Year:           show.Year,
 			SizeBytes:      show.Statistics.SizeOnDisk,
 			Path:           show.Path,
-			SeriesStatus:     show.Status,
+			SeriesStatus:   show.Status,
 			EpisodeCount:   show.Statistics.EpisodeCount,
 			QualityProfile: profileMap[show.QualityProfileID],
 			Rating:         show.Ratings.Value,
@@ -244,6 +244,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 
 // --- RuleValueFetcher implementation ---
 
+// GetQualityProfiles returns available quality profiles from Sonarr.
 func (s *SonarrClient) GetQualityProfiles() ([]NameValue, error) {
 	body, err := s.doRequest("/api/v3/qualityprofile")
 	if err != nil {
@@ -300,10 +301,11 @@ func (s *SonarrClient) GetLanguages() ([]NameValue, error) {
 // DeleteMediaItem removes a series or season and its files from disk via the Sonarr API.
 func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
 	var endpoint string
-	if item.Type == MediaTypeShow { //nolint:gocritic // conditions test different fields, not a single value
+	switch item.Type { //nolint:exhaustive // Sonarr only handles shows and seasons
+	case MediaTypeShow:
 		// Delete the entire series and its files
 		endpoint = fmt.Sprintf("/api/v3/series/%s?deleteFiles=true", item.ExternalID)
-	} else if item.Type == MediaTypeSeason {
+	case MediaTypeSeason:
 		// ExternalID for season is formatted as "seriesId-seasonNum" (e.g., "12-s1")
 		parts := strings.Split(item.ExternalID, "-s")
 		if len(parts) != 2 {
@@ -347,11 +349,11 @@ func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
 		req.Header.Set("X-Api-Key", s.APIKey)
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := sharedHTTPClient.Do(req)
+		resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 		if err != nil {
 			return fmt.Errorf("connection failed: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == 401 {
 			return fmt.Errorf("unauthorized: invalid API key")
@@ -361,7 +363,7 @@ func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
 		}
 
 		return nil
-	} else {
+	default:
 		return fmt.Errorf("unsupported media type for sonarr deletion: %s", item.Type)
 	}
 
@@ -371,11 +373,11 @@ func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
 	}
 	req.Header.Set("X-Api-Key", s.APIKey)
 
-	resp, err := sharedHTTPClient.Do(req)
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 {
 		return fmt.Errorf("unauthorized: invalid API key")

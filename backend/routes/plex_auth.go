@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	plexPinURL          = "https://plex.tv/api/v2/pins"
-	plexClientID        = "capacitarr"
-	plexProduct         = "Capacitarr"
-	plexPinRequestBody  = "strong=true"
-	plexAPITimeout      = 15 * time.Second
+	plexPinURL         = "https://plex.tv/api/v2/pins"
+	plexClientID       = "capacitarr"
+	plexProduct        = "Capacitarr"
+	plexPinRequestBody = "strong=true"
+	plexAPITimeout     = 15 * time.Second
 )
 
 // plexPinResponse represents the relevant fields from the Plex PIN API.
@@ -53,12 +53,12 @@ func handleCreatePlexPin(c echo.Context) error {
 	req.Header.Set("X-Plex-Product", plexProduct)
 
 	client := &http.Client{Timeout: plexAPITimeout}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: URL is a well-known Plex API endpoint
 	if err != nil {
 		slog.Error("Plex PIN API request failed", "error", err)
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to reach Plex API"})
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -67,7 +67,7 @@ func handleCreatePlexPin(c echo.Context) error {
 	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		slog.Error("Plex PIN API returned unexpected status", "status", resp.StatusCode, "body", string(body))
+		slog.Error("Plex PIN API returned unexpected status", "status", resp.StatusCode, "body", string(body)) //nolint:gosec // G706: resp values are from Plex API, not user input
 		return c.JSON(http.StatusBadGateway, map[string]string{
 			"error": fmt.Sprintf("Plex API returned status %d", resp.StatusCode),
 		})
@@ -107,12 +107,12 @@ func handleCheckPlexPin(c echo.Context) error {
 	req.Header.Set("X-Plex-Product", plexProduct)
 
 	client := &http.Client{Timeout: plexAPITimeout}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: URL is a well-known Plex API endpoint
 	if err != nil {
 		slog.Error("Plex PIN check request failed", "error", err)
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to reach Plex API"})
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -125,7 +125,7 @@ func handleCheckPlexPin(c echo.Context) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("Plex PIN check returned unexpected status", "status", resp.StatusCode, "body", string(body))
+		slog.Error("Plex PIN check returned unexpected status", "status", resp.StatusCode, "body", string(body)) //nolint:gosec // G706: resp values are from Plex API, not user input
 		return c.JSON(http.StatusBadGateway, map[string]string{
 			"error": fmt.Sprintf("Plex API returned status %d", resp.StatusCode),
 		})

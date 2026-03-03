@@ -10,10 +10,12 @@ import (
 	"capacitarr/internal/testutil"
 )
 
+const testLoginBody = `{"username":"admin","password":"password123"}`
+
 func TestLoginHandler_FirstUserBootstrap(t *testing.T) {
 	e := testutil.SetupTestServer(t, testutil.SetupTestDB(t))
 
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -56,7 +58,7 @@ func TestLoginHandler_SuccessfulLogin(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Bootstrap first user
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -82,7 +84,7 @@ func TestLoginHandler_WrongPassword(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Bootstrap first user
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -132,7 +134,7 @@ func TestPasswordChange(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Bootstrap user
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -176,7 +178,7 @@ func TestPasswordChange_ShortPassword(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Bootstrap user
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -205,7 +207,7 @@ func TestAPIKeyGeneration(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Bootstrap user
-	body := `{"username":"admin","password":"password123"}`
+	body := testLoginBody
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

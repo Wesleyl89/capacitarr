@@ -12,6 +12,13 @@ import (
 	"capacitarr/internal/notifications"
 )
 
+// Notification channel type constants.
+const (
+	notifTypeDiscord = "discord"
+	notifTypeSlack   = "slack"
+	notifTypeInApp   = "inapp"
+)
+
 // RegisterNotificationRoutes sets up CRUD endpoints for notification channels
 // and management endpoints for in-app notifications.
 func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
@@ -37,17 +44,17 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 		if req.Type == "" || req.Name == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type and name are required"})
 		}
-		if req.Type != "discord" && req.Type != "slack" && req.Type != "inapp" {
+		if req.Type != notifTypeDiscord && req.Type != notifTypeSlack && req.Type != notifTypeInApp {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord, slack, or inapp"})
 		}
-		if (req.Type == "discord" || req.Type == "slack") && req.WebhookURL == "" {
+		if (req.Type == notifTypeDiscord || req.Type == notifTypeSlack) && req.WebhookURL == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl is required for discord and slack channels"})
 		}
 
 		// Validate webhook URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		if req.WebhookURL != "" {
 			parsedURL, err := url.Parse(req.WebhookURL)
-			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+			if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
 				return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl must be a valid HTTP or HTTPS URL"})
 			}
 		}
@@ -78,14 +85,14 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 		}
 
 		// Validate type if changed
-		if req.Type != "" && req.Type != "discord" && req.Type != "slack" && req.Type != "inapp" {
+		if req.Type != "" && req.Type != notifTypeDiscord && req.Type != notifTypeSlack && req.Type != notifTypeInApp {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord, slack, or inapp"})
 		}
 
 		// Validate webhook URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		if req.WebhookURL != "" {
 			parsedURL, err := url.Parse(req.WebhookURL)
-			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+			if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
 				return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl must be a valid HTTP or HTTPS URL"})
 			}
 		}
@@ -152,11 +159,11 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 
 		var err error
 		switch cfg.Type {
-		case "discord":
+		case notifTypeDiscord:
 			err = notifications.SendDiscord(cfg.WebhookURL, event)
-		case "slack":
+		case notifTypeSlack:
 			err = notifications.SendSlack(cfg.WebhookURL, event)
-		case "inapp":
+		case notifTypeInApp:
 			err = notifications.SendInApp(event)
 		default:
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown channel type"})

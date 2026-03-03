@@ -12,7 +12,7 @@ func TestReadarrClient_TestConnection_Success(t *testing.T) {
 		if r.URL.Path != "/api/v1/system/status" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Api-Key") != "test-key" {
+		if r.Header.Get("X-Api-Key") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.WriteHeader(http.StatusOK)
@@ -20,7 +20,7 @@ func TestReadarrClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestReadarrClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -69,7 +69,7 @@ func TestReadarrClient_GetDiskSpace(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	disks, err := client.GetDiskSpace()
 	if err != nil {
 		t.Fatalf("GetDiskSpace should succeed: %v", err)
@@ -133,7 +133,7 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed: %v", err)
@@ -189,7 +189,7 @@ func TestReadarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetMediaItems()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -207,7 +207,7 @@ func TestReadarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed with empty: %v", err)
@@ -236,7 +236,7 @@ func TestReadarrClient_GetRootFolders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	folders, err := client.GetRootFolders()
 	if err != nil {
 		t.Fatalf("GetRootFolders should succeed: %v", err)
@@ -272,7 +272,7 @@ func TestReadarrClient_GetQualityProfiles(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	profiles, err := client.GetQualityProfiles()
 	if err != nil {
 		t.Fatalf("GetQualityProfiles should succeed: %v", err)
@@ -305,7 +305,7 @@ func TestReadarrClient_GetTags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	tags, err := client.GetTags()
 	if err != nil {
 		t.Fatalf("GetTags should succeed: %v", err)
@@ -338,7 +338,7 @@ func TestReadarrClient_GetLanguages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL, "test-key")
+	client := NewReadarrClient(srv.URL, testTautulliAPIKey)
 	langs, err := client.GetLanguages()
 	if err != nil {
 		t.Fatalf("GetLanguages should succeed: %v", err)
@@ -364,7 +364,7 @@ func TestReadarrClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewReadarrClient(srv.URL+"/", "test-key")
+	client := NewReadarrClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

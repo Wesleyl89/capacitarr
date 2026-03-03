@@ -327,5 +327,3 @@ func TestForeignKeysEnabled(t *testing.T) {
 		t.Errorf("Expected foreign_keys=1 after enabling, got %d", fkEnabled)
 	}
 }
-
-

@@ -1,3 +1,4 @@
+// Package jobs manages scheduled background tasks and cron execution.
 package jobs
 
 import (

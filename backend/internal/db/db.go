@@ -1,3 +1,4 @@
+// Package db provides database initialization, migrations, and model definitions.
 package db
 
 import (

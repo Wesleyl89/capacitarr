@@ -18,6 +18,13 @@ linters:
     - prealloc
     - exhaustive
     - noctx
+  settings:
+    goconst:
+      min-occurrences: 4
+      ignore-tests: true
+    gosec:
+      excludes:
+        - G117
 
 formatters:
   enable:
@@ -27,15 +34,11 @@ run:
   timeout: 5m
   tests: true
 
-linters-settings:
-  goconst:
-    min-occurrences: 4
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
-    - path: _test\.go
+    - path: _test\.go$
       linters:
         - errcheck
         - goconst

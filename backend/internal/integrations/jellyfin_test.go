@@ -6,12 +6,14 @@ import (
 	"testing"
 )
 
+const testJellyfinPathItems = "/Users/admin-1/Items"
+
 func TestJellyfinClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/System/Info" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Emby-Token") != "test-key" {
+		if r.Header.Get("X-Emby-Token") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -19,7 +21,7 @@ func TestJellyfinClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -44,7 +46,7 @@ func TestJellyfinClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -59,7 +61,7 @@ func TestJellyfinClient_TestConnection_EmptyResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail when both ServerName and Version are empty")
@@ -73,7 +75,7 @@ func TestJellyfinClient_TestConnection_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with malformed JSON")
@@ -95,7 +97,7 @@ func TestJellyfinClient_GetAdminUserID_Admin(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	userID, err := client.GetAdminUserID()
 	if err != nil {
 		t.Fatalf("GetAdminUserID should succeed: %v", err)
@@ -120,7 +122,7 @@ func TestJellyfinClient_GetAdminUserID_FallbackToFirstUser(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	userID, err := client.GetAdminUserID()
 	if err != nil {
 		t.Fatalf("GetAdminUserID should fall back to first user: %v", err)
@@ -141,7 +143,7 @@ func TestJellyfinClient_GetAdminUserID_NoUsers(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetAdminUserID()
 	if err == nil {
 		t.Fatal("GetAdminUserID should fail with no users")
@@ -150,7 +152,7 @@ func TestJellyfinClient_GetAdminUserID_NoUsers(t *testing.T) {
 
 func TestJellyfinClient_GetBulkWatchData(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Users/admin-1/Items" {
+		if r.URL.Path == testJellyfinPathItems {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"Items": [
@@ -193,7 +195,7 @@ func TestJellyfinClient_GetBulkWatchData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin-1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -230,7 +232,7 @@ func TestJellyfinClient_GetBulkWatchData(t *testing.T) {
 
 func TestJellyfinClient_GetBulkWatchData_DuplicateKeepsHigherPlayCount(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Users/admin-1/Items" {
+		if r.URL.Path == testJellyfinPathItems {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"Items": [
@@ -255,7 +257,7 @@ func TestJellyfinClient_GetBulkWatchData_DuplicateKeepsHigherPlayCount(t *testin
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin-1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -273,7 +275,7 @@ func TestJellyfinClient_GetBulkWatchData_DuplicateKeepsHigherPlayCount(t *testin
 
 func TestJellyfinClient_GetBulkWatchData_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Users/admin-1/Items" {
+		if r.URL.Path == testJellyfinPathItems {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"Items":[],"TotalRecordCount":0}`))
 			return
@@ -282,7 +284,7 @@ func TestJellyfinClient_GetBulkWatchData_Empty(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin-1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed with empty: %v", err)
@@ -294,7 +296,7 @@ func TestJellyfinClient_GetBulkWatchData_Empty(t *testing.T) {
 
 func TestJellyfinClient_GetBulkWatchData_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Users/admin-1/Items" {
+		if r.URL.Path == testJellyfinPathItems {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{broken`))
 			return
@@ -303,7 +305,7 @@ func TestJellyfinClient_GetBulkWatchData_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetBulkWatchData("admin-1")
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON response")
@@ -312,7 +314,7 @@ func TestJellyfinClient_GetBulkWatchData_MalformedJSON(t *testing.T) {
 
 func TestJellyfinClient_GetBulkWatchData_SkipsEmptyNames(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Users/admin-1/Items" {
+		if r.URL.Path == testJellyfinPathItems {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"Items": [
@@ -328,7 +330,7 @@ func TestJellyfinClient_GetBulkWatchData_SkipsEmptyNames(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL, "test-key")
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin-1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -353,7 +355,7 @@ func TestJellyfinClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellyfinClient(srv.URL+"/", "test-key")
+	client := NewJellyfinClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should handle trailing slash: %v", err)
 	}

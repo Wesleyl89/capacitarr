@@ -13,7 +13,7 @@ func TestSonarrClient_TestConnection_Success(t *testing.T) {
 		if r.URL.Path != "/api/v3/system/status" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Api-Key") != "test-key" {
+		if r.Header.Get("X-Api-Key") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.WriteHeader(http.StatusOK)
@@ -21,7 +21,7 @@ func TestSonarrClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestSonarrClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -65,7 +65,7 @@ func TestSonarrClient_TestConnection_Timeout(t *testing.T) {
 	sharedHTTPClient = &http.Client{Timeout: 10 * time.Millisecond}
 	defer func() { sharedHTTPClient = origClient }()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with timeout")
@@ -89,7 +89,7 @@ func TestSonarrClient_GetDiskSpace(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	disks, err := client.GetDiskSpace()
 	if err != nil {
 		t.Fatalf("GetDiskSpace should succeed: %v", err)
@@ -112,7 +112,7 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			resp := []sonarrQualityProfile{
 				{ID: 1, Name: "HD-1080p"},
 				{ID: 2, Name: "Ultra-HD"},
@@ -120,7 +120,7 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
 				t.Fatalf("Failed to encode response: %v", err)
 			}
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			resp := []sonarrTag{
 				{ID: 1, Label: "anime"},
 				{ID: 2, Label: "classic"},
@@ -190,7 +190,7 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed: %v", err)
@@ -237,9 +237,9 @@ func TestSonarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			_, _ = w.Write([]byte(`[{"id":1,"name":"HD"}]`))
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v3/series":
 			_, _ = w.Write([]byte(`{not valid json`))
@@ -249,7 +249,7 @@ func TestSonarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetMediaItems()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -260,9 +260,9 @@ func TestSonarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v3/series":
 			_, _ = w.Write([]byte(`[]`))
@@ -272,7 +272,7 @@ func TestSonarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed with empty results: %v", err)
@@ -299,7 +299,7 @@ func TestSonarrClient_GetRootFolders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	folders, err := client.GetRootFolders()
 	if err != nil {
 		t.Fatalf("GetRootFolders should succeed: %v", err)
@@ -314,7 +314,7 @@ func TestSonarrClient_GetRootFolders(t *testing.T) {
 
 func TestSonarrClient_GetQualityProfiles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v3/qualityprofile" {
+		if r.URL.Path == testRadarrPathQuality {
 			resp := []sonarrQualityProfile{
 				{ID: 1, Name: "HD-1080p"},
 				{ID: 2, Name: "Ultra-HD"},
@@ -329,7 +329,7 @@ func TestSonarrClient_GetQualityProfiles(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	profiles, err := client.GetQualityProfiles()
 	if err != nil {
 		t.Fatalf("GetQualityProfiles should succeed: %v", err)
@@ -344,7 +344,7 @@ func TestSonarrClient_GetQualityProfiles(t *testing.T) {
 
 func TestSonarrClient_GetTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v3/tag" {
+		if r.URL.Path == testRadarrPathTag {
 			resp := []sonarrTag{
 				{ID: 1, Label: "anime"},
 			}
@@ -358,7 +358,7 @@ func TestSonarrClient_GetTags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	tags, err := client.GetTags()
 	if err != nil {
 		t.Fatalf("GetTags should succeed: %v", err)
@@ -378,7 +378,7 @@ func TestSonarrClient_HTMLResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewSonarrClient(srv.URL, "test-key")
+	client := NewSonarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("Expected error for HTML response (reverse proxy login page)")
@@ -397,7 +397,7 @@ func TestSonarrClient_URLTrailingSlash(t *testing.T) {
 	defer srv.Close()
 
 	// URL with trailing slash should be normalized
-	client := NewSonarrClient(srv.URL+"/", "test-key")
+	client := NewSonarrClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

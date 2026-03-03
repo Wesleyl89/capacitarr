@@ -8,12 +8,18 @@ import (
 	"testing"
 )
 
+const (
+	testLidarrPathStatus  = "/api/v1/system/status"
+	testLidarrPathQuality = "/api/v1/qualityprofile"
+	testLidarrPathTag     = "/api/v1/tag"
+)
+
 func TestLidarrClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/system/status" {
+		if r.URL.Path != testLidarrPathStatus {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Api-Key") != "test-key" {
+		if r.Header.Get("X-Api-Key") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.WriteHeader(http.StatusOK)
@@ -21,7 +27,7 @@ func TestLidarrClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -46,7 +52,7 @@ func TestLidarrClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -69,7 +75,7 @@ func TestLidarrClient_GetDiskSpace(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	disks, err := client.GetDiskSpace()
 	if err != nil {
 		t.Fatalf("GetDiskSpace should succeed: %v", err)
@@ -92,7 +98,7 @@ func TestLidarrClient_GetMediaItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			resp := []lidarrQualityProfile{
 				{ID: 1, Name: "Lossless"},
 				{ID: 2, Name: "Standard"},
@@ -100,7 +106,7 @@ func TestLidarrClient_GetMediaItems(t *testing.T) {
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
 				t.Fatalf("Failed to encode response: %v", err)
 			}
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			resp := []lidarrTag{
 				{ID: 1, Label: "favorite"},
 				{ID: 2, Label: "jazz"},
@@ -165,7 +171,7 @@ func TestLidarrClient_GetMediaItems(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed: %v", err)
@@ -225,9 +231,9 @@ func TestLidarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v1/artist":
 			_, _ = w.Write([]byte(`not json at all`))
@@ -237,7 +243,7 @@ func TestLidarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetMediaItems()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -248,9 +254,9 @@ func TestLidarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v1/artist":
 			_, _ = w.Write([]byte(`[]`))
@@ -260,7 +266,7 @@ func TestLidarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed with empty: %v", err)
@@ -286,7 +292,7 @@ func TestLidarrClient_GetRootFolders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	folders, err := client.GetRootFolders()
 	if err != nil {
 		t.Fatalf("GetRootFolders should succeed: %v", err)
@@ -298,7 +304,7 @@ func TestLidarrClient_GetRootFolders(t *testing.T) {
 
 func TestLidarrClient_GetQualityProfiles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/qualityprofile" {
+		if r.URL.Path == testLidarrPathQuality {
 			resp := []lidarrQualityProfile{{ID: 1, Name: "Lossless"}, {ID: 2, Name: "Standard"}}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -310,7 +316,7 @@ func TestLidarrClient_GetQualityProfiles(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	profiles, err := client.GetQualityProfiles()
 	if err != nil {
 		t.Fatalf("GetQualityProfiles should succeed: %v", err)
@@ -325,7 +331,7 @@ func TestLidarrClient_GetQualityProfiles(t *testing.T) {
 
 func TestLidarrClient_GetTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/tag" {
+		if r.URL.Path == testLidarrPathTag {
 			resp := []lidarrTag{{ID: 1, Label: "rock"}}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -337,7 +343,7 @@ func TestLidarrClient_GetTags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL, "test-key")
+	client := NewLidarrClient(srv.URL, testTautulliAPIKey)
 	tags, err := client.GetTags()
 	if err != nil {
 		t.Fatalf("GetTags should succeed: %v", err)
@@ -361,7 +367,7 @@ func TestLidarrClient_GetLanguages(t *testing.T) {
 
 func TestLidarrClient_URLTrailingSlash(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/system/status" {
+		if r.URL.Path != testLidarrPathStatus {
 			t.Errorf("Expected /api/v1/system/status, got %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -369,7 +375,7 @@ func TestLidarrClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewLidarrClient(srv.URL+"/", "test-key")
+	client := NewLidarrClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

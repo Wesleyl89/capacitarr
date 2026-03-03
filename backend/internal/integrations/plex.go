@@ -36,13 +36,13 @@ func (p *PlexClient) TestConnection() error {
 	return err
 }
 
-// Plex doesn't report disk space directly through its API,
-// so we return an empty slice. Disk info comes from *arr services.
+// GetDiskSpace returns an empty slice because Plex doesn't report disk space
+// directly through its API. Disk info comes from *arr services.
 func (p *PlexClient) GetDiskSpace() ([]DiskSpace, error) {
 	return []DiskSpace{}, nil
 }
 
-// Plex doesn't have root folders in the *arr sense
+// GetRootFolders returns an empty slice because Plex doesn't have root folders in the *arr sense.
 func (p *PlexClient) GetRootFolders() ([]string, error) {
 	return []string{}, nil
 }
@@ -108,7 +108,7 @@ func (p *PlexClient) GetMediaItems() ([]MediaItem, error) {
 
 	for _, lib := range libs.MediaContainer.Directory {
 		// Only process movie and show libraries
-		if lib.Type != "movie" && lib.Type != "show" {
+		if lib.Type != string(MediaTypeMovie) && lib.Type != string(MediaTypeShow) {
 			continue
 		}
 
@@ -173,14 +173,14 @@ func plexMetadataToMediaItem(m plexMetadata) *MediaItem {
 	}
 
 	var mediaType MediaType
-	switch m.Type {
-	case "movie":
+	switch MediaType(m.Type) { //nolint:exhaustive // Plex only returns movie, show, season, and episode types
+	case MediaTypeMovie:
 		mediaType = MediaTypeMovie
-	case "show":
+	case MediaTypeShow:
 		mediaType = MediaTypeShow
-	case "season":
+	case MediaTypeSeason:
 		mediaType = MediaTypeSeason
-	case "episode":
+	case MediaTypeEpisode:
 		mediaType = MediaTypeEpisode
 	default:
 		return nil

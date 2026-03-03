@@ -1,3 +1,4 @@
+// Package main is the entry point for the Capacitarr application server.
 package main
 
 import (
@@ -48,7 +49,7 @@ func serveEmbeddedFile(c echo.Context, fsys fs.FS, filePath string) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
@@ -88,11 +89,11 @@ func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
 		if err == nil {
 			// Check if it's a directory — if so, look for index.html inside it
 			stat, statErr := f.Stat()
-			f.Close()
+			_ = f.Close()
 			if statErr == nil && stat.IsDir() {
 				indexPath := path.Join(reqPath, "index.html")
 				if idxFile, idxErr := fsys.Open(indexPath); idxErr == nil {
-					idxFile.Close()
+					_ = idxFile.Close()
 					return serveEmbeddedFile(c, fsys, indexPath)
 				}
 				// Directory exists but no index.html — fall through to SPA fallback
@@ -105,7 +106,7 @@ func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
 		// File not found — serve the SPA fallback (200.html or index.html)
 		// Nuxt generates 200.html specifically for SPA catch-all hosting
 		if fallback, fbErr := fsys.Open("200.html"); fbErr == nil {
-			fallback.Close()
+			_ = fallback.Close()
 			return serveEmbeddedFile(c, fsys, "200.html")
 		}
 		return serveEmbeddedFile(c, fsys, "index.html")

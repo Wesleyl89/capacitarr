@@ -56,7 +56,7 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 							Password: string(placeholder),
 						}
 						database.Create(&auth)
-						slog.Info("Auto-created user from proxy auth header", "component", "middleware", "username", headerUser)
+						slog.Info("Auto-created user from proxy auth header", "component", "middleware", "username", headerUser) //nolint:gosec // G706: headerUser is from a trusted reverse proxy header
 					}
 					c.Set("user", headerUser)
 					return next(c)
@@ -73,15 +73,16 @@ func RequireAuth(database *gorm.DB, cfg *config.Config) echo.MiddlewareFunc {
 					return echo.ErrUnauthorized
 				}
 
-				if parts[0] == "Bearer" { //nolint:gocritic // auth method branches test different conditions
+				switch parts[0] {
+				case "Bearer": //nolint:gocritic // auth method branches test different conditions
 					tokenStr = parts[1]
-				} else if parts[0] == "ApiKey" {
+				case "ApiKey":
 					if auth := validateAPIKey(database, parts[1]); auth != nil {
 						c.Set("user", auth.Username)
 						return next(c)
 					}
 					return echo.ErrUnauthorized
-				} else {
+				default:
 					return echo.ErrUnauthorized
 				}
 			}

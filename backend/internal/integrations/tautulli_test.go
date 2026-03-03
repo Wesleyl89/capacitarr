@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const testTautulliAPIKey = "test-key"
+
 func TestTautulliClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Tautulli uses query params for auth: ?apikey=XXX&cmd=CMD
@@ -14,7 +16,7 @@ func TestTautulliClient_TestConnection_Success(t *testing.T) {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
 		apiKey := r.URL.Query().Get("apikey")
-		if apiKey != "test-key" {
+		if apiKey != testTautulliAPIKey {
 			t.Errorf("Expected apikey 'test-key', got %q", apiKey)
 		}
 		cmd := r.URL.Query().Get("cmd")
@@ -32,7 +34,7 @@ func TestTautulliClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -57,7 +59,7 @@ func TestTautulliClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -94,7 +96,7 @@ func TestTautulliClient_TestConnection_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with malformed JSON")
@@ -160,7 +162,7 @@ func TestTautulliClient_GetWatchHistory(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetWatchHistory("12345")
 	if err != nil {
 		t.Fatalf("GetWatchHistory should succeed: %v", err)
@@ -203,7 +205,7 @@ func TestTautulliClient_GetWatchHistory_EmptyHistory(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetWatchHistory("99999")
 	if err != nil {
 		t.Fatalf("GetWatchHistory should succeed with empty: %v", err)
@@ -235,7 +237,7 @@ func TestTautulliClient_GetWatchHistory_ErrorResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetWatchHistory("12345")
 	if err == nil {
 		t.Fatal("GetWatchHistory should fail with error result")
@@ -249,7 +251,7 @@ func TestTautulliClient_GetWatchHistory_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetWatchHistory("12345")
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -298,7 +300,7 @@ func TestTautulliClient_GetShowWatchHistory(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetShowWatchHistory("show42")
 	if err != nil {
 		t.Fatalf("GetShowWatchHistory should succeed: %v", err)
@@ -336,7 +338,7 @@ func TestTautulliClient_GetShowWatchHistory_ErrorResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL, "test-key")
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetShowWatchHistory("show42")
 	if err == nil {
 		t.Fatal("GetShowWatchHistory should fail with error result")
@@ -359,7 +361,7 @@ func TestTautulliClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewTautulliClient(srv.URL+"/", "test-key")
+	client := NewTautulliClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

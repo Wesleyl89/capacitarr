@@ -85,7 +85,7 @@ func TestMatchesRule_AllFieldTypes(t *testing.T) {
 	baseItem := integrations.MediaItem{
 		Title:          "The Matrix",
 		QualityProfile: "HD-1080p",
-		SeriesStatus:     "Ended",
+		SeriesStatus:   "Ended",
 		Genre:          "action, sci-fi",
 		Rating:         8.5,
 		SizeBytes:      10 * 1024 * 1024 * 1024, // 10 GB
@@ -232,7 +232,7 @@ func TestApplyRules(t *testing.T) {
 
 	baseItem := integrations.MediaItem{
 		Title:         "The Matrix",
-		SeriesStatus:    "Ended",
+		SeriesStatus:  "Ended",
 		Rating:        8.5,
 		AddedAt:       &now,
 		IntegrationID: 1,

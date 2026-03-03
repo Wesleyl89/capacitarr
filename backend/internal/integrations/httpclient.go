@@ -30,15 +30,15 @@ func DoAPIRequest(url, headerKey, headerValue string) ([]byte, error) {
 		req.Header.Set(headerKey, headerValue)
 	}
 
-	resp, err := sharedHTTPClient.Do(req)
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 	if err != nil {
 		slog.Debug("Integration API request failed", "component", "integrations",
 			"url", sanitizedURL, "error", err, "duration", time.Since(start).String())
 		return nil, fmt.Errorf("connection failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	slog.Debug("Integration API response", "component", "integrations",
+	slog.Debug("Integration API response", "component", "integrations", //nolint:gosec // G706: sanitizedURL is safe, status/duration are server-side values
 		"url", sanitizedURL, "status", resp.StatusCode, "duration", time.Since(start).String())
 
 	if resp.StatusCode == 401 {

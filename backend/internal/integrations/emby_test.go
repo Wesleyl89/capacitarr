@@ -1,18 +1,22 @@
 package integrations
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
+const (
+	testEmbyPathSystemInfo = "/System/Info"
+	testEmbyPathUsers      = "/Users"
+)
+
 func TestEmbyClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/System/Info" {
+		if r.URL.Path != testEmbyPathSystemInfo {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Emby-Token") != "test-key" {
+		if r.Header.Get("X-Emby-Token") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -20,7 +24,7 @@ func TestEmbyClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -45,7 +49,7 @@ func TestEmbyClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -59,7 +63,7 @@ func TestEmbyClient_TestConnection_EmptyResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail when both ServerName and Version are empty")
@@ -73,7 +77,7 @@ func TestEmbyClient_TestConnection_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with malformed JSON")
@@ -119,7 +123,7 @@ func TestEmbyClient_GetBulkWatchData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -182,7 +186,7 @@ func TestEmbyClient_GetBulkWatchData_Pagination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -211,7 +215,7 @@ func TestEmbyClient_GetBulkWatchData_DuplicateKeepsHigherPlayCount(t *testing.T)
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -232,7 +236,7 @@ func TestEmbyClient_GetBulkWatchData_EmptyItems(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -256,7 +260,7 @@ func TestEmbyClient_GetBulkWatchData_SkipsEmptyNames(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	data, err := client.GetBulkWatchData("admin1")
 	if err != nil {
 		t.Fatalf("GetBulkWatchData should succeed: %v", err)
@@ -272,7 +276,7 @@ func TestEmbyClient_GetBulkWatchData_SkipsEmptyNames(t *testing.T) {
 
 func TestEmbyClient_GetAdminUserID_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/Users" {
+		if r.URL.Path != testEmbyPathUsers {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -291,7 +295,7 @@ func TestEmbyClient_GetAdminUserID_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	userID, err := client.GetAdminUserID()
 	if err != nil {
 		t.Fatalf("GetAdminUserID should succeed: %v", err)
@@ -314,7 +318,7 @@ func TestEmbyClient_GetAdminUserID_FallsBackToFirstUser(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	userID, err := client.GetAdminUserID()
 	if err != nil {
 		t.Fatalf("GetAdminUserID should succeed: %v", err)
@@ -332,7 +336,7 @@ func TestEmbyClient_GetAdminUserID_NoUsers(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetAdminUserID()
 	if err == nil {
 		t.Fatal("GetAdminUserID should fail when no users exist")
@@ -346,7 +350,7 @@ func TestEmbyClient_GetAdminUserID_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL, "test-key")
+	client := NewEmbyClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetAdminUserID()
 	if err == nil {
 		t.Fatal("GetAdminUserID should fail with malformed JSON")
@@ -355,15 +359,15 @@ func TestEmbyClient_GetAdminUserID_MalformedJSON(t *testing.T) {
 
 func TestEmbyClient_URLTrailingSlash(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/System/Info" {
+		if r.URL.Path != testEmbyPathSystemInfo {
 			t.Errorf("Expected /System/Info, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"ServerName":"Test","Version":"1.0"}`)))
+		_, _ = w.Write([]byte(`{"ServerName":"Test","Version":"1.0"}`))
 	}))
 	defer srv.Close()
 
-	client := NewEmbyClient(srv.URL+"/", "test-key")
+	client := NewEmbyClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

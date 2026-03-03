@@ -212,6 +212,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 
 // --- RuleValueFetcher implementation ---
 
+// GetQualityProfiles returns available quality profiles from Radarr.
 func (r *RadarrClient) GetQualityProfiles() ([]NameValue, error) {
 	body, err := r.doRequest("/api/v3/qualityprofile")
 	if err != nil {
@@ -274,11 +275,11 @@ func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {
 	}
 	req.Header.Set("X-Api-Key", r.APIKey)
 
-	resp, err := sharedHTTPClient.Do(req)
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 {
 		return fmt.Errorf("unauthorized: invalid API key")

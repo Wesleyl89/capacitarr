@@ -7,12 +7,18 @@ import (
 	"testing"
 )
 
+const (
+	testRadarrPathStatus  = "/api/v3/system/status"
+	testRadarrPathQuality = "/api/v3/qualityprofile"
+	testRadarrPathTag     = "/api/v3/tag"
+)
+
 func TestRadarrClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v3/system/status" {
+		if r.URL.Path != testRadarrPathStatus {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Api-Key") != "test-key" {
+		if r.Header.Get("X-Api-Key") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.WriteHeader(http.StatusOK)
@@ -20,7 +26,7 @@ func TestRadarrClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -45,7 +51,7 @@ func TestRadarrClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -68,7 +74,7 @@ func TestRadarrClient_GetDiskSpace(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	disks, err := client.GetDiskSpace()
 	if err != nil {
 		t.Fatalf("GetDiskSpace should succeed: %v", err)
@@ -88,7 +94,7 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			resp := []radarrQualityProfile{
 				{ID: 1, Name: "HD-1080p"},
 				{ID: 2, Name: "Ultra-HD"},
@@ -96,7 +102,7 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
 				t.Fatalf("Failed to encode response: %v", err)
 			}
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			resp := []radarrTag{
 				{ID: 1, Label: "christmas"},
 				{ID: 2, Label: "classic"},
@@ -166,7 +172,7 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed: %v", err)
@@ -209,9 +215,9 @@ func TestRadarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v3/movie":
 			_, _ = w.Write([]byte(`not json at all`))
@@ -221,7 +227,7 @@ func TestRadarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetMediaItems()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -232,9 +238,9 @@ func TestRadarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v3/qualityprofile":
+		case testRadarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v3/tag":
+		case testRadarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v3/movie":
 			_, _ = w.Write([]byte(`[]`))
@@ -244,7 +250,7 @@ func TestRadarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	items, err := client.GetMediaItems()
 	if err != nil {
 		t.Fatalf("GetMediaItems should succeed with empty: %v", err)
@@ -270,7 +276,7 @@ func TestRadarrClient_GetRootFolders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	folders, err := client.GetRootFolders()
 	if err != nil {
 		t.Fatalf("GetRootFolders should succeed: %v", err)
@@ -282,7 +288,7 @@ func TestRadarrClient_GetRootFolders(t *testing.T) {
 
 func TestRadarrClient_GetQualityProfiles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v3/qualityprofile" {
+		if r.URL.Path == testRadarrPathQuality {
 			resp := []radarrQualityProfile{{ID: 1, Name: "Any"}, {ID: 2, Name: "Ultra-HD"}}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -294,7 +300,7 @@ func TestRadarrClient_GetQualityProfiles(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	profiles, err := client.GetQualityProfiles()
 	if err != nil {
 		t.Fatalf("GetQualityProfiles should succeed: %v", err)
@@ -306,7 +312,7 @@ func TestRadarrClient_GetQualityProfiles(t *testing.T) {
 
 func TestRadarrClient_GetTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v3/tag" {
+		if r.URL.Path == testRadarrPathTag {
 			resp := []radarrTag{{ID: 1, Label: "action"}}
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -318,7 +324,7 @@ func TestRadarrClient_GetTags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL, "test-key")
+	client := NewRadarrClient(srv.URL, testTautulliAPIKey)
 	tags, err := client.GetTags()
 	if err != nil {
 		t.Fatalf("GetTags should succeed: %v", err)
@@ -330,7 +336,7 @@ func TestRadarrClient_GetTags(t *testing.T) {
 
 func TestRadarrClient_URLTrailingSlash(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v3/system/status" {
+		if r.URL.Path != testRadarrPathStatus {
 			t.Errorf("Expected /api/v3/system/status, got %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -338,7 +344,7 @@ func TestRadarrClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRadarrClient(srv.URL+"/", "test-key")
+	client := NewRadarrClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

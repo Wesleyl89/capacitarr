@@ -14,6 +14,14 @@ const (
 	EventEngineComplete   = "engine_complete"
 )
 
+// Emoji constants shared by notification formatters (Discord, Slack).
+const (
+	emojiRed    = "🔴"
+	emojiYellow = "🟡"
+	emojiGreen  = "🟢"
+	emojiInfo   = "ℹ️"
+)
+
 // NotificationEvent represents something that happened that channels may want to know about.
 type NotificationEvent struct {
 	Type    string            // One of the Event* constants

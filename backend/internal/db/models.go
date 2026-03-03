@@ -23,7 +23,7 @@ type LibraryHistory struct {
 	Timestamp     time.Time `gorm:"index;not null" json:"timestamp"`
 	TotalCapacity int64     `gorm:"not null" json:"totalCapacity"`
 	UsedCapacity  int64     `gorm:"not null" json:"usedCapacity"`
-	Resolution    string    `gorm:"index;not null" json:"resolution"` // "raw", "hourly", "daily", "weekly"
+	Resolution    string    `gorm:"index;not null" json:"resolution"`   // "raw", "hourly", "daily", "weekly"
 	DiskGroupID   *uint     `gorm:"index" json:"diskGroupId,omitempty"` // Optional FK to DiskGroup
 	CreatedAt     time.Time `json:"createdAt"`
 }
@@ -127,9 +127,9 @@ type EngineRunStats struct {
 // LifetimeStats stores cumulative counters that persist across container restarts
 // and are NOT cleared by the "Clear All Scraped Data" action. Singleton row (id=1).
 type LifetimeStats struct {
-	ID                  uint  `gorm:"primarykey" json:"id"`
-	TotalBytesReclaimed int64 `gorm:"not null;default:0" json:"totalBytesReclaimed"`
-	TotalItemsRemoved   int   `gorm:"not null;default:0" json:"totalItemsRemoved"`
+	ID                  uint      `gorm:"primarykey" json:"id"`
+	TotalBytesReclaimed int64     `gorm:"not null;default:0" json:"totalBytesReclaimed"`
+	TotalItemsRemoved   int       `gorm:"not null;default:0" json:"totalItemsRemoved"`
 	TotalEngineRuns     int       `gorm:"not null;default:0" json:"totalEngineRuns"`
 	CreatedAt           time.Time `json:"createdAt"`
 	UpdatedAt           time.Time `json:"updatedAt"`
@@ -138,9 +138,9 @@ type LifetimeStats struct {
 // NotificationConfig stores a configured notification channel (Discord, Slack, or in-app).
 type NotificationConfig struct {
 	ID         uint   `gorm:"primarykey" json:"id"`
-	Type       string `gorm:"not null" json:"type"`          // "discord", "slack", "inapp"
-	Name       string `gorm:"not null" json:"name"`          // User-friendly name
-	WebhookURL string `json:"webhookUrl,omitempty"`          // Discord/Slack webhook URL
+	Type       string `gorm:"not null" json:"type"` // "discord", "slack", "inapp"
+	Name       string `gorm:"not null" json:"name"` // User-friendly name
+	WebhookURL string `json:"webhookUrl,omitempty"` // Discord/Slack webhook URL
 	Enabled    bool   `gorm:"default:true" json:"enabled"`
 	// Event subscriptions — which events trigger this channel
 	OnThresholdBreach  bool      `gorm:"default:true" json:"onThresholdBreach"`

@@ -1,3 +1,4 @@
+// Package poller orchestrates periodic media library polling and capacity evaluation.
 package poller
 
 import (

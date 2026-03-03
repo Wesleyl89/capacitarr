@@ -12,7 +12,7 @@ func TestOverseerrClient_TestConnection_Success(t *testing.T) {
 		if r.URL.Path != "/api/v1/status" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		if r.Header.Get("X-Api-Key") != "test-key" {
+		if r.Header.Get("X-Api-Key") != testTautulliAPIKey {
 			t.Errorf("Missing or wrong API key header")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -20,7 +20,7 @@ func TestOverseerrClient_TestConnection_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestOverseerrClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -59,7 +59,7 @@ func TestOverseerrClient_TestConnection_EmptyVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail when version is empty")
@@ -73,7 +73,7 @@ func TestOverseerrClient_TestConnection_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with malformed JSON")
@@ -137,7 +137,7 @@ func TestOverseerrClient_GetRequestedMedia(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	requests, err := client.GetRequestedMedia()
 	if err != nil {
 		t.Fatalf("GetRequestedMedia should succeed: %v", err)
@@ -229,7 +229,7 @@ func TestOverseerrClient_GetRequestedMedia_Pagination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	requests, err := client.GetRequestedMedia()
 	if err != nil {
 		t.Fatalf("GetRequestedMedia should succeed: %v", err)
@@ -252,7 +252,7 @@ func TestOverseerrClient_GetRequestedMedia_EmptyResults(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	requests, err := client.GetRequestedMedia()
 	if err != nil {
 		t.Fatalf("GetRequestedMedia should succeed with empty: %v", err)
@@ -269,7 +269,7 @@ func TestOverseerrClient_GetRequestedMedia_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL, "test-key")
+	client := NewOverseerrClient(srv.URL, testTautulliAPIKey)
 	_, err := client.GetRequestedMedia()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
@@ -286,7 +286,7 @@ func TestOverseerrClient_URLTrailingSlash(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewOverseerrClient(srv.URL+"/", "test-key")
+	client := NewOverseerrClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}

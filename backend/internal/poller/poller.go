@@ -291,5 +291,3 @@ func createClient(intType, url, apiKey string) integrations.Integration {
 		return nil
 	}
 }
-
-

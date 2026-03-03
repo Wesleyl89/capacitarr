@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const testPlexPathSections = "/library/sections"
+
 func TestPlexClient_TestConnection_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/identity" {
@@ -91,7 +93,7 @@ func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/library/sections":
+		case testPlexPathSections:
 			resp := plexLibraryResponse{}
 			resp.MediaContainer.Directory = []struct {
 				Key   string `json:"key"`
@@ -115,7 +117,9 @@ func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
 					ViewCount:      3,
 					LastViewedAt:   1700000000,
 					AddedAt:        1680000000,
-					Genre:          []struct{ Tag string `json:"tag"` }{{Tag: "Action"}, {Tag: "Sci-Fi"}},
+					Genre: []struct {
+						Tag string `json:"tag"`
+					}{{Tag: "Action"}, {Tag: "Sci-Fi"}},
 					Media: []struct {
 						Part []struct {
 							File string `json:"file"`
@@ -213,7 +217,7 @@ func TestPlexClient_GetMediaItems_ShowLibrary(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/library/sections":
+		case testPlexPathSections:
 			resp := plexLibraryResponse{}
 			resp.MediaContainer.Directory = []struct {
 				Key   string `json:"key"`
@@ -267,7 +271,7 @@ func TestPlexClient_GetMediaItems_SkipsNonMediaLibraries(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/library/sections":
+		case testPlexPathSections:
 			resp := plexLibraryResponse{}
 			resp.MediaContainer.Directory = []struct {
 				Key   string `json:"key"`
@@ -301,7 +305,7 @@ func TestPlexClient_GetMediaItems_EmptyLibrary(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/library/sections":
+		case testPlexPathSections:
 			_, _ = w.Write([]byte(`{"MediaContainer":{"Directory":[]}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -322,7 +326,7 @@ func TestPlexClient_GetMediaItems_EmptyLibrary(t *testing.T) {
 func TestPlexClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/library/sections" {
+		if r.URL.Path == testPlexPathSections {
 			_, _ = w.Write([]byte(`not json at all`))
 			return
 		}
@@ -339,7 +343,7 @@ func TestPlexClient_GetMediaItems_MalformedJSON(t *testing.T) {
 
 func TestPlexClient_GetLibrarySections(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/library/sections" {
+		if r.URL.Path == testPlexPathSections {
 			w.Header().Set("Content-Type", "application/json")
 			resp := plexLibraryResponse{}
 			resp.MediaContainer.Directory = []struct {

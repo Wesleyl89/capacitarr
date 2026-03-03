@@ -1,3 +1,4 @@
+// Package routes defines HTTP handlers and middleware for the Capacitarr API.
 package routes
 
 import (

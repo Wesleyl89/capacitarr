@@ -1,3 +1,4 @@
+// Package integrations provides clients for external media management services.
 package integrations
 
 import (

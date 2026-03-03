@@ -13,15 +13,15 @@ import (
 func slackEmoji(eventType string) string {
 	switch eventType {
 	case EventThresholdBreach:
-		return "🔴"
+		return emojiRed
 	case EventDeletionExecuted:
-		return "🟡"
+		return emojiYellow
 	case EventEngineError:
-		return "🔴"
+		return emojiRed
 	case EventEngineComplete:
-		return "🟢"
+		return emojiGreen
 	default:
-		return "ℹ️"
+		return emojiInfo
 	}
 }
 
@@ -95,11 +95,11 @@ func SendSlack(webhookURL string, event NotificationEvent) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := webhookHTTPClient.Do(req)
+	resp, err := webhookHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured webhook settings
 	if err != nil {
 		return fmt.Errorf("slack webhook request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("slack webhook returned status %d", resp.StatusCode)
