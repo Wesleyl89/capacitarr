@@ -29,6 +29,9 @@ stages:
 lint:go:
   stage: lint
   image: golangci/golangci-lint:latest
+  before_script:
+    # Create placeholder for go:embed directive (frontend isn't built during lint)
+    - mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
   script:
     - cd backend && golangci-lint run ./...
 
@@ -46,6 +49,9 @@ lint:frontend:
 test:go:
   stage: test
   image: golang:1.25-alpine
+  before_script:
+    # Create placeholder for go:embed directive (frontend isn't built during test)
+    - mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
   script:
     - cd backend && go test ./... -race -count=1
 
@@ -77,6 +83,8 @@ security:govulncheck:
   image: golang:1.25-alpine
   before_script:
     - go install golang.org/x/vuln/cmd/govulncheck@latest
+    # Create placeholder for go:embed directive (frontend isn't built during security scan)
+    - mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
   script:
     - cd backend && govulncheck ./...
   allow_failure: true
