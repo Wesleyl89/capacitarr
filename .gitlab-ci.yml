@@ -20,6 +20,10 @@ lint:go:
   image: golangci/golangci-lint:latest
   script:
     - cd backend && golangci-lint run ./...
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 lint:frontend:
   stage: lint
@@ -28,7 +32,11 @@ lint:frontend:
     - corepack enable
     - cd frontend && pnpm install --frozen-lockfile
   script:
-    - cd frontend && pnpm lint
+    - pnpm lint
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
@@ -37,6 +45,10 @@ test:go:
   image: golang:1.25-alpine
   script:
     - cd backend && go test ./... -race -count=1
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 test:frontend:
   stage: test
@@ -45,7 +57,11 @@ test:frontend:
     - corepack enable
     - cd frontend && pnpm install --frozen-lockfile
   script:
-    - cd frontend && pnpm test
+    - pnpm test
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +75,8 @@ build:docker:
   script:
     - docker buildx build --platform linux/amd64,linux/arm64 .
   rules:
+    - if: $CI_COMMIT_TAG
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -72,6 +90,10 @@ security:govulncheck:
   script:
     - cd backend && govulncheck ./...
   allow_failure: true
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 security:pnpm-audit:
   stage: security
@@ -80,8 +102,12 @@ security:pnpm-audit:
     - corepack enable
     - cd frontend && pnpm install --frozen-lockfile
   script:
-    - cd frontend && pnpm audit
+    - pnpm audit
   allow_failure: true
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
 
 # ── Release (tag-triggered) ──────────────────────────────────────────────────
 
@@ -161,8 +187,7 @@ pages:
     - corepack enable
     - cd site && pnpm install --frozen-lockfile
   script:
-    - cd site
-    # Sync docs, screenshots, and changelog
+    # Sync docs, screenshots, and changelog (already in site/ from before_script cd)
     - node scripts/sync-docs.mjs
     # Copy favicon
     - cp ../frontend/public/favicon.ico public/favicon.ico 2>/dev/null || true
