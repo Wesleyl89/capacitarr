@@ -1,3 +1,8 @@
+## [0.1.2] - 2026-03-03
+
+### 🐛 Bug Fixes
+
+- *(ci)* Add release_notes.md to .gitignore ([3bc13cc](https://gitlab.com/starshadow/software/capacitarr/-/commit/3bc13cc1661f31c21dd5de938b87ed13a91c9b6d))
 ## [0.1.1] - 2026-03-03
 
 ### 🐛 Bug Fixes
