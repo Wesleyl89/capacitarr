@@ -1,3 +1,9 @@
+## [1.0.0-rc.1] - 2026-03-03
+
+### 🐛 Bug Fixes
+
+- *(deps)* Update golang.org/x/net to v0.51.0 (GO-2026-4559) ([164d22d](https://gitlab.com/starshadow/software/capacitarr/-/commit/164d22d2a5c8779f326f89906ab117c8b54c1f08))
+- Include package-lock.json and frontend version in release script ([37eabc2](https://gitlab.com/starshadow/software/capacitarr/-/commit/37eabc28c38b4bed4cfa609b5aed935ecfab5871))
 ## [0.1.2] - 2026-03-03
 
 ### 🐛 Bug Fixes
@@ -127,52 +133,9 @@
 - Add go:embed placeholder to make check target ([e917633](https://gitlab.com/starshadow/software/capacitarr/-/commit/e9176338b94a584cf0302248d75e296e13526022))
 - *(ci)* Remove -race flag from Go tests and add vue as dev dependency ([c79462e](https://gitlab.com/starshadow/software/capacitarr/-/commit/c79462e2bcb011d76a9402f753c064ad76ebd47b))
 
-### 🚜 Refactor
+### 🛡️ Security
 
-- *(poller)* Decompose into fetch, evaluate, delete, and stats modules ([dec5b06](https://gitlab.com/starshadow/software/capacitarr/-/commit/dec5b0654e26940b6964f211bdb0126e02c9731f))
-- *(routes)* Split rules.go into preferences, rules, and preview handlers ([4cd7762](https://gitlab.com/starshadow/software/capacitarr/-/commit/4cd7762bbed30eb023aaf1164f139d740f5dec8a))
-- Remove cleanup sparkline and backend endpoint ([c7b809b](https://gitlab.com/starshadow/software/capacitarr/-/commit/c7b809b426f8679e070ef7456944fc5dcb8020db))
-- UI refinements — navbar, deletion safety, help page audit ([97069a3](https://gitlab.com/starshadow/software/capacitarr/-/commit/97069a338e7a5b1ae4d6121637c13a8045ab485b))
-- Deletion safety uses toggle with red active state, simplified confirmation ([7532fc7](https://gitlab.com/starshadow/software/capacitarr/-/commit/7532fc7586a9436d86546b95b1611140e5b95cbb))
-- Rename ProtectionRule → CustomRule, /protections → /custom-rules, availability → seriesstatus ([a279bf9](https://gitlab.com/starshadow/software/capacitarr/-/commit/a279bf9f058f02fa6ad7583b25594e6aade99a34))
-- *(db)* Migrate from mattn/go-sqlite3 to ncruces/go-sqlite3 ([828236d](https://gitlab.com/starshadow/software/capacitarr/-/commit/828236d76eae2a96adda18522b29c6f97bfdeddd))
-- *(ci)* Single pipeline with conditional release stage ([8f9ee00](https://gitlab.com/starshadow/software/capacitarr/-/commit/8f9ee00f688bd36619f3e4783abc5a67bb9a17a9))
-
-### 📚 Documentation
-
-- Add UX refinement and decoupling plans ([4a1f7af](https://gitlab.com/starshadow/software/capacitarr/-/commit/4a1f7afddd0d2453dff593cd97617a1653ee9e6a))
-- Add safety guard and i18n follow-up plans ([4876e45](https://gitlab.com/starshadow/software/capacitarr/-/commit/4876e45cbd0efd21f28c095e3139c12f4e9553bf))
-- Add engine stats persistence plan ([9650053](https://gitlab.com/starshadow/software/capacitarr/-/commit/9650053f014321487fd2a6edceefe5e57a38bc61))
-- Add complete code audit plan ([916cf63](https://gitlab.com/starshadow/software/capacitarr/-/commit/916cf63daf9f7f41ead1a98bc2adee8254c77dde))
-- Fix CHANGELOG.md header to reference git-cliff instead of commit-and-tag-version ([d94b9a7](https://gitlab.com/starshadow/software/capacitarr/-/commit/d94b9a737062a3f61b4b446a2747d6e32ab6e01b))
-- Fix README typos, add comprehensive env var table, and update deployment docs ([ef56c3e](https://gitlab.com/starshadow/software/capacitarr/-/commit/ef56c3e49e797c37245bcbd3551e9917d7bb707c))
-- Add doc comments to all exported Go functions ([fac1748](https://gitlab.com/starshadow/software/capacitarr/-/commit/fac17485e3a2fef5adc58805c3bf94bbcb17d972))
-- Update CONTRIBUTING.md with testing and CI/CD information ([ad1f12d](https://gitlab.com/starshadow/software/capacitarr/-/commit/ad1f12d9908a6566347b51197c693b2c2246982c))
-- Add release workflow documentation ([1f60139](https://gitlab.com/starshadow/software/capacitarr/-/commit/1f601390263398c6a49364c104cfd4b02245ac11))
-- Add configuration reference and scoring algorithm documentation ([793c14e](https://gitlab.com/starshadow/software/capacitarr/-/commit/793c14ecbfcc5b095d61885f8045246469a0f260))
-- Rewrite README with comprehensive project documentation ([0a83267](https://gitlab.com/starshadow/software/capacitarr/-/commit/0a832678acb7a25e23f5779fcfe9802c159470ee))
-- Add plan for removing cleanup sparkline ([1f5600b](https://gitlab.com/starshadow/software/capacitarr/-/commit/1f5600bf4febf6d2e51e726df9cdddec3da638c1))
-- Add API documentation and specification plan ([75ec250](https://gitlab.com/starshadow/software/capacitarr/-/commit/75ec250ca2db079f3d042547f78dc5b21bf80023))
-- Add OpenAPI spec, API documentation, and versioning policy ([4a4d043](https://gitlab.com/starshadow/software/capacitarr/-/commit/4a4d043fef124304dfcb9e0d2df84925d1862f9e))
-- Add internationalization implementation plan ([b78b964](https://gitlab.com/starshadow/software/capacitarr/-/commit/b78b964a40d596bcd5fbd2579e9c9b0663f3bcd3))
-- *(help)* Comprehensive audit and UX redo of help page ([0beee87](https://gitlab.com/starshadow/software/capacitarr/-/commit/0beee87e02929fc917cc84ef5453b7eff441e0e7))
-- Add 'From the Author' note with Ukraine support in Help About card ([506ffb4](https://gitlab.com/starshadow/software/capacitarr/-/commit/506ffb4097ff6f58dcb39bc5a8ee214c05a915a7))
-- Add Nuxt UI Pro plans and update Astro site plan ([df222d6](https://gitlab.com/starshadow/software/capacitarr/-/commit/df222d65711edf65122c9a2f2fd640dcb633a7aa))
-- Add build, CI/CD, and publishing overhaul plan ([579f20d](https://gitlab.com/starshadow/software/capacitarr/-/commit/579f20d765589a0e9beb230a1719b8c43a592677))
-- Add arm64 and pure-go sqlite migration plan ([ab52f73](https://gitlab.com/starshadow/software/capacitarr/-/commit/ab52f73498d3aea61e984f92c26e5c70862f991e))
-- Mark arm64 and pure-go sqlite plan as complete ([9e7e823](https://gitlab.com/starshadow/software/capacitarr/-/commit/9e7e8230d6a08262a042a12d64810616afdf9f0d))
-- Add pre-release versioning plan ([8cb3153](https://gitlab.com/starshadow/software/capacitarr/-/commit/8cb3153cf086f6f5766f0830b77976e600ad1356))
-
-### ⚙️ Miscellaneous Tasks
-
-- Initial scaffolding for Phase 1 ([08a05b9](https://gitlab.com/starshadow/software/capacitarr/-/commit/08a05b9dac567e8e736ddf25797f55d5f184208d))
-- Integrate git cliff for changelogs ([22d6ca8](https://gitlab.com/starshadow/software/capacitarr/-/commit/22d6ca82558af04b3dfd9ccb0d0c5034b3139a6c))
-- *(dx)* Add Makefile and lint/format scripts ([e0bca2a](https://gitlab.com/starshadow/software/capacitarr/-/commit/e0bca2afdbdd40c9663fea12110cfdd3b43d36f8))
-- *(lint)* Expand golangci-lint config with security and quality linters ([bfba513](https://gitlab.com/starshadow/software/capacitarr/-/commit/bfba513f7a88897bd6e72f9f3e3ff3801dccd59a))
-- *(lint)* Exclude goconst from test files ([e1811d6](https://gitlab.com/starshadow/software/capacitarr/-/commit/e1811d659a96229240b9549713c9f1abcd2823ce))
-- *(docker)* Optimize Dockerfile with pinned alpine, Node 22, labels, and healthcheck ([54a7a79](https://gitlab.com/starshadow/software/capacitarr/-/commit/54a7a796cf6de2a13efed73e8444749c7882be91))
-- Regenerate pnpm-lock.yaml for @nuxtjs/i18n ([2c564e9](https://gitlab.com/starshadow/software/capacitarr/-/commit/2c564e93b3398e566de15a4ddb7e1189da1dabb3))
-- Remove manually-maintained 'What's New' section from help page ([6a0a7fd](https://gitlab.com/starshadow/software/capacitarr/-/commit/6a0a7fdcf7db9cafa23376b3048876fceefa4a1a))
+- Add GitLab CI pipeline with lint, test, build, and security stages ([e544a68](https://gitlab.com/starshadow/software/capacitarr/-/commit/e544a685de70d98d46eedb0e95168de1e1b1c253))
 
 ### ◀️ Revert
 
