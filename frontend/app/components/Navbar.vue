@@ -83,7 +83,7 @@
             </UiPopoverTrigger>
             <UiPopoverContent
               align="end"
-              class="w-80 p-0 bg-popover"
+              class="w-80 p-0"
             >
               <div class="flex items-center justify-between px-4 py-3 border-b border-border">
                 <h4 class="text-sm font-semibold">

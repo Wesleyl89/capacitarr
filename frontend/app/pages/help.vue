@@ -522,10 +522,15 @@
 
           <!-- From the Author -->
           <div class="space-y-2 pt-4 border-t border-border/50">
-            <p class="text-xs text-muted-foreground/70 leading-relaxed">
-              <span class="inline-block mr-1">🇺🇦</span>
-              I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.
-            </p>
+            <div class="flex items-start gap-2">
+              <span class="inline-flex flex-col shrink-0 mt-0.5 w-5 h-3.5 rounded-sm overflow-hidden shadow-sm" aria-label="Ukrainian flag">
+                <span class="w-full flex-1 bg-[#005BBB]" />
+                <span class="w-full flex-1 bg-[#FFD500]" />
+              </span>
+              <p class="text-xs text-muted-foreground/70 leading-relaxed">
+                🇺🇦 I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.
+              </p>
+            </div>
           </div>
         </div>
       </details>
