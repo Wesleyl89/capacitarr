@@ -737,9 +737,9 @@ html {
 /* Range fill — rich primary gradient */
 [data-slot="slider-range"] {
   background: linear-gradient(90deg,
-    oklch(from var(--color-primary) calc(l - 0.05) c h),
+    color-mix(in oklch, var(--color-primary), black 8%),
     var(--color-primary),
-    oklch(from var(--color-primary) calc(l + 0.06) c h)
+    color-mix(in oklch, var(--color-primary), white 10%)
   );
   box-shadow: 0 0 6px oklch(from var(--color-primary) l c h / 0.25);
 }
@@ -753,7 +753,7 @@ html {
   width: 14px;
   height: 14px;
   background: var(--color-primary);
-  border: 2px solid oklch(from var(--color-primary) calc(l + 0.15) c h);
+  border: 2px solid color-mix(in oklch, var(--color-primary), white 25%);
   box-shadow:
     0 1px 4px oklch(from var(--color-primary) l c h / 0.3),
     0 0 0 2px oklch(from var(--color-primary) l c h / 0.1);
@@ -777,7 +777,7 @@ html {
 
 .dark [data-slot="slider-thumb"] {
   background: var(--color-primary);
-  border-color: oklch(from var(--color-primary) calc(l + 0.2) c h);
+  border-color: color-mix(in oklch, var(--color-primary), white 33%);
   box-shadow:
     0 1px 6px oklch(from var(--color-primary) l c h / 0.4),
     0 0 0 2px oklch(from var(--color-primary) l c h / 0.15),
