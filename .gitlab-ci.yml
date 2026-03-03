@@ -171,11 +171,37 @@ release:
 
 pages:
   stage: pages
-  image: python:3.12-alpine
+  image: node:22-alpine
   before_script:
-    - pip install mkdocs-material mkdocs-exclude
+    - corepack enable
+    - cd site && pnpm install --frozen-lockfile
   script:
-    - cd capacitarr && mkdocs build --strict --site-dir ../public
+    - cd site
+    # Sync docs (file-by-file copy from docs/ into content/docs/)
+    - mkdir -p content/docs/api
+    - cp ../docs/index.md content/docs/
+    - cp ../docs/deployment.md content/docs/
+    - cp ../docs/configuration.md content/docs/
+    - cp ../docs/scoring.md content/docs/
+    - cp ../docs/releasing.md content/docs/
+    - cp ../docs/api/README.md content/docs/api/index.md
+    - cp ../docs/api/examples.md content/docs/api/
+    - cp ../docs/api/workflows.md content/docs/api/
+    - cp ../docs/api/versioning.md content/docs/api/
+    # Inject changelog
+    - |
+      echo '---' > content/docs/changelog.md
+      echo 'title: Changelog' >> content/docs/changelog.md
+      echo '---' >> content/docs/changelog.md
+      echo '' >> content/docs/changelog.md
+      cat ../CHANGELOG.md >> content/docs/changelog.md
+    # Copy assets
+    - mkdir -p public/screenshots
+    - cp -r ../screenshots/* public/screenshots/ 2>/dev/null || true
+    - cp ../frontend/public/favicon.ico public/favicon.ico 2>/dev/null || true
+    # Build static site
+    - pnpm generate
+    - mv .output/public/ ../public/
   artifacts:
     paths:
       - public

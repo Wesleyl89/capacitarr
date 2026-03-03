@@ -1,0 +1,28 @@
+# Nuxt dev/build outputs
+.output
+.nuxt
+.data
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode
+*.sw?
+
+# Synced docs (generated at build time)
+content/docs/*.md
+content/docs/api/*.md
+!content/docs/.gitkeep

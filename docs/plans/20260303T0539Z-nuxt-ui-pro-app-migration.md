@@ -1,26 +1,35 @@
-# Nuxt UI Pro App Migration — Replace shadcn-vue
+# Nuxt UI v4 App Migration — Replace shadcn-vue
 
 **Created:** 2026-03-03T05:39Z
-**Scope:** Migrate `capacitarr/frontend/` from shadcn-vue + @vueuse/motion to Nuxt UI (Pro)
-**Prerequisite:** Nuxt UI Pro license (same license as the site plan)
+**Updated:** 2026-03-03T14:07Z
+**Scope:** Migrate `capacitarr/frontend/` from shadcn-vue + @vueuse/motion to Nuxt UI v4
 
 ## Overview
 
-Replace all shadcn-vue components in the Capacitarr frontend with Nuxt UI equivalents. This unifies the component library across both the app and the project site, eliminates 60+ copied component files under `components/ui/`, and gains access to Nuxt UI Pro's dashboard layout components.
+Replace all shadcn-vue components in the Capacitarr frontend with Nuxt UI v4 equivalents. This unifies the component library across both the app and the project site, eliminates 60+ copied component files under `components/ui/`, and gains access to Nuxt UI v4's dashboard layout components, TanStack-powered tables, and built-in toast system.
+
+## Why Nuxt UI v4 (not v3 / Pro)
+
+In Nuxt UI v4 (`@nuxt/ui@^4.5`), all previously-Pro components are **included in the base package**. The separate `@nuxt/ui-pro` module is legacy v3 only.
+
+- **No license required** — the `NUXT_UI_PRO_LICENSE` env var is a v3 concept
+- **One package:** `@nuxt/ui` provides all 100+ components (base + dashboard + page layout)
+- **TanStack Table:** `UTable` is powered by `@tanstack/vue-table` with full sorting, filtering, pagination
+- **Modern stack:** Reka UI primitives, Tailwind CSS v4, Tailwind Variants, `motion-v` for animations
 
 ## Current State
 
 ### shadcn-vue Components in Use (287 instances across the app)
 
-| shadcn-vue Component | Usage Count | Nuxt UI Equivalent |
-|---------------------|-------------|-------------------|
+| shadcn-vue Component | Usage Count | Nuxt UI v4 Equivalent |
+|---------------------|-------------|----------------------|
 | `UiButton` | ~40 | `UButton` |
 | `UiCard` / `UiCardHeader` / `UiCardContent` / `UiCardFooter` | ~50 | `UCard` |
 | `UiSelect` / `UiSelectTrigger` / `UiSelectContent` / `UiSelectItem` | ~40 | `USelect` or `USelectMenu` |
 | `UiInput` | ~15 | `UInput` |
 | `UiLabel` | ~20 | `UFormField` (wraps label + input) |
 | `UiDialog` / `UiDialogContent` / `UiDialogHeader` / `UiDialogFooter` | ~20 | `UModal` |
-| `UiTable` / `UiTableHeader` / `UiTableBody` / `UiTableRow` / `UiTableCell` | ~30 | `UTable` |
+| `UiTable` / `UiTableHeader` / `UiTableBody` / `UiTableRow` / `UiTableCell` | ~30 | `UTable` (TanStack-powered) |
 | `UiBadge` | ~15 | `UBadge` |
 | `UiAlert` / `UiAlertTitle` / `UiAlertDescription` | ~8 | `UAlert` |
 | `UiSwitch` | ~10 | `USwitch` |
@@ -30,20 +39,20 @@ Replace all shadcn-vue components in the Capacitarr frontend with Nuxt UI equiva
 | `UiDropdownMenu` / `UiDropdownMenuTrigger` / `UiDropdownMenuContent` / `UiDropdownMenuItem` | ~12 | `UDropdownMenu` |
 | `UiTooltip` / `UiTooltipTrigger` / `UiTooltipContent` | ~4 | `UTooltip` |
 | `UiCommand` / `UiCommandInput` / `UiCommandList` / `UiCommandItem` | ~5 | `UCommandPalette` |
-| `UiSeparator` | ~4 | `UDivider` |
+| `UiSeparator` | ~4 | `USeparator` |
 | `UiProgress` | ~1 | `UProgress` |
 | `UiSkeleton` | ~2 | `USkeleton` |
-| `UiCollapsible` | ~1 | native `<details>` or custom |
-| `UiScrollArea` | ~2 | native CSS `overflow-y: auto` |
+| `UiCollapsible` | ~1 | `UCollapsible` |
+| `UiScrollArea` | ~2 | `UScrollArea` |
 
 ### Other Libraries to Remove
 
-| Library | Current Use | Nuxt UI Replacement |
-|---------|------------|-------------------|
-| `@vueuse/motion` (`v-motion`) | Card entrance animations | Nuxt UI's built-in transitions or CSS `@keyframes` |
-| `reka-ui` | Primitive headless components (used by shadcn-vue internally) | Reka UI is already used by Nuxt UI internally — no change |
-| `@radix-icons/vue` | Icons | `@nuxt/icon` module with Iconify (bundled with Nuxt UI) |
-| `tailwind-variants` / `class-variance-authority` | Component variant styling | Nuxt UI handles variants internally via `app.config.ts` |
+| Library | Current Use | Nuxt UI v4 Replacement |
+|---------|------------|----------------------|
+| `@vueuse/motion` (`v-motion`) | Card entrance animations | `motion-v` (bundled with Nuxt UI v4) or CSS `@keyframes` |
+| `reka-ui` | Primitive headless components (used by shadcn-vue internally) | Reka UI is already used by Nuxt UI v4 internally — no change |
+| `@radix-icons/vue` | Icons | `@nuxt/icon` module with Iconify (bundled with Nuxt UI v4) |
+| `tailwind-variants` / `class-variance-authority` | Component variant styling | `tailwind-variants` is used by Nuxt UI v4 internally — can keep or let Nuxt UI manage it |
 
 ### Files to Delete
 
@@ -75,14 +84,14 @@ All 60+ files under `frontend/app/components/ui/`:
 - `tooltip/` (5 files)
 
 Also delete:
-- `frontend/app/lib/utils.ts` (shadcn's `cn()` utility — Nuxt UI doesn't need it)
+- `frontend/app/lib/utils.ts` (shadcn's `cn()` utility — Nuxt UI v4 uses Tailwind Variants internally)
 - `frontend/components.json` (shadcn-vue config)
 
 ## Migration Approach
 
 ### API Differences
 
-Nuxt UI components are **simpler** than shadcn-vue's compound component pattern. For example:
+Nuxt UI v4 components are **simpler** than shadcn-vue's compound component pattern. For example:
 
 **shadcn-vue (verbose compound components):**
 ```vue
@@ -97,7 +106,7 @@ Nuxt UI components are **simpler** than shadcn-vue's compound component pattern.
 </UiSelect>
 ```
 
-**Nuxt UI (single component with props):**
+**Nuxt UI v4 (single component with props):**
 ```vue
 <USelectMenu
   v-model="value"
@@ -125,7 +134,7 @@ Nuxt UI components are **simpler** than shadcn-vue's compound component pattern.
 </UiDialog>
 ```
 
-**Nuxt UI Modal:**
+**Nuxt UI v4 Modal:**
 ```vue
 <UModal v-model:open="show" title="Title" description="Description">
   <p>Content</p>
@@ -153,18 +162,55 @@ Nuxt UI components are **simpler** than shadcn-vue's compound component pattern.
 </UiTable>
 ```
 
-**Nuxt UI Table (data-driven):**
+**Nuxt UI v4 Table (TanStack-powered with ColumnDef):**
 ```vue
-<UTable
-  :columns="[
-    { key: 'name', label: 'Name' },
-    { key: 'score', label: 'Score' },
-  ]"
-  :rows="items"
-/>
+<script setup lang="ts">
+import type { ColumnDef } from '@tanstack/vue-table'
+
+const columns: ColumnDef<Item>[] = [
+  { accessorKey: 'name', header: 'Name' },
+  { accessorKey: 'score', header: 'Score' },
+]
+</script>
+
+<template>
+  <UTable :columns="columns" :data="items" />
+</template>
 ```
 
-This means the migration generally **reduces** template complexity, but requires restructuring data into the format Nuxt UI expects (arrays of objects for selects/tables instead of inline `<Item>` elements).
+The v4 `UTable` uses TanStack Table's `ColumnDef` API, which supports:
+- `accessorKey` / `accessorFn` for data access
+- `header` (string or render function) for column headers
+- `cell` render function for custom cell rendering
+- Built-in sorting, filtering, pagination, row selection, column pinning
+- Row expansion via TanStack's `ExpandedState`
+
+This means the migration **reduces** template verbosity, but requires restructuring data into TanStack Table format (column definitions + data arrays).
+
+**shadcn-vue Toast (custom composable):**
+```vue
+<!-- Using custom ToastContainer.vue + useToast composable -->
+```
+
+**Nuxt UI v4 Toast:**
+```vue
+<script setup lang="ts">
+const toast = useToast()
+
+function showSuccess() {
+  toast.add({
+    title: 'Success',
+    description: 'Action completed',
+    color: 'success',
+  })
+}
+</script>
+
+<!-- UToaster is global — add once in app.vue -->
+<template>
+  <UToaster />
+</template>
+```
 
 ## Phase 1: Infrastructure
 
@@ -175,29 +221,44 @@ git checkout main && git pull
 git checkout -b feature/nuxt-ui-migration
 ```
 
-### Step 1.2: Install Nuxt UI Pro
+### Step 1.2: Install Nuxt UI v4
 
 ```bash
 cd frontend
-pnpm remove @radix-icons/vue class-variance-authority tailwind-variants @vueuse/motion
-pnpm add @nuxt/ui-pro
+pnpm remove @radix-icons/vue class-variance-authority @vueuse/motion
+pnpm add @nuxt/ui tailwindcss
 ```
+
+> **Note:** `@nuxt/ui` v4 includes `reka-ui`, `tailwind-variants`, `@nuxt/icon`, `@nuxtjs/color-mode`, `@nuxt/fonts`, `@tailwindcss/vite`, `@tanstack/vue-table`, `@tanstack/vue-virtual`, `motion-v`, and `fuse.js` as dependencies. Do not install them separately.
 
 ### Step 1.3: Update nuxt.config.ts
 
-Replace shadcn-related config with Nuxt UI module:
+Replace shadcn-related config with Nuxt UI v4 module:
 
 ```ts
 export default defineNuxtConfig({
-  extends: ['@nuxt/ui-pro'],
   modules: ['@nuxt/ui', '@nuxtjs/i18n', /* other existing modules */],
+  css: ['~/assets/css/main.css'],
   // ... rest of config
 })
 ```
 
-### Step 1.4: Theme Configuration
+> **No `extends`** — Nuxt UI v4 is a module, not a layer. Do NOT use `extends: ['@nuxt/ui-pro']`.
 
-Create `app.config.ts` with the violet dark theme mapped to Nuxt UI's color system:
+### Step 1.4: Update CSS
+
+The existing `main.css` needs to be updated to use Nuxt UI v4's CSS imports. Add at the top:
+
+```css
+@import "tailwindcss";
+@import "@nuxt/ui";
+```
+
+Remove shadcn-specific CSS variables (`--radius`, `--background`, `--foreground`, `--card`, `--primary`, etc.) and replace with Nuxt UI v4's theme system. The oklch design tokens can be mapped to Tailwind CSS v4's `@theme` directive.
+
+### Step 1.5: Theme Configuration
+
+Update `app.config.ts` with the violet dark theme mapped to Nuxt UI v4's color system:
 
 ```ts
 export default defineAppConfig({
@@ -206,14 +267,23 @@ export default defineAppConfig({
       primary: 'violet',
       neutral: 'zinc',
     },
-    // Component-level customization for the violet dark aesthetic
+    // Component-level customization can be done here
+    // See: https://ui.nuxt.com/docs/getting-started/theme
   },
 })
 ```
 
-### Step 1.5: Update CSS
+### Step 1.6: Add UToaster to app.vue
 
-The existing `main.css` with oklch tokens can largely stay. Remove shadcn-specific CSS variables and replace with Nuxt UI's variable names.
+Add the global toast container to the app root:
+
+```vue
+<!-- app.vue -->
+<template>
+  <NuxtPage />
+  <UToaster />
+</template>
+```
 
 ## Phase 2: Component Migration (by page)
 
@@ -246,7 +316,7 @@ This is the simplest page — good starting point for establishing the migration
 - `UiSelect` (3 instances) → `USelectMenu`
 - `UiButton` → `UButton`
 - `UiBadge` → `UBadge`
-- `v-motion` directives → CSS `@keyframes` or `Transition` component
+- `v-motion` directives → `motion-v` or CSS `@keyframes` (see Phase 4)
 
 This is the largest page — 80+ component instances.
 
@@ -257,16 +327,16 @@ This is the largest page — 80+ component instances.
 - `UiSelect` (many instances) → `USelectMenu`
 - `UiSlider` → `USlider`
 - `UiSwitch` → `USwitch`
-- `UiTable` (preview table) → `UTable`
+- `UiTable` (preview table) → `UTable` (TanStack-powered)
 - `UiTooltip` → `UTooltip`
 - `UiInput` → `UInput`
-- `UiSeparator` → `UDivider`
+- `UiSeparator` → `USeparator`
 - `UiButton` → `UButton`
 
 ### Step 2.5: Audit Page (`pages/audit.vue`)
 
 **Components to replace:**
-- `UiTable` (full audit table) → `UTable`
+- `UiTable` (full audit table) → `UTable` (TanStack-powered)
 - `UiInput` → `UInput`
 - `UiButton` → `UButton`
 - `UiBadge` → `UBadge`
@@ -284,7 +354,7 @@ This is the largest page — 80+ component instances.
 - `UiInput` → `UInput`
 - `UiLabel` → `UFormField`
 - `UiButton` → `UButton`
-- `UiSeparator` → `UDivider`
+- `UiSeparator` → `USeparator`
 
 This is the most complex page with the most diverse component usage.
 
@@ -301,7 +371,7 @@ Minimal changes needed.
 - `EngineControlPopover.vue` — `UiPopover` → `UPopover`, `UiDialog` → `UModal`, `UiButton` → `UButton`, `UiBadge` → `UBadge`
 - `RuleBuilder.vue` — `UiSelect` → `USelectMenu`, `UiSwitch` → `USwitch`, `UiInput` → `UInput`, `UiCommand` → `UCommandPalette`, `UiPopover` → `UPopover`, `UiButton` → `UButton`
 - `DiskGroupSection.vue` — `UiCard` → `UCard`
-- `ToastContainer.vue` — Replace with `UNotification` toast system
+- `ToastContainer.vue` — Delete and replace with global `UToaster` + `useToast()` composable
 
 ## Phase 3: Cleanup
 
@@ -317,8 +387,10 @@ rm frontend/components.json
 
 ```bash
 cd frontend
-pnpm remove reka-ui class-variance-authority tailwind-variants @vueuse/motion @radix-icons/vue
+pnpm remove reka-ui class-variance-authority @vueuse/motion @radix-icons/vue
 ```
+
+> **Note:** `tailwind-variants` is kept as a dependency of `@nuxt/ui` v4 — do not remove it.
 
 ### Step 3.3: Update Imports
 
@@ -326,22 +398,39 @@ Remove all dead imports referencing `@/components/ui/`, `@/lib/utils`, or remove
 
 ### Step 3.4: Update CSS
 
-Remove shadcn-specific CSS variables and utility classes from `main.css`. Keep the oklch design tokens and theme-specific styles.
+Remove shadcn-specific CSS variables and utility classes from `main.css`. Keep the oklch design tokens and theme-specific styles. Ensure the file starts with:
+
+```css
+@import "tailwindcss";
+@import "@nuxt/ui";
+```
 
 ## Phase 4: Animation Migration
 
-Replace `@vueuse/motion` (`v-motion`) directives with CSS or Vue transitions:
+Nuxt UI v4 includes `motion-v` as a dependency. This provides a Vue animation API similar to `@vueuse/motion`. Two options:
 
-**Current pattern (v-motion):**
+### Option A: Use motion-v (bundled with Nuxt UI v4)
+
+`motion-v` is already installed. Use its directive or component API:
+
 ```vue
-<UiCard
-  v-motion
-  :initial="{ opacity: 0, y: 20 }"
-  :enter="{ opacity: 1, y: 0, transition: { delay: 100 } }"
->
+<script setup lang="ts">
+import { Motion } from 'motion-v'
+</script>
+
+<template>
+  <Motion
+    :initial="{ opacity: 0, y: 20 }"
+    :animate="{ opacity: 1, y: 0 }"
+    :transition="{ delay: 0.1 }"
+  >
+    <UCard>...</UCard>
+  </Motion>
+</template>
 ```
 
-**Replacement (CSS):**
+### Option B: CSS @keyframes (simpler, no JS dependency)
+
 ```css
 .card-enter {
   animation: fadeInUp 0.4s ease both;
@@ -357,30 +446,69 @@ Replace `@vueuse/motion` (`v-motion`) directives with CSS or Vue transitions:
 <UCard class="card-enter" :style="{ '--delay': `${idx * 100}ms` }">
 ```
 
-Or use Vue's `<Transition>` component for route-level transitions.
+Option B is recommended for simplicity. Option A provides more control and matches the current `v-motion` behavior more closely.
 
 ## Phase 5: Testing
 
-- All pages render correctly with Nuxt UI components
-- Dark/light mode toggle works (if re-enabled)
+- All pages render correctly with Nuxt UI v4 components
+- Dark/light mode toggle works (via `UColorModeButton` or existing toggle)
 - Theme colors match the violet dark aesthetic
 - Mobile responsive layout works
 - All form interactions (select, input, switch, slider) work
 - Modals open/close correctly
-- Tables sort and filter correctly
-- Toast notifications work
+- TanStack-powered tables sort, filter, and paginate correctly
+- Toast notifications work via `useToast()` + `UToaster`
 - I18n translations still display correctly
 - No console errors or warnings
-- Build produces correct output
+- Build produces correct Docker image output
 
 ## Risk Considerations
 
-1. **Nuxt UI Table API differs significantly** — the shadcn-vue tables use manual `<TableRow>` / `<TableCell>` with custom rendering. Nuxt UI's `UTable` is data-driven with column slots. The audit and rules preview tables have complex rendering (expandable rows, color-coded badges, score breakdowns) that will need custom column slots.
+1. **TanStack Table API in UTable** — Nuxt UI v4's `UTable` uses `@tanstack/vue-table` with `ColumnDef<T>[]` column definitions. The shadcn-vue tables use manual `<TableRow>` / `<TableCell>` with inline rendering. The audit and rules preview tables have complex rendering (expandable rows, color-coded badges, score breakdowns) that will need TanStack `cell` render functions or scoped slots. This is the most complex migration item. The upside is that TanStack Table provides built-in sorting, filtering, pagination, and row selection that the current manual implementation lacks.
 
-2. **Command/Combobox in RuleBuilder** — The current implementation uses shadcn-vue's Command + Popover combo for the combobox. Nuxt UI's `UCommandPalette` has a different API — may need `USelectMenu` with `searchable` prop instead.
+2. **Command/Combobox in RuleBuilder** — The current implementation uses shadcn-vue's Command + Popover combo for the combobox. Nuxt UI v4's `UCommandPalette` has a different API. Alternatively, `USelectMenu` with `searchable` prop or `UInputMenu` may be more appropriate replacements.
 
-3. **Select component API change** — shadcn-vue uses inline `<SelectItem>` children. Nuxt UI uses an `items` array prop. Every select usage needs to extract the options into a data array. This is the highest-volume change.
+3. **Select component API change** — shadcn-vue uses inline `<SelectItem>` children. Nuxt UI v4 uses an `items` array prop. Every select usage needs to extract the options into a data array. This is the highest-volume change (~40 instances).
 
-4. **Motion animations** — The `v-motion` fade-in-up animations on cards are used extensively on the dashboard, rules, and settings pages. CSS replacement is straightforward but needs testing for timing/feel parity.
+4. **Motion animations** — The `v-motion` fade-in-up animations on cards are used extensively on the dashboard, rules, and settings pages. Nuxt UI v4 bundles `motion-v` which provides a similar (but not identical) API. CSS `@keyframes` is the simpler path. Either approach needs testing for timing/feel parity.
 
-5. **Custom toast system** — The current `ToastContainer.vue` + `useToast` composable would be replaced by Nuxt UI's built-in notification system. Toast triggering throughout the app would need updating.
+5. **Toast system** — The current `ToastContainer.vue` + `useToast` composable would be replaced by Nuxt UI v4's `UToaster` + `useToast()`. The composable API is similar but the options shape differs — each call site that triggers a toast needs updating.
+
+6. **CSS variable names** — shadcn-vue uses CSS variables like `--background`, `--foreground`, `--card`, `--primary`, `--radius`, etc. Nuxt UI v4 uses a different variable naming scheme integrated with Tailwind CSS v4's `@theme` system. The `main.css` file will need significant cleanup to remove shadcn variables and map oklch tokens to the new system.
+
+## Migration Reference
+
+| shadcn-vue | Nuxt UI v4 | Notes |
+|-----------|-----------|-------|
+| `UiButton` | `UButton` | Props: `variant`, `color`, `size`, `icon`, `loading` |
+| `UiCard` + compounds | `UCard` | Single component with `#header`, `#footer` slots |
+| `UiSelect` + compounds | `USelectMenu` | Data-driven: `:items="[...]"` prop |
+| `UiInput` | `UInput` | Similar API |
+| `UiLabel` | `UFormField` | Wraps label + input + error |
+| `UiDialog` + compounds | `UModal` | `v-model:open`, `title`, `description` props |
+| `UiTable` + compounds | `UTable` | TanStack-powered: `:columns` + `:data` |
+| `UiBadge` | `UBadge` | Similar API |
+| `UiAlert` + compounds | `UAlert` | Single component with props |
+| `UiSwitch` | `USwitch` | Similar API |
+| `UiSlider` | `USlider` | Similar API |
+| `UiTabs` + compounds | `UTabs` | Data-driven: `:items="[...]"` with `#content` slot |
+| `UiPopover` + compounds | `UPopover` | `#trigger` + `#content` slots |
+| `UiDropdownMenu` + compounds | `UDropdownMenu` | Data-driven: `:items="[...]"` |
+| `UiTooltip` + compounds | `UTooltip` | `text` prop or `#content` slot |
+| `UiCommand` + compounds | `UCommandPalette` | Data-driven: `:groups="[...]"` |
+| `UiSeparator` | `USeparator` | Similar API |
+| `UiProgress` | `UProgress` | Similar API |
+| `UiSkeleton` | `USkeleton` | Similar API |
+| `UiCollapsible` | `UCollapsible` | Similar API (v4 has this built-in) |
+| `UiScrollArea` | `UScrollArea` | Similar API (v4 has this built-in) |
+| `ToastContainer.vue` | `UToaster` + `useToast()` | Global toaster + composable |
+| `@radix-icons/vue` icons | `UIcon` with Iconify | `icon="i-lucide-*"` or `icon="i-heroicons-*"` |
+| `class-variance-authority` | Tailwind Variants (internal) | Nuxt UI handles variants — use `app.config.ts` |
+| `@vueuse/motion` | `motion-v` (bundled) or CSS | `motion-v` already in node_modules |
+
+## Notes
+
+- Nuxt UI v4 does **not** require a license — all components are included in `@nuxt/ui@^4.5`
+- The `@nuxt/ui-pro` package is legacy (v3 only) and should NOT be installed
+- This plan can be executed independently from the site plan (`20260303T0539Z-nuxt-ui-pro-project-site.md`)
+- The official Nuxt UI v4 docs are at [ui.nuxt.com](https://ui.nuxt.com)

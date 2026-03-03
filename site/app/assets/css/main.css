@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Ensure content files are scanned for Tailwind classes */
+@source "../../../content/**/*";
+
+/* Geist Sans — body text (matches the Capacitarr app) */
+@import '@fontsource/geist-sans/400.css';
+@import '@fontsource/geist-sans/500.css';
+@import '@fontsource/geist-sans/600.css';
+@import '@fontsource/geist-sans/700.css';
+
+/* Geist Mono — code blocks, monospace text */
+@import '@fontsource/geist-mono/400.css';
+
+@theme static {
+  --font-sans: 'Geist Sans', 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
+}

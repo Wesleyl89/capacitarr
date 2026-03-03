@@ -1,0 +1,31 @@
+{
+  "name": "capacitarr-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "sync-docs": "node scripts/sync-docs.mjs"
+  },
+  "dependencies": {
+    "@fontsource/geist-mono": "^5.2.7",
+    "@fontsource/geist-sans": "^5.2.5",
+    "@nuxt/content": "^3.12.0",
+    "@nuxt/ui": "^4.5.1",
+    "better-sqlite3": "^12.6.2",
+    "nuxt": "^4.3.1",
+    "tailwindcss": "^4.2.1"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "better-sqlite3",
+      "esbuild",
+      "vue-demi"
+    ]
+  }
+}
