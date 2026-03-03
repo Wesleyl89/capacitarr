@@ -1,5 +1,7 @@
 # Capacitarr
 
+[![GitLab Container Registry](https://img.shields.io/badge/Container_Registry-GitLab-orange?logo=gitlab)](https://gitlab.com/starshadow/software/capacitarr/container_registry)
+
 **Intelligent media library capacity manager for the *arr ecosystem.**
 
 Capacitarr integrates with your *arr apps, media servers, and request managers to automatically manage disk capacity. When disk space runs low, it scores every media item across multiple dimensions — watch history, recency, file size, ratings, age, and availability — then removes the least-valuable items first. A visual rule builder lets you protect specific content from ever being deleted.
@@ -24,7 +26,7 @@ Create a `docker-compose.yml` file:
 ```yaml
 services:
   capacitarr:
-    image: capacitarr:latest
+    image: registry.gitlab.com/starshadow/software/capacitarr:latest
     container_name: capacitarr
     ports:
       - "2187:2187"

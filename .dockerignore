@@ -11,6 +11,7 @@ frontend/.data
 # Go build artifacts
 backend/capacitarr
 backend/tmp
+dist/
 
 # Documentation and plans
 docs/

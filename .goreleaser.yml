@@ -1,0 +1,77 @@
+# GoReleaser configuration for Capacitarr
+# Docs: https://goreleaser.com
+#
+# This config handles:
+# - Cross-compilation for linux/amd64 and linux/arm64
+# - Archive packaging (.tar.gz with binary + README + LICENSE)
+# - Checksum generation
+# - GitLab release creation with asset uploads
+#
+# Docker image building is NOT handled here — the existing multi-arch
+# Dockerfile + docker buildx setup in CI handles that separately.
+
+version: 2
+
+before:
+  hooks:
+    # Build the frontend SPA before Go compilation so it can be embedded
+    - cmd: make build:frontend
+    # Copy frontend assets into the backend embed directory
+    - cmd: mkdir -p backend/frontend/dist
+    - cmd: cp -r frontend/.output/public/. backend/frontend/dist/
+
+builds:
+  - id: capacitarr
+    dir: backend
+    main: ./main.go
+    binary: capacitarr
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -w -s
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.buildDate={{ .Date }}
+
+archives:
+  - id: capacitarr
+    builds:
+      - capacitarr
+    format: tar.gz
+    name_template: "capacitarr_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  # Changelog is managed by git-cliff and committed before tagging.
+  # GoReleaser should not generate its own changelog.
+  disable: true
+
+release:
+  gitlab:
+    owner: starshadow/software
+    name: capacitarr
+  # Use the committed CHANGELOG.md content for the release description.
+  # The changelog job in CI extracts the latest version's notes.
+  header: |
+    ## What's Changed
+
+    See the full [CHANGELOG](https://capacitarr.app/changelog) for details.
+  # Don't replace existing drafts
+  mode: replace
+  # Upload extra files to the release
+  extra_files: []
+
+# Don't build Docker images via GoReleaser — handled by CI docker buildx
+# dockers: []

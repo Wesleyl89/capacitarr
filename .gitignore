@@ -2,6 +2,7 @@
 backend/capacitarr
 backend/server
 backend/frontend/dist/
+dist/
 
 # Database files
 *.db
