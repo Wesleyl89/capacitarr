@@ -15,10 +15,10 @@ version: 2
 before:
   hooks:
     # Build the frontend SPA before Go compilation so it can be embedded
-    - cmd: make build:frontend
+    - make build:frontend
     # Copy frontend assets into the backend embed directory
-    - cmd: mkdir -p backend/frontend/dist
-    - cmd: cp -r frontend/.output/public/. backend/frontend/dist/
+    - mkdir -p backend/frontend/dist
+    - cp -r frontend/.output/public/. backend/frontend/dist/
 
 builds:
   - id: capacitarr
