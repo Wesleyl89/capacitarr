@@ -1520,7 +1520,7 @@ import type { IntegrationConfig, NotificationChannel, PreferenceSet, ConnectionT
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 const { locale: currentLocale, setLocale, locales } = useI18n()
 const availableLocales = computed(() =>
-  (locales.value as Array<{ code: string; name: string }>).map(l => ({ code: l.code, name: l.name }))
+  (locales.value as Array<{ code: string, name: string }>).map(l => ({ code: l.code, name: l.name }))
 )
 
 // ─── SaveIndicator functional component ──────────────────────────────────────

@@ -268,20 +268,20 @@
               <UiDropdownMenuLabel>{{ $t('nav.theme') }}</UiDropdownMenuLabel>
               <UiDropdownMenuSeparator />
               <UiDropdownMenuItem
-                v-for="t in themes"
-                :key="t.id"
+                v-for="themeOption in themes"
+                :key="themeOption.id"
                 class="flex items-center gap-2.5 cursor-pointer"
-                @click="setTheme(t.id)"
+                @click="setTheme(themeOption.id)"
               >
                 <span
                   class="w-4 h-4 rounded-full border-2 shrink-0"
-                  :class="theme === t.id ? 'border-primary' : 'border-transparent'"
-                  :style="{ backgroundColor: themeSwatchColor(t) }"
+                  :class="theme === themeOption.id ? 'border-primary' : 'border-transparent'"
+                  :style="{ backgroundColor: themeSwatchColor(themeOption) }"
                 />
-                <span>{{ t.label }}</span>
+                <span>{{ themeOption.label }}</span>
                 <component
                   :is="CheckIcon"
-                  v-if="theme === t.id"
+                  v-if="theme === themeOption.id"
                   class="w-4 h-4 ml-auto text-primary"
                 />
               </UiDropdownMenuItem>

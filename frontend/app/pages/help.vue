@@ -176,7 +176,10 @@
               :key="effect.nameKey"
               class="flex items-start gap-2"
             >
-              <span class="mt-1 w-1.5 h-1.5 rounded-full shrink-0" :class="effect.colorClass" />
+              <span
+                class="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
+                :class="effect.colorClass"
+              />
               <span><strong class="text-foreground">{{ $t(effect.nameKey) }}</strong> — {{ $t(effect.descKey) }}</span>
             </li>
           </ul>

@@ -51,7 +51,9 @@ export function useNotifications() {
   async function markAllAsRead() {
     try {
       await api('/api/v1/notifications/read-all', { method: 'PUT' })
-      notifications.value.forEach(n => { n.read = true })
+      notifications.value.forEach((n) => {
+        n.read = true
+      })
       unreadCount.value = 0
     } catch {
       // Silently fail
