@@ -522,8 +522,13 @@
 
           <!-- From the Author -->
           <div class="pt-4 border-t border-border/50">
-            <p class="text-xs text-muted-foreground/70 leading-relaxed">
-              🇺🇦 I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.
+            <p class="text-xs text-muted-foreground/70 leading-relaxed flex items-start gap-2">
+              <img
+                src="~/assets/images/flag-ua.svg"
+                alt="Ukrainian flag"
+                class="w-4 h-4 shrink-0 mt-0.5"
+              >
+              <span>I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.</span>
             </p>
           </div>
         </div>
