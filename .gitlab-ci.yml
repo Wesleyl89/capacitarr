@@ -17,7 +17,7 @@ stages:
 
 lint:go:
   stage: lint
-  image: golangci/golangci-lint:latest
+  image: golangci/golangci-lint:v2.1.6
   script:
     - cd backend && golangci-lint run ./...
   rules:
