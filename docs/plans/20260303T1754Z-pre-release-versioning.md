@@ -1,6 +1,6 @@
 # Pre-Release Versioning Support
 
-**Status:** 📋 Planned
+**Status:** 🔄 In Progress (Phase 1.1 complete)
 
 **Prerequisite:** [Build, CI/CD, and Publishing Overhaul](20260303T1551Z-build-cicd-publishing.md) — ✅ Complete
 
