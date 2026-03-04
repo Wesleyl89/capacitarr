@@ -32,6 +32,13 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		slog.Debug("Disk within threshold, no action needed", "component", "poller",
 			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
 			"threshold", group.ThresholdPct)
+
+		// Auto-clear all active snoozes when below threshold — gives a clean slate
+		// for the next cleanup cycle.
+		if err := db.DB.Exec("UPDATE audit_logs SET snoozed_until = NULL WHERE snoozed_until IS NOT NULL").Error; err != nil {
+			slog.Error("Failed to clear active snoozes", "component", "poller", "error", err)
+		}
+
 		return
 	}
 
@@ -154,6 +161,17 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 			}
 		} else if prefs.ExecutionMode == "approval" {
 			actionName = "Queued for Approval"
+
+			// Skip items that are currently snoozed (rejected with an active snooze window)
+			var snoozedCount int64
+			db.DB.Model(&db.AuditLog{}).Where(
+				"media_name = ? AND media_type = ? AND snoozed_until IS NOT NULL AND snoozed_until > ?",
+				ev.Item.Title, string(ev.Item.Type), time.Now().UTC(),
+			).Count(&snoozedCount)
+			if snoozedCount > 0 {
+				slog.Debug("Skipping snoozed item", "component", "poller", "media", ev.Item.Title)
+				continue
+			}
 		}
 
 		factorsJSON, _ := json.Marshal(ev.Factors) //nolint:errcheck // marshal of known-safe struct

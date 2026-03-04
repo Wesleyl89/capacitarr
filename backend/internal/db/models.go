@@ -79,6 +79,7 @@ type PreferenceSet struct {
 	ExecutionMode         string    `gorm:"default:'dry-run';not null" json:"executionMode"`      // "dry-run", "approval", "auto"
 	TiebreakerMethod      string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"` // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
 	DeletionsEnabled      bool      `gorm:"default:true;not null" json:"deletionsEnabled"`        // Safety guard: actual deletions only when true
+	SnoozeDurationHours   int       `gorm:"default:24;not null" json:"snoozeDurationHours"`       // Hours to snooze rejected items before re-evaluation
 	UpdatedAt             time.Time `json:"updatedAt"`
 }
 
@@ -109,8 +110,9 @@ type AuditLog struct {
 	Action        string    `gorm:"not null" json:"action"`        // "Deleted", "Dry-Run", "Queued for Approval", "Approved", "Rejected"
 	SizeBytes     int64     `json:"sizeBytes"`
 	IntegrationID *uint     `json:"integrationId,omitempty" gorm:"column:integration_id"`
-	ExternalID    string    `json:"externalId,omitempty" gorm:"column:external_id"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ExternalID    string     `json:"externalId,omitempty" gorm:"column:external_id"`
+	SnoozedUntil  *time.Time `json:"snoozedUntil,omitempty" gorm:"column:snoozed_until"`
+	CreatedAt     time.Time  `json:"createdAt"`
 }
 
 // EngineRunStats stores one row per engine evaluation cycle, persisting metrics

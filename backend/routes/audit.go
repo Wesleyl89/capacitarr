@@ -287,7 +287,7 @@ func RegisterAuditRoutes(g *echo.Group, database *gorm.DB) {
 		return c.JSON(http.StatusOK, map[string]string{"status": "approved"})
 	})
 
-	// Reject a queued-for-approval audit entry
+	// Reject a queued-for-approval audit entry and snooze it
 	g.POST("/audit/:id/reject", func(c echo.Context) error {
 		id := c.Param("id")
 
@@ -302,7 +302,21 @@ func RegisterAuditRoutes(g *echo.Group, database *gorm.DB) {
 			})
 		}
 
-		if err := database.Model(&entry).Update("action", "Rejected").Error; err != nil {
+		// Load preferences to get configured snooze duration
+		var prefs db.PreferenceSet
+		if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+			slog.Error("Failed to load preferences for snooze duration", "error", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Failed to load preferences",
+			})
+		}
+
+		snoozedUntil := time.Now().UTC().Add(time.Duration(prefs.SnoozeDurationHours) * time.Hour)
+
+		if err := database.Model(&entry).Updates(map[string]interface{}{
+			"action":        "Rejected",
+			"snoozed_until": snoozedUntil,
+		}).Error; err != nil {
 			slog.Error("Failed to update audit entry to Rejected", "id", entry.ID, "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "Failed to update audit entry",
@@ -310,6 +324,33 @@ func RegisterAuditRoutes(g *echo.Group, database *gorm.DB) {
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "rejected"})
+	})
+
+	// Unsnooze a snoozed audit entry: clear snooze and reset to Pending
+	g.POST("/audit/:id/unsnooze", func(c echo.Context) error {
+		id := c.Param("id")
+
+		var entry db.AuditLog
+		if err := database.First(&entry, id).Error; err != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Audit entry not found"})
+		}
+
+		if err := database.Model(&entry).Updates(map[string]interface{}{
+			"snoozed_until": nil,
+			"action":        "Queued for Approval",
+		}).Error; err != nil {
+			slog.Error("Failed to unsnooze audit entry", "id", entry.ID, "error", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Failed to unsnooze audit entry",
+			})
+		}
+
+		// Reload the updated entry
+		if err := database.First(&entry, id).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reload audit entry"})
+		}
+
+		return c.JSON(http.StatusOK, entry)
 	})
 }
 
