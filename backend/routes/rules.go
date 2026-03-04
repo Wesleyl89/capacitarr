@@ -42,7 +42,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			{"field": "genre", "label": "Genre", "type": "string", "operators": []string{"==", "!=", "contains", "!contains"}},
 			{"field": "rating", "label": "Rating", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
 			{"field": "sizebytes", "label": "Size (bytes)", "type": "number", "operators": []string{">", ">=", "<", "<="}},
-			{"field": "timeinlibrary", "label": "Time in Library (days)", "type": "number", "operators": []string{">", ">=", "<", "<="}},
+			{"field": "timeinlibrary", "label": "Time in Library (days)", "type": "number", "operators": []string{">", ">=", "<", "<=", "in_last", "over_ago"}},
 			{"field": "monitored", "label": "Monitored", "type": "boolean", "operators": []string{"=="}},
 			{"field": "year", "label": "Year", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
 			{"field": "language", "label": "Language", "type": "string", "operators": []string{"==", "!="}},
@@ -98,12 +98,24 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			if hasTautulli || hasMediaServer {
 				fields = append(fields,
 					map[string]interface{}{"field": "playcount", "label": "Play Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+					map[string]interface{}{"field": "lastplayed", "label": "Last Watched", "type": "date", "operators": []string{"in_last", "over_ago", "never"}},
 				)
 			}
 			if hasOverseerr {
 				fields = append(fields,
 					map[string]interface{}{"field": "requested", "label": "Is Requested", "type": "boolean", "operators": []string{"=="}},
 					map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+					map[string]interface{}{"field": "requestedby", "label": "Requested By", "type": "string", "operators": []string{"==", "!=", "contains", "!contains"}},
+				)
+			}
+			if hasMediaServer {
+				fields = append(fields,
+					map[string]interface{}{"field": "incollection", "label": "In Collection", "type": "boolean", "operators": []string{"=="}},
+				)
+			}
+			if hasOverseerr && (hasTautulli || hasMediaServer) {
+				fields = append(fields,
+					map[string]interface{}{"field": "watchedbyreq", "label": "Watched by Requestor", "type": "boolean", "operators": []string{"=="}},
 				)
 			}
 		} else {
@@ -128,12 +140,24 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 				if hasTautulli || hasMediaServer {
 					fields = append(fields,
 						map[string]interface{}{"field": "playcount", "label": "Play Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+						map[string]interface{}{"field": "lastplayed", "label": "Last Watched", "type": "date", "operators": []string{"in_last", "over_ago", "never"}},
 					)
 				}
 				if hasOverseerr {
 					fields = append(fields,
 						map[string]interface{}{"field": "requested", "label": "Is Requested", "type": "boolean", "operators": []string{"=="}},
 						map[string]interface{}{"field": "requestcount", "label": "Request Count", "type": "number", "operators": []string{"==", "!=", ">", ">=", "<", "<="}},
+						map[string]interface{}{"field": "requestedby", "label": "Requested By", "type": "string", "operators": []string{"==", "!=", "contains", "!contains"}},
+					)
+				}
+				if hasMediaServer {
+					fields = append(fields,
+						map[string]interface{}{"field": "incollection", "label": "In Collection", "type": "boolean", "operators": []string{"=="}},
+					)
+				}
+				if hasOverseerr && (hasTautulli || hasMediaServer) {
+					fields = append(fields,
+						map[string]interface{}{"field": "watchedbyreq", "label": "Watched by Requestor", "type": "boolean", "operators": []string{"=="}},
 					)
 				}
 			}
@@ -185,7 +209,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			RuleValueCache.Set(cacheKey, result)
 			return c.JSON(http.StatusOK, result)
 
-		case "monitored", "requested": // Boolean fields
+		case "monitored", "requested", "incollection", "watchedbyreq": // Boolean fields
 			result := map[string]interface{}{
 				"type": "closed",
 				"options": []integrations.NameValue{
@@ -246,6 +270,14 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 		case "requestcount":
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"type": "free", "inputType": "number", "placeholder": "e.g., 3", "suffix": "",
+			})
+		case "lastplayed":
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"type": "free", "inputType": "number", "placeholder": "e.g., 30", "suffix": "days",
+			})
+		case "requestedby":
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"type": "free", "inputType": "text", "placeholder": "e.g., john", "suffix": "",
 			})
 		}
 

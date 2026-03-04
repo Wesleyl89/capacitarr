@@ -81,6 +81,9 @@ type plexMetadata struct {
 	Genre            []struct {
 		Tag string `json:"tag"`
 	} `json:"Genre"`
+	Collection []struct {
+		Tag string `json:"tag"`
+	} `json:"Collection"`
 	Media []struct {
 		Part []struct {
 			File string `json:"file"`
@@ -153,6 +156,12 @@ func plexMetadataToMediaItem(m plexMetadata) *MediaItem {
 		genres = append(genres, g.Tag)
 	}
 
+	// Build collections list
+	collections := make([]string, 0, len(m.Collection))
+	for _, c := range m.Collection {
+		collections = append(collections, c.Tag)
+	}
+
 	// Pick best rating
 	rating := m.AudienceRating
 	if rating == 0 {
@@ -187,17 +196,18 @@ func plexMetadataToMediaItem(m plexMetadata) *MediaItem {
 	}
 
 	item := &MediaItem{
-		ExternalID: m.RatingKey,
-		Type:       mediaType,
-		Title:      m.Title,
-		Year:       m.Year,
-		SizeBytes:  totalSize,
-		Path:       filePath,
-		Rating:     rating,
-		Genre:      strings.Join(genres, ", "),
-		PlayCount:  m.ViewCount,
-		LastPlayed: lastPlayed,
-		AddedAt:    addedAt,
+		ExternalID:  m.RatingKey,
+		Type:        mediaType,
+		Title:       m.Title,
+		Year:        m.Year,
+		SizeBytes:   totalSize,
+		Path:        filePath,
+		Rating:      rating,
+		Genre:       strings.Join(genres, ", "),
+		PlayCount:   m.ViewCount,
+		LastPlayed:  lastPlayed,
+		AddedAt:     addedAt,
+		Collections: collections,
 	}
 
 	// Show/season specifics

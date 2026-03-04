@@ -245,6 +245,9 @@ func enrichItems(items []integrations.MediaItem, ec enrichmentClients) {
 			if watchData != nil {
 				item.PlayCount = watchData.PlayCount
 				item.LastPlayed = watchData.LastPlayed
+				if len(watchData.Users) > 0 {
+					item.WatchedByUsers = watchData.Users
+				}
 			}
 		}
 	}
@@ -339,6 +342,19 @@ func enrichItems(items []integrations.MediaItem, ec enrichmentClients) {
 					}
 				}
 				slog.Info("Emby enrichment complete", "component", "poller", "libraryItems", len(watchMap), "matched", matched)
+			}
+		}
+	}
+
+	// ─── Cross-reference: did the requestor watch it? ───────────────────────
+	for i := range items {
+		item := &items[i]
+		if item.IsRequested && item.RequestedBy != "" && len(item.WatchedByUsers) > 0 {
+			for _, user := range item.WatchedByUsers {
+				if strings.EqualFold(user, item.RequestedBy) {
+					item.WatchedByRequestor = true
+					break
+				}
 			}
 		}
 	}

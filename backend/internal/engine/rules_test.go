@@ -538,6 +538,158 @@ func TestLegacyEffect(t *testing.T) {
 	}
 }
 
+func TestMatchesRule_LastPlayed(t *testing.T) {
+	recentPlay := time.Now().Add(-5 * 24 * time.Hour) // 5 days ago
+	oldPlay := time.Now().Add(-90 * 24 * time.Hour)   // 90 days ago
+
+	tests := []struct {
+		name       string
+		lastPlayed *time.Time
+		operator   string
+		value      string
+		matched    bool
+	}{
+		{"in_last match (recent)", &recentPlay, "in_last", "30", true},
+		{"in_last no match (old)", &oldPlay, "in_last", "30", false},
+		{"over_ago match (old)", &oldPlay, "over_ago", "30", true},
+		{"over_ago no match (recent)", &recentPlay, "over_ago", "30", false},
+		{"never with nil", nil, "never", "", true},
+		{"never with play", &recentPlay, "never", "", false},
+		{"over_ago with nil (counts as over)", nil, "over_ago", "30", true},
+		{"in_last with nil (not in last)", nil, "in_last", "30", false},
+		{"invalid value", &recentPlay, "in_last", "notanumber", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{LastPlayed: tc.lastPlayed}
+			rule := db.CustomRule{Enabled: true, Field: "lastplayed", Operator: tc.operator, Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("lastplayed %s %s = %v, want %v", tc.operator, tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
+func TestMatchesRule_RequestedBy(t *testing.T) {
+	tests := []struct {
+		name        string
+		requestedBy string
+		operator    string
+		value       string
+		matched     bool
+	}{
+		{"== match case insensitive", "John", "==", "john", true},
+		{"== no match", "John", "==", "jane", false},
+		{"!= match", "John", "!=", "jane", true},
+		{"!= no match", "John", "!=", "john", false},
+		{"contains match", "JohnDoe", "contains", "john", true},
+		{"contains no match", "JohnDoe", "contains", "jane", false},
+		{"!contains match", "JohnDoe", "!contains", "jane", true},
+		{"!contains no match", "JohnDoe", "!contains", "john", false},
+		{"== empty requestedby vs empty value", "", "==", "", true},
+		{"contains empty value always matches", "anything", "contains", "", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{RequestedBy: tc.requestedBy}
+			rule := db.CustomRule{Enabled: true, Field: "requestedby", Operator: tc.operator, Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("requestedby %s %s = %v, want %v", tc.operator, tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
+func TestMatchesRule_InCollection(t *testing.T) {
+	tests := []struct {
+		name        string
+		collections []string
+		value       string
+		matched     bool
+	}{
+		{"true with collections", []string{"Marvel", "MCU"}, "true", true},
+		{"true with no collections", nil, "true", false},
+		{"false with no collections", nil, "false", true},
+		{"false with collections", []string{"Marvel"}, "false", false},
+		{"true with empty slice", []string{}, "true", false},
+		{"false with empty slice", []string{}, "false", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{Collections: tc.collections}
+			rule := db.CustomRule{Enabled: true, Field: "incollection", Operator: "==", Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("incollection == %s = %v, want %v", tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
+func TestMatchesRule_WatchedByReq(t *testing.T) {
+	tests := []struct {
+		name               string
+		watchedByRequestor bool
+		value              string
+		matched            bool
+	}{
+		{"true match", true, "true", true},
+		{"true no match", false, "true", false},
+		{"false match", false, "false", true},
+		{"false no match", true, "false", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{WatchedByRequestor: tc.watchedByRequestor}
+			rule := db.CustomRule{Enabled: true, Field: "watchedbyreq", Operator: "==", Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("watchedbyreq == %s = %v, want %v", tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
+func TestMatchesRule_TimeInLibrary_DateOperators(t *testing.T) {
+	recentAdd := time.Now().Add(-10 * 24 * time.Hour) // 10 days ago
+	oldAdd := time.Now().Add(-90 * 24 * time.Hour)    // 90 days ago
+
+	tests := []struct {
+		name     string
+		addedAt  *time.Time
+		operator string
+		value    string
+		matched  bool
+	}{
+		{"in_last match (recent)", &recentAdd, "in_last", "30", true},
+		{"in_last no match (old)", &oldAdd, "in_last", "30", false},
+		{"over_ago match (old)", &oldAdd, "over_ago", "30", true},
+		{"over_ago no match (recent)", &recentAdd, "over_ago", "30", false},
+		{"nil addedAt in_last", nil, "in_last", "30", false},
+		{"nil addedAt over_ago", nil, "over_ago", "30", false},
+		// Backward compat: old operators still work
+		{"old > operator still works", &oldAdd, ">", "30", true},
+		{"old < operator still works", &recentAdd, "<", "30", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{AddedAt: tc.addedAt}
+			rule := db.CustomRule{Enabled: true, Field: "timeinlibrary", Operator: tc.operator, Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("timeinlibrary %s %s = %v, want %v", tc.operator, tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
 func TestApplyRules_LegacyFallback(t *testing.T) {
 	now := time.Now()
 	item := integrations.MediaItem{

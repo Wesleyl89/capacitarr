@@ -80,9 +80,17 @@
           Value
         </UiLabel>
 
+        <!-- "never" operator: no value needed -->
+        <div
+          v-if="form.operator === 'never'"
+          class="flex items-center h-9 px-3 rounded-md border border-input bg-muted/50"
+        >
+          <span class="text-xs text-muted-foreground italic">No value required</span>
+        </div>
+
         <!-- Loading state -->
         <div
-          v-if="valueLoading"
+          v-else-if="valueLoading"
           class="flex items-center justify-center h-9 rounded-md border border-input bg-background px-3"
         >
           <span class="text-xs text-muted-foreground animate-pulse">Loading…</span>
@@ -245,7 +253,7 @@
         </UiLabel>
         <UiSelect
           v-model="form.effect"
-          :disabled="!form.value"
+          :disabled="!form.value && !valueNotRequired"
         >
           <UiSelectTrigger>
             <UiSelectValue placeholder="Select effect…" />
@@ -353,7 +361,10 @@ const operatorLabels: Record<string, string> = {
   '>': 'more than',
   '>=': 'at least',
   '<': 'less than',
-  '<=': 'at most'
+  '<=': 'at most',
+  'in_last': 'in the last',
+  'over_ago': 'over…ago',
+  'never': 'never'
 }
 
 // Effect options with color coding
@@ -457,6 +468,8 @@ const freeInputPlaceholder = computed(() => {
     case 'episodecount': return 'e.g., 100'
     case 'playcount': return 'e.g., 0'
     case 'requestcount': return 'e.g., 3'
+    case 'lastplayed': return 'e.g., 30'
+    case 'requestedby': return 'e.g., john'
     default: return 'Value'
   }
 })
@@ -464,6 +477,7 @@ const freeInputPlaceholder = computed(() => {
 const freeInputSuffix = computed(() => {
   if (ruleValues.value?.suffix) return ruleValues.value.suffix
   if (form.field === 'timeinlibrary') return 'days'
+  if (form.field === 'lastplayed' && ['in_last', 'over_ago'].includes(form.operator)) return 'days'
   if (form.field === 'sizebytes') return 'bytes (≈ GB)'
   return ''
 })
@@ -484,11 +498,14 @@ const showFreeTextWarning = computed(() => {
   return !knownOptions.some(opt => opt.value.toLowerCase() === lower)
 })
 
+// "never" operator needs no value — the backend ignores the value field for it
+const valueNotRequired = computed(() => form.operator === 'never')
+
 const isFormValid = computed(() =>
   form.integrationId !== ''
   && form.field !== ''
   && form.operator !== ''
-  && form.value !== ''
+  && (form.value !== '' || valueNotRequired.value)
   && form.effect !== ''
 )
 
@@ -578,7 +595,7 @@ function submitRule() {
     integrationId: Number(form.integrationId),
     field: form.field,
     operator: form.operator,
-    value: String(form.value),
+    value: valueNotRequired.value ? 'true' : String(form.value),
     effect: form.effect
   })
   // Reset form

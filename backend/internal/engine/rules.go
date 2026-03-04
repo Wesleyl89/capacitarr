@@ -213,8 +213,15 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 			return false, ""
 		}
 		days := time.Since(*item.AddedAt).Hours() / 24.0
-		matched := numberMatch(days, cond, ruleNum)
-		return matched, fmt.Sprintf("%.0f days", days)
+		switch cond {
+		case "in_last":
+			return days <= ruleNum, fmt.Sprintf("%.0f days", days)
+		case "over_ago":
+			return days > ruleNum, fmt.Sprintf("%.0f days", days)
+		default:
+			matched := numberMatch(days, cond, ruleNum)
+			return matched, fmt.Sprintf("%.0f days", days)
+		}
 	case "seasoncount":
 		ruleNum, err := strconv.ParseFloat(val, 64)
 		if err != nil {
@@ -264,6 +271,51 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 		}
 		matched := numberMatch(float64(item.Year), cond, ruleNum)
 		return matched, fmt.Sprintf("%d", item.Year)
+	case "lastplayed":
+		if item.LastPlayed == nil || item.LastPlayed.IsZero() {
+			if cond == "never" {
+				return true, "never played"
+			}
+			if cond == "over_ago" {
+				return true, "never played (counts as over)"
+			}
+			return false, "never played"
+		}
+		if cond == "never" {
+			return false, fmt.Sprintf("%.0f days ago", time.Since(*item.LastPlayed).Hours()/24.0)
+		}
+		ruleNum, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return false, ""
+		}
+		days := time.Since(*item.LastPlayed).Hours() / 24.0
+		switch cond {
+		case "in_last":
+			return days <= ruleNum, fmt.Sprintf("%.0f days ago", days)
+		case "over_ago":
+			return days > ruleNum, fmt.Sprintf("%.0f days ago", days)
+		}
+		return false, ""
+	case "requestedby":
+		actual := item.RequestedBy
+		switch cond {
+		case "==":
+			return strings.EqualFold(actual, val), actual
+		case "!=":
+			return !strings.EqualFold(actual, val), actual
+		case "contains":
+			return strings.Contains(strings.ToLower(actual), strings.ToLower(val)), actual
+		case "!contains":
+			return !strings.Contains(strings.ToLower(actual), strings.ToLower(val)), actual
+		}
+		return false, actual
+	case "incollection":
+		inCollection := len(item.Collections) > 0
+		ruleBool := val == "true"
+		return inCollection == ruleBool, fmt.Sprintf("%d collections", len(item.Collections))
+	case "watchedbyreq":
+		ruleBool := val == "true"
+		return item.WatchedByRequestor == ruleBool, fmt.Sprintf("watched by requestor: %v", item.WatchedByRequestor)
 	}
 
 	return false, ""

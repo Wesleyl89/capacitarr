@@ -415,7 +415,10 @@
               <!-- Human-readable condition -->
               <span :class="rule.enabled === false ? 'text-muted-foreground' : 'text-foreground'">{{ fieldLabel(rule.field) }}</span>
               <span class="text-muted-foreground">{{ operatorLabel(rule.operator) }}</span>
-              <span :class="rule.enabled === false ? 'text-muted-foreground' : 'font-medium'">"{{ rule.value }}"</span>
+              <span
+                v-if="rule.operator !== 'never'"
+                :class="rule.enabled === false ? 'text-muted-foreground' : 'font-medium'"
+              >"{{ rule.value }}"{{ ruleValueSuffix(rule) }}</span>
             </div>
             <div class="flex items-center gap-2 shrink-0">
               <!-- Effect badge -->
@@ -999,7 +1002,10 @@ const operatorLabelMap: Record<string, string> = {
   '>': 'more than',
   '>=': 'at least',
   '<': 'less than',
-  '<=': 'at most'
+  '<=': 'at most',
+  'in_last': 'in the last',
+  'over_ago': 'over…ago',
+  'never': 'never'
 }
 
 // Effect label and badge style helpers
@@ -1046,8 +1052,12 @@ const fieldLabelMap: Record<string, string> = {
   seasoncount: 'Season Count',
   episodecount: 'Episode Count',
   playcount: 'Play Count',
+  lastplayed: 'Last Watched',
   requested: 'Is Requested',
   requestcount: 'Request Count',
+  requestedby: 'Requested By',
+  incollection: 'In Collection',
+  watchedbyreq: 'Watched by Requestor',
   type: 'Media Type'
 }
 
@@ -1065,6 +1075,14 @@ function operatorLabel(op: string): string {
 
 function fieldLabel(field: string): string {
   return fieldLabelMap[field] ?? field
+}
+
+// Show "days" suffix for date-aware operators in rule cards
+function ruleValueSuffix(rule: { field: string; operator: string }): string {
+  if (['in_last', 'over_ago'].includes(rule.operator) && ['lastplayed', 'timeinlibrary'].includes(rule.field)) {
+    return ' days'
+  }
+  return ''
 }
 
 function integrationName(id: number): string {

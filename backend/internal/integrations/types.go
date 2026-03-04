@@ -73,11 +73,14 @@ type MediaItem struct {
 	Tags []string `json:"tags,omitempty"`
 
 	// Enrichment data (from Tautulli, Overseerr, etc.)
-	IsRequested  bool   `json:"isRequested,omitempty"`  // Overseerr: was this item user-requested?
-	RequestedBy  string `json:"requestedBy,omitempty"`  // Overseerr: who requested it
-	RequestCount int    `json:"requestCount,omitempty"` // Overseerr: number of requests
-	TMDbID       int    `json:"tmdbId,omitempty"`       // TMDb ID for cross-referencing Overseerr
-	Language     string `json:"language,omitempty"`     // Original language from *arr
+	IsRequested        bool     `json:"isRequested,omitempty"`        // Overseerr: was this item user-requested?
+	RequestedBy        string   `json:"requestedBy,omitempty"`        // Overseerr: who requested it
+	RequestCount       int      `json:"requestCount,omitempty"`       // Overseerr: number of requests
+	TMDbID             int      `json:"tmdbId,omitempty"`             // TMDb ID for cross-referencing Overseerr
+	Language           string   `json:"language,omitempty"`           // Original language from *arr
+	Collections        []string `json:"collections,omitempty"`        // Plex collection membership
+	WatchedByUsers     []string `json:"watchedByUsers,omitempty"`     // Users who watched (from Tautulli)
+	WatchedByRequestor bool     `json:"watchedByRequestor"`           // Cross-ref: requestor watched it
 }
 
 // MediaType represents different forms of media content
