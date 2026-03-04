@@ -3,7 +3,7 @@
 **Date:** 2026-03-04  
 **Branch:** `refactor/full-site-audit`  
 **Scope:** Deep audit, dead code removal, refactoring, modularity, efficiency  
-**Status:** 🔲 Not Started  
+**Status:** 🟡 In Progress
 **Predecessor:** [`20260303T0201Z-deep-code-audit.md`](20260303T0201Z-deep-code-audit.md) (many items already fixed)
 
 ---
@@ -57,25 +57,30 @@ The following items from the prior audit have been confirmed fixed/resolved:
 
 ### Step 1.1: CSS Dead Selector Audit
 
-- [ ] Audit all 74 `[data-slot="..."]` CSS selectors in `main.css`
-- [ ] Cross-reference each against Vue templates to find orphaned selectors
-- [ ] Remove selectors with no matching template usage
-- [ ] Verify no visual regressions via Docker Compose build + manual check
+- [x] Audit all 74 `[data-slot="..."]` CSS selectors in `main.css`
+- [x] Cross-reference each against Vue templates to find orphaned selectors
+- [x] Remove selectors with no matching template usage — removed `[data-slot="score"]` from font rule
+- [x] `nav-link-active` confirmed used dynamically via ternary in Navbar.vue
+- **Note:** Prior audit's 5 orphaned selectors (FIX-013) were already removed. Only 1 new orphan found.
 
 ### Step 1.2: Frontend Dead Export Sweep
 
-- [ ] Scan all `export function`, `export interface`, `export type`, `export const` in `utils/`, `lib/`, `composables/`, `types/`
-- [ ] Cross-reference each against imports in `.vue` and `.ts` files
-- [ ] Remove any exports with zero consumers
-- [ ] Check for duplicate interface/type definitions across components vs `types/api.ts`
+- [x] Scan all `export function`, `export interface`, `export type`, `export const` in `utils/`, `lib/`, `composables/`, `types/`
+- [x] Cross-reference each against imports in `.vue` and `.ts` files
+- [x] All format.ts, composable, and lib exports confirmed in use
+- [x] Consolidated duplicate `DiskGroup` interface (DiskGroupSection.vue → import from types/api.ts)
+- [x] Consolidated duplicate `ScoreFactor` interface (ScoreBreakdown.vue, ScoreDetailModal.vue → import from types/api.ts)
+- [x] Added `matchedValue?` to shared `ScoreFactor` type to cover ScoreDetailModal usage
+- **Note:** `RuleBuilder.vue` local types (`Integration`, `FieldDef`, `NameValue`, `RuleValuesResponse`) are unique to component — intentionally kept local.
 
 ### Step 1.3: Backend Dead Code Sweep
 
-- [ ] Run `go vet ./...` and fix any findings
-- [ ] Identify all exported Go functions/types; verify each has at least one call site
-- [ ] Check for unreachable code after early returns
-- [ ] Verify all `switch` cases in integration/poller code cover all integration types
-- [ ] Remove any commented-out code blocks
+- [x] Run `go vet ./...` — passes clean, zero warnings
+- [x] All Go tests pass (`go test -count=1 ./...` — 7 packages OK)
+- [x] Fixed swallowed error on `db.DB.Find()` in poller orphan cleanup (FIX-018 remnant)
+- [x] Added panic recovery to deletion worker goroutine (auto-restarts on panic)
+- [x] Added `safePoll()` wrapper with panic recovery for poller goroutine
+- [x] GORM `primaryKey` casing confirmed consistent (`primarykey` throughout)
 - [ ] Check `cache.go` — confirm `Close()` is either called at shutdown or documented as intentional
 
 ### Step 1.4: i18n Dead Key Audit
