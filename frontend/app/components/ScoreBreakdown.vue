@@ -116,13 +116,7 @@
 </template>
 
 <script setup lang="ts">
-interface ScoreFactor {
-  name: string
-  rawScore: number
-  weight: number
-  contribution: number
-  type: string // "weight" or "rule"
-}
+import type { ScoreFactor } from '~/types/api'
 
 interface Props {
   reason: string

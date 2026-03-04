@@ -59,6 +59,13 @@ func init() {
 }
 
 func deletionWorker() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Panic recovered in deletion worker — restarting", "component", "poller", "panic", r)
+			go deletionWorker()
+		}
+	}()
+
 	// Rate limit: 1 deletion every 3 seconds to protect disk I/O, burst of 1.
 	// This is much smarter than arbitrary sleeps, as it smooths out load dynamically.
 	limiter := rate.NewLimiter(rate.Every(3*time.Second), 1)

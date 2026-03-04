@@ -32,13 +32,13 @@ func Start() func() {
 		timer := time.NewTimer(getPollInterval())
 		defer timer.Stop()
 		for {
-			select {
-			case <-timer.C:
-				poll()
-				timer.Reset(getPollInterval())
-			case <-RunNowCh:
-				slog.Info("Manual run triggered via API", "component", "poller")
-				poll()
+		select {
+		case <-timer.C:
+			safePoll()
+			timer.Reset(getPollInterval())
+		case <-RunNowCh:
+			slog.Info("Manual run triggered via API", "component", "poller")
+			safePoll()
 				// Don't reset the timer — let the next scheduled tick proceed normally
 			case <-done:
 				return
@@ -67,6 +67,18 @@ func getPollInterval() time.Duration {
 // StopWorker closes the delete queue channel so the deletion worker can drain and exit.
 func StopWorker() {
 	close(deleteQueue)
+}
+
+// safePoll wraps poll() with panic recovery so a single failing cycle
+// doesn't crash the entire poller goroutine.
+func safePoll() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Panic recovered in poll cycle", "component", "poller", "panic", r)
+			pollRunning.Store(false) // ensure the lock is released
+		}
+	}()
+	poll()
 }
 
 func poll() {
@@ -177,7 +189,9 @@ func poll() {
 	// Clean up orphaned disk groups that are no longer media mounts
 	if len(mediaMounts) > 0 {
 		var allGroups []db.DiskGroup
-		db.DB.Find(&allGroups)
+		if err := db.DB.Find(&allGroups).Error; err != nil {
+			slog.Error("Failed to fetch disk groups for orphan cleanup", "component", "poller", "error", err)
+		}
 		for _, g := range allGroups {
 			if !mediaMounts[g.MountPath] {
 				slog.Info("Removing orphaned disk group", "component", "poller",

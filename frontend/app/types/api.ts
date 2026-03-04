@@ -174,6 +174,7 @@ export interface ScoreFactor {
   weight: number;
   contribution: number;
   type: string;
+  matchedValue?: string;
 }
 
 export interface EvaluatedItem {

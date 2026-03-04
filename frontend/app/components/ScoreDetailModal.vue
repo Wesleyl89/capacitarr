@@ -202,15 +202,7 @@
 <script setup lang="ts">
 import { ClockIcon } from 'lucide-vue-next'
 import { formatBytes } from '~/utils/format'
-
-interface ScoreFactor {
-  name: string
-  rawScore: number
-  weight: number
-  contribution: number
-  type: string
-  matchedValue?: string
-}
+import type { ScoreFactor } from '~/types/api'
 
 interface Props {
   visible: boolean

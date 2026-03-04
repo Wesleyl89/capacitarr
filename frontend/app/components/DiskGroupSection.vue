@@ -130,15 +130,7 @@ import {
   diskStatusTextClass,
   diskStatusFillColor
 } from '~/utils/format'
-
-interface DiskGroup {
-  id: number
-  mountPath: string
-  totalBytes: number
-  usedBytes: number
-  thresholdPct: number
-  targetPct: number
-}
+import type { DiskGroup } from '~/types/api'
 
 const props = defineProps<{
   group: DiskGroup

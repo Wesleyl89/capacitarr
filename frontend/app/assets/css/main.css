@@ -231,7 +231,7 @@ body:where(.dark *) {
 }
 
 /* Geist Mono for numbers, scores, and monospaced elements */
-.font-mono, code, kbd, pre, [data-slot="score"], .tabular-nums {
+.font-mono, code, kbd, pre, .tabular-nums {
   font-family: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
