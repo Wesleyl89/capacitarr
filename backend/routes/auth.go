@@ -30,6 +30,15 @@ type LoginRequest struct {
 // RegisterAuthRoutes sets up login, logout, password change, first-user
 // bootstrap, and API key management endpoints.
 func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gorm.DB, cfg *config.Config) {
+	// Auth status — public endpoint for first-login UX detection
+	public.GET("/auth/status", func(c echo.Context) error {
+		var count int64
+		database.Model(&db.AuthConfig{}).Count(&count)
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"initialized": count > 0,
+		})
+	})
+
 	// Rate-limit login endpoint: 10 attempts per IP per 15-minute window
 	loginRL := newLoginRateLimiter(10, 15*time.Minute)
 

@@ -12,6 +12,58 @@ import (
 
 const testLoginBody = `{"username":"admin","password":"password123"}`
 
+func TestAuthStatus_NoUser(t *testing.T) {
+	e := testutil.SetupTestServer(t, testutil.SetupTestDB(t))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+	if resp["initialized"] != false {
+		t.Errorf("Expected initialized=false when no user exists, got %v", resp["initialized"])
+	}
+}
+
+func TestAuthStatus_AfterUserCreated(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	// Bootstrap a user via login
+	body := testLoginBody
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Bootstrap failed: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Now check status — should be initialized
+	req = httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+	if resp["initialized"] != true {
+		t.Errorf("Expected initialized=true after user created, got %v", resp["initialized"])
+	}
+}
+
 func TestLoginHandler_FirstUserBootstrap(t *testing.T) {
 	e := testutil.SetupTestServer(t, testutil.SetupTestDB(t))
 

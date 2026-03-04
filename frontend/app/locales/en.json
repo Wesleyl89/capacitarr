@@ -59,6 +59,10 @@
   "login.authFailed": "Authentication failed",
   "login.invalidCredentials": "Invalid username or password",
   "login.networkError": "Network error connecting to backend",
+  "login.setupTitle": "Set Up Capacitarr",
+  "login.setupSubtitle": "Create your admin account to get started",
+  "login.createAccount": "Create Account",
+  "login.setupHint": "Choose a username and password — this will be your admin account",
 
   "dashboard.title": "Dashboard",
   "dashboard.subtitle": "Capacity overview across your media storage.",

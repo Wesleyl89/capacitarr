@@ -1,6 +1,7 @@
 <template>
   <div class="flex items-center justify-center min-h-[calc(100vh-100px)]">
     <div
+      v-if="!isLoading"
       v-motion
       :initial="{ opacity: 0, scale: 0.96, y: 10 }"
       :enter="{ opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } }"
@@ -22,9 +23,9 @@
             />
           </div>
           <UiCardTitle class="text-2xl">
-            {{ $t('login.title') }}
+            {{ isSetupMode ? $t('login.setupTitle') : $t('login.title') }}
           </UiCardTitle>
-          <UiCardDescription>{{ $t('login.subtitle') }}</UiCardDescription>
+          <UiCardDescription>{{ isSetupMode ? $t('login.setupSubtitle') : $t('login.subtitle') }}</UiCardDescription>
         </UiCardHeader>
 
         <!-- Form -->
@@ -41,7 +42,7 @@
                 id="username"
                 v-model="state.username"
                 type="text"
-                placeholder="admin"
+                :placeholder="isSetupMode ? 'Choose a username' : 'admin'"
                 autofocus
               />
             </div>
@@ -57,6 +58,14 @@
                 placeholder="••••••••"
               />
             </div>
+
+            <!-- Setup mode hint -->
+            <p
+              v-if="isSetupMode"
+              class="text-sm text-muted-foreground"
+            >
+              {{ $t('login.setupHint') }}
+            </p>
 
             <!-- Error message -->
             <div
@@ -84,7 +93,7 @@
                 />
                 {{ $t('login.signingIn') }}
               </span>
-              <span v-else>{{ $t('login.signIn') }}</span>
+              <span v-else>{{ isSetupMode ? $t('login.createAccount') : $t('login.signIn') }}</span>
             </UiButton>
           </form>
         </UiCardContent>
@@ -112,6 +121,20 @@ const state = reactive({
 
 const loading = ref(false)
 const errorMsg = ref('')
+const isSetupMode = ref(false)
+const isLoading = ref(true)
+
+onMounted(async () => {
+  try {
+    const data = await ofetch(`${config.public.apiBaseUrl}/api/v1/auth/status`)
+    isSetupMode.value = !data.initialized
+  } catch {
+    // If the status check fails, default to login mode
+    isSetupMode.value = false
+  } finally {
+    isLoading.value = false
+  }
+})
 
 async function onSubmit() {
   errorMsg.value = ''
