@@ -18,6 +18,17 @@ docs/
 *.md
 !frontend/README.md
 
+# CI/CD and build config (not needed in Docker build)
+.gitlab-ci.yml
+.goreleaser.yml
+cliff.toml
+Makefile
+docker-compose.yml
+
+# Root-level package files (frontend has its own)
+/package.json
+/package-lock.json
+
 # IDE and editor files
 .vscode
 *.code-workspace
