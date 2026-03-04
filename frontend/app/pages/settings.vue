@@ -72,6 +72,11 @@
             </div>
           </UiCardHeader>
           <UiCardContent class="pt-5 space-y-5">
+            <!-- Date & Time -->
+            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Date & Time
+            </p>
+
             <!-- Timezone -->
             <div class="space-y-1.5">
               <UiLabel>{{ $t('settings.timezone') }}</UiLabel>
@@ -122,6 +127,8 @@
               </div>
               <UiSwitch :checked="showExactDates" @update:checked="setShowExactDates" />
             </div>
+
+            <UiSeparator />
 
             <!-- Theme -->
             <div class="space-y-2">
