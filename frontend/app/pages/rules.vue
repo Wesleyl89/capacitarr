@@ -1192,7 +1192,7 @@ const keepEffects = new Set(['always_keep', 'prefer_keep', 'lean_keep'])
 const removeEffects = new Set(['lean_remove', 'prefer_remove', 'always_remove'])
 
 // Fields that use numeric values
-const numericFields = new Set(['rating', 'sizebytes', 'timeinlibrary', 'year', 'seasoncount', 'episodecount', 'playcount', 'requestcount'])
+const numericFields = new Set(['rating', 'sizebytes', 'timeinlibrary', 'year', 'seasoncount', 'episodecount', 'playcount', 'requestcount', 'lastplayed'])
 // Fields that use boolean values
 const booleanFields = new Set(['monitored', 'requested'])
 
@@ -1254,6 +1254,13 @@ function rulesCouldOverlap(a: CustomRule, b: CustomRule): boolean {
  * Each rule defines a half-open range. We check if the intersection is non-empty.
  */
 function numericRangesOverlap(opA: string, valA: number, opB: string, valB: number): boolean {
+  // Map date-aware operators to their numeric equivalents so range logic works.
+  // in_last  → '<'  (played in last N days ≈ value < N)
+  // over_ago → '>'  (played over N days ago ≈ value > N)
+  const dateOpMap: Record<string, string> = { in_last: '<', over_ago: '>' }
+  opA = dateOpMap[opA] ?? opA
+  opB = dateOpMap[opB] ?? opB
+
   if (isNaN(valA) || isNaN(valB)) return true // can't determine — assume overlap
 
   // Convert operator+value into [min, max] ranges (inclusive)
