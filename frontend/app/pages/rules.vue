@@ -760,19 +760,18 @@
                       <!-- Snoozed: check FIRST to prevent re-queued entries from overriding active snooze -->
                       <div
                         v-if="isSnoozed(group.entry)"
-                        class="flex flex-col items-center gap-1"
+                        class="flex items-center justify-center gap-1"
                       >
-                        <span class="text-xs text-muted-foreground whitespace-nowrap">
-                          💤 {{ $t('rules.snoozedUntil', { time: formatSnoozeTime(getSnoozedInfo(group.entry)!.snoozedUntil) }) }}
-                        </span>
+                        <span class="text-sm" title="Snoozed">💤</span>
                         <UiButton
                           variant="ghost"
                           size="sm"
-                          class="h-6 px-2 text-xs"
+                          class="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          title="Undo snooze"
                           :disabled="!!approvalLoading[getSnoozedInfo(group.entry)!.id]"
                           @click="unsnoozeItem(group.entry)"
                         >
-                          ↩ {{ $t('rules.undoSnooze') }}
+                          <span class="text-sm">↩</span>
                         </UiButton>
                       </div>
                       <!-- Approved/Deleting: spinner + text -->
@@ -863,19 +862,18 @@
                         <!-- Snoozed: check FIRST to prevent re-queued entries from overriding active snooze -->
                         <div
                           v-if="isSnoozed(season)"
-                          class="flex flex-col items-center gap-1"
+                          class="flex items-center justify-center gap-1"
                         >
-                          <span class="text-xs text-muted-foreground whitespace-nowrap">
-                            💤 {{ $t('rules.snoozedUntil', { time: formatSnoozeTime(getSnoozedInfo(season)!.snoozedUntil) }) }}
-                          </span>
+                          <span class="text-sm" title="Snoozed">💤</span>
                           <UiButton
                             variant="ghost"
                             size="sm"
-                            class="h-6 px-2 text-xs"
+                            class="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                            title="Undo snooze"
                             :disabled="!!approvalLoading[getSnoozedInfo(season)!.id]"
                             @click="unsnoozeItem(season)"
                           >
-                            ↩ {{ $t('rules.undoSnooze') }}
+                            <span class="text-sm">↩</span>
                           </UiButton>
                         </div>
                         <!-- Approved/Deleting: spinner + text -->
