@@ -192,7 +192,7 @@
           class="inline-flex items-center gap-1 text-xs text-muted-foreground"
         >
           <ClockIcon class="w-3 h-3" />
-          {{ formatTime(createdAt) }}
+          <DateDisplay :date="createdAt" />
         </span>
       </UiDialogFooter>
     </UiDialogContent>
@@ -201,7 +201,7 @@
 
 <script setup lang="ts">
 import { ClockIcon } from 'lucide-vue-next'
-import { formatBytes, formatTime } from '~/utils/format'
+import { formatBytes } from '~/utils/format'
 
 interface ScoreFactor {
   name: string

@@ -114,6 +114,15 @@
               </div>
             </div>
 
+            <!-- Exact Dates Toggle -->
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium">{{ $t('settings.exactDates') }}</p>
+                <p class="text-xs text-muted-foreground">{{ $t('settings.exactDatesDesc') }}</p>
+              </div>
+              <UiSwitch :checked="showExactDates" @update:checked="setShowExactDates" />
+            </div>
+
             <!-- Theme -->
             <div class="space-y-2">
               <UiLabel>{{ $t('settings.theme') }}</UiLabel>
@@ -383,7 +392,7 @@
                   :is="ClockIcon"
                   class="w-3.5 h-3.5 shrink-0"
                 />
-                <span>Synced {{ formatRelativeTime(integration.lastSync) }}</span>
+                <span>Synced <DateDisplay :date="integration.lastSync" /></span>
               </div>
               <div
                 v-if="integration.lastError"
@@ -1521,7 +1530,6 @@ import {
   CogIcon, Trash2Icon, LogInIcon,
   BellIcon, MessageSquareIcon, HashIcon, TerminalIcon
 } from 'lucide-vue-next'
-import { formatRelativeTime } from '~/utils/format'
 import type { IntegrationConfig, NotificationChannel, PreferenceSet, ConnectionTestResult, ApiKeyResponse, ApiError } from '~/types/api'
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
@@ -1558,7 +1566,7 @@ const SaveIndicator = defineComponent({
 })
 
 const api = useApi()
-const { timezone: displayTimezone, clockFormat: displayClockFormat, setTimezone, setClockFormat } = useDisplayPrefs()
+const { timezone: displayTimezone, clockFormat: displayClockFormat, showExactDates, setTimezone, setClockFormat, setShowExactDates } = useDisplayPrefs()
 const { theme: currentTheme, setTheme, themes: themeList } = useTheme()
 
 const loading = ref(true)

@@ -18,9 +18,21 @@ export function useDisplayPrefs() {
     if (import.meta.client) localStorage.setItem('capacitarr_timezone', tz)
   }
 
+  const showExactDates = useState('displayExactDates', () => {
+    if (import.meta.client) {
+      return localStorage.getItem('capacitarr_exactDates') === 'true'
+    }
+    return false
+  })
+
   function setClockFormat(fmt: string) {
     clockFormat.value = fmt
     if (import.meta.client) localStorage.setItem('capacitarr_clockFormat', fmt)
+  }
+
+  function setShowExactDates(val: boolean) {
+    showExactDates.value = val
+    if (import.meta.client) localStorage.setItem('capacitarr_exactDates', String(val))
   }
 
   function formatTimestamp(dateStr: string): string {
@@ -40,5 +52,5 @@ export function useDisplayPrefs() {
     return new Intl.DateTimeFormat(undefined, options).format(date)
   }
 
-  return { timezone, clockFormat, setTimezone, setClockFormat, formatTimestamp }
+  return { timezone, clockFormat, showExactDates, setTimezone, setClockFormat, setShowExactDates, formatTimestamp }
 }

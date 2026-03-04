@@ -171,6 +171,8 @@
   "settings.clockFormat": "Clock Format",
   "settings.clock12h": "12-hour",
   "settings.clock24h": "24-hour",
+  "settings.exactDates": "Always show exact dates",
+  "settings.exactDatesDesc": "Display full date and time instead of relative times like '3d ago'",
   "settings.theme": "Theme",
   "settings.themeHint": "Changes apply immediately and are stored in your browser.",
   "settings.language": "Language",

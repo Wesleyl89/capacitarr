@@ -64,7 +64,8 @@
               {{ $t('engine.lastRun') }}
             </div>
             <div class="font-medium">
-              {{ lastRunText }}
+              <DateDisplay v-if="lastRunEpoch" :date="new Date(lastRunEpoch * 1000).toISOString()" />
+              <span v-else>Never</span>
             </div>
           </div>
           <div class="rounded-lg bg-muted px-2.5 py-1.5">
@@ -147,7 +148,7 @@
 
 <script setup lang="ts">
 import { ShieldIcon, HandIcon, ZapIcon, PlayIcon, LoaderCircleIcon } from 'lucide-vue-next'
-import { formatRelativeTime } from '~/utils/format'
+
 
 const {
   executionMode, lastRunEpoch, lastRunEvaluated, lastRunFlagged,
@@ -177,11 +178,6 @@ const statusDotColor = computed(() => {
   if (isRunning.value) return 'bg-primary'
   if (runNowLoading.value) return 'bg-amber-500'
   return 'bg-green-500'
-})
-
-const lastRunText = computed(() => {
-  if (!lastRunEpoch.value) return 'Never'
-  return formatRelativeTime(new Date(lastRunEpoch.value * 1000).toISOString())
 })
 
 function handleModeChange(mode: string) {

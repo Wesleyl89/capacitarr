@@ -189,7 +189,7 @@
                 @click="selectItem(group.entry); group.seasons.length > 0 && toggleGroup(group.key)"
               >
                 <UiTableCell class="text-xs text-muted-foreground whitespace-nowrap">
-                  {{ formatTimestamp(group.entry.createdAt) }}
+                  <DateDisplay :date="group.entry.createdAt" :always-exact="true" />
                 </UiTableCell>
                 <UiTableCell class="font-medium whitespace-nowrap">
                   <div class="flex items-center gap-2">
@@ -240,7 +240,7 @@
                   @click.stop="selectItem(season)"
                 >
                   <UiTableCell class="text-xs text-muted-foreground whitespace-nowrap pl-8">
-                    {{ formatTimestamp(season.createdAt) }}
+                    <DateDisplay :date="season.createdAt" :always-exact="true" />
                   </UiTableCell>
                   <UiTableCell class="text-muted-foreground whitespace-nowrap pl-8">
                     <span class="inline-flex items-center gap-1.5">
@@ -323,7 +323,6 @@ import { RefreshCwIcon, LoaderCircleIcon, ClockIcon, ChevronRightIcon, SearchIco
 import type { AuditLog, AuditResponse, SelectedDetailItem } from '~/types/api'
 
 const api = useApi()
-const { formatTimestamp } = useDisplayPrefs()
 
 // Pull-to-refresh for touch devices
 const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () => {

@@ -27,7 +27,7 @@
               class="w-3 h-3"
               :class="{ 'animate-spin': isAutoRefreshing }"
             />
-            Updated {{ formatRelativeTime(lastUpdated.toISOString()) }}
+            Updated <DateDisplay :date="lastUpdated.toISOString()" />
           </span>
         </p>
       </div>
@@ -102,7 +102,13 @@
             v-else
             class="w-4 h-4 shrink-0"
           />
-          <span>{{ engineStatusText }}</span>
+          <span v-if="engineIsRunning">{{ t('dashboard.engineRunningDetail') }}</span>
+          <span v-else-if="!engineLastRunEpoch">{{ t('dashboard.engineIdleNoRuns') }}</span>
+          <i18n-t v-else keypath="dashboard.engineIdleLastRun" tag="span">
+            <template #time>
+              <DateDisplay :date="new Date(engineLastRunEpoch * 1000).toISOString()" />
+            </template>
+          </i18n-t>
           <span
             v-if="!engineIsRunning && countdownText"
             class="ml-auto text-xs font-normal text-muted-foreground"
@@ -140,8 +146,15 @@
             <template v-if="engineIsRunning">
               🔄 {{ $t('dashboard.engineRunning') }}
             </template>
+            <template v-else-if="engineLastRunEpoch">
+              <i18n-t keypath="dashboard.lastRun" tag="span">
+                <template #time>
+                  <DateDisplay :date="new Date(engineLastRunEpoch * 1000).toISOString()" />
+                </template>
+              </i18n-t>
+            </template>
             <template v-else>
-              {{ engineLastRunEpoch ? $t('dashboard.lastRun', { time: formatRelativeTime(new Date(engineLastRunEpoch * 1000).toISOString()) }) : $t('dashboard.noRunsYet') }}
+              {{ $t('dashboard.noRunsYet') }}
             </template>
           </span>
           <UiBadge
@@ -478,7 +491,7 @@
 
 <script setup lang="ts">
 import { ServerIcon, ChartPieIcon, HardDriveIcon, LoaderCircleIcon, RefreshCwIcon, ActivityIcon, PlayIcon, CheckCircle2Icon, Trash2Icon, ShieldCheckIcon, TrendingUpIcon } from 'lucide-vue-next'
-import { formatBytes, formatRelativeTime } from '~/utils/format'
+import { formatBytes } from '~/utils/format'
 import type { DiskGroup, IntegrationConfig, DashboardStats, SparklineTooltipOpts } from '~/types/api'
 
 const { t } = useI18n()
@@ -579,13 +592,7 @@ const engineStatusBannerClass = computed(() => {
   return 'bg-muted text-muted-foreground'
 })
 
-const engineStatusText = computed(() => {
-  if (engineIsRunning.value) {
-    return t('dashboard.engineRunningDetail')
-  }
-  if (!engineLastRunEpoch.value) return t('dashboard.engineIdleNoRuns')
-  return t('dashboard.engineIdleLastRun', { time: formatRelativeTime(new Date(engineLastRunEpoch.value * 1000).toISOString()) })
-})
+// engineStatusText removed — now rendered inline with <DateDisplay> component
 
 // --- Countdown to next run ---
 const nowEpoch = ref(Math.floor(Date.now() / 1000))

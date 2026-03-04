@@ -147,7 +147,7 @@
                         {{ notif.message }}
                       </p>
                       <p class="text-[10px] text-muted-foreground/60 mt-1">
-                        {{ formatRelativeTime(notif.createdAt) }}
+                        <DateDisplay :date="notif.createdAt" />
                       </p>
                     </div>
                     <span
@@ -330,7 +330,6 @@ import {
   CheckIcon, BellIcon, LoaderCircleIcon,
   AlertTriangleIcon, XCircleIcon, CheckCircleIcon, InfoIcon, GlobeIcon
 } from 'lucide-vue-next'
-import { formatRelativeTime } from '~/utils/format'
 import type { ThemeMeta } from '~/composables/useTheme'
 import type { InAppNotification } from '~/types/api'
 
