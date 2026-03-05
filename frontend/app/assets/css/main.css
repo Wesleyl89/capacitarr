@@ -1048,6 +1048,26 @@ table tr {
   border-color: hsl(var(--primary) / 0.5);
 }
 
+/* Update Available — breathing pulse on the version icon */
+@keyframes update-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+    color: var(--color-primary);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+    color: var(--color-chart-3);
+  }
+}
+
+.update-breathe {
+  animation: update-breathe 5s ease-in-out infinite;
+  color: var(--color-primary);
+}
+
 /* Page transitions (Nuxt pageTransition: 'page') */
 .page-enter-active,
 .page-leave-active {

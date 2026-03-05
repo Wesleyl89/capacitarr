@@ -147,20 +147,24 @@
             </UiPopoverContent>
           </UiPopover>
 
-          <!-- Update Available Indicator -->
-          <UiPopover v-if="updateAvailable">
+          <!-- Version / Update Indicator (always visible) -->
+          <UiPopover>
             <UiPopoverTrigger as-child>
-              <UiButton variant="ghost" size="icon" :aria-label="$t('update.title')">
-                <span class="relative">
-                  <component :is="ArrowUpCircleIcon" class="w-5 h-5 text-green-500" />
-                  <span
-                    class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 ring-2 ring-background"
-                  />
-                </span>
+              <UiButton
+                variant="ghost"
+                size="icon"
+                :aria-label="updateAvailable ? $t('update.title') : $t('update.upToDate')"
+              >
+                <component
+                  :is="ArrowUpCircleIcon"
+                  class="w-5 h-5"
+                  :class="updateAvailable ? 'update-breathe' : ''"
+                />
               </UiButton>
             </UiPopoverTrigger>
             <UiPopoverContent align="end" class="w-72 p-4">
-              <div class="space-y-3">
+              <!-- Update available -->
+              <div v-if="updateAvailable" class="space-y-3">
                 <h4 class="text-sm font-semibold">{{ $t('update.title') }}</h4>
                 <p class="text-xs text-muted-foreground">{{ $t('update.available') }}</p>
                 <div class="space-y-1 text-sm">
@@ -170,7 +174,7 @@
                   </div>
                   <div class="flex justify-between">
                     <span class="text-muted-foreground">{{ $t('update.latestVersion') }}</span>
-                    <span class="font-mono text-green-500">{{ latestVersion }}</span>
+                    <span class="font-mono text-primary">{{ latestVersion }}</span>
                   </div>
                 </div>
                 <div class="flex items-center justify-between pt-1">
@@ -182,6 +186,20 @@
                   >
                     {{ $t('update.viewRelease') }}
                   </a>
+                </div>
+              </div>
+              <!-- Up to date -->
+              <div v-else class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <component :is="CheckCircleIcon" class="w-4 h-4 text-primary" />
+                  <h4 class="text-sm font-semibold">{{ $t('update.upToDate') }}</h4>
+                </div>
+                <p class="text-xs text-muted-foreground">{{ $t('update.upToDateDesc') }}</p>
+                <div class="text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-muted-foreground">{{ $t('update.currentVersion') }}</span>
+                    <span class="font-mono">{{ apiVersion || uiVersion }}</span>
+                  </div>
                 </div>
               </div>
             </UiPopoverContent>

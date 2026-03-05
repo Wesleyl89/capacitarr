@@ -375,5 +375,7 @@
   "update.available": "A new version of Capacitarr is available.",
   "update.currentVersion": "Current Version",
   "update.latestVersion": "Latest Version",
-  "update.viewRelease": "View Release Notes"
+  "update.viewRelease": "View Release Notes",
+  "update.upToDate": "Up to Date",
+  "update.upToDateDesc": "You're running the latest version of Capacitarr."
 }

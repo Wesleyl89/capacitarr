@@ -35,7 +35,7 @@ var (
 
 // gitlabReleasesURL is the GitLab API endpoint for Capacitarr releases.
 // Extracted as a package-level variable so tests can override it.
-var gitlabReleasesURL = "https://gitlab.com/api/v4/projects/67012297/releases?per_page=1"
+var gitlabReleasesURL = "https://gitlab.com/api/v4/projects/79833150/releases?per_page=1"
 
 // RegisterVersionRoutes sets up the version check endpoint on the protected group.
 func RegisterVersionRoutes(g *echo.Group, database *gorm.DB, appVersion string) {
@@ -140,7 +140,7 @@ func fetchLatestRelease(appVersion string) versionCheckResult {
 		Current:         appVersion,
 		Latest:          latestTag,
 		UpdateAvailable: updateAvailable,
-		ReleaseURL:      fmt.Sprintf("https://gitlab.com/starshadow/capacitarr/-/releases/%s", latestTag),
+		ReleaseURL:      fmt.Sprintf("https://gitlab.com/starshadow/software/capacitarr/-/releases/%s", latestTag),
 		CheckedAt:       time.Now(),
 	}
 }
