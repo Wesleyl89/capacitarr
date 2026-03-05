@@ -1,3 +1,24 @@
+## [1.0.0-rc.4] - 2026-03-05
+
+### 🚀 Features
+
+- *(version)* Add update check endpoint with 6h cache ([2adf50c](https://gitlab.com/starshadow/software/capacitarr/-/commit/2adf50ce762dfabf7ed34df3411273276746d09e))
+- *(navbar)* Add update check indicator and Serenity slogan ([01fc236](https://gitlab.com/starshadow/software/capacitarr/-/commit/01fc236651e4a48f705d371748efd245810303f0))
+- *(engine)* Track deleted count per run with run-stats-ID approach ([a00b42e](https://gitlab.com/starshadow/software/capacitarr/-/commit/a00b42efa1dea383214014dd6c94274bb19d1efe))
+- *(engine)* Add history endpoint, remove audit/activity ([7b6f708](https://gitlab.com/starshadow/software/capacitarr/-/commit/7b6f7080e372ce56b96760ab7739768180d1aa4e))
+- *(dashboard)* Consolidate sparklines onto engine history data ([ba92422](https://gitlab.com/starshadow/software/capacitarr/-/commit/ba92422611115ccd44930f05f5c73f216ed418df))
+- *(approval)* Block approvals when deletions disabled, add orphan recovery ([cf9a3e5](https://gitlab.com/starshadow/software/capacitarr/-/commit/cf9a3e56f402d065e935bbf0be9ad092d24a64b7))
+
+### 🐛 Bug Fixes
+
+- *(deps)* Override svgo and tar to resolve pnpm audit vulnerabilities ([7c20356](https://gitlab.com/starshadow/software/capacitarr/-/commit/7c203561e6e09b3a48f64aecea900214d62f6d70))
+- *(data)* Preserve disk group thresholds during data reset ([ea7f73b](https://gitlab.com/starshadow/software/capacitarr/-/commit/ea7f73be287642ec5d76e8fee371b7a7f843e8af))
+- *(frontend)* Replace bare catch blocks with console.warn logging ([b653de0](https://gitlab.com/starshadow/software/capacitarr/-/commit/b653de0a30c4a93a5a0b14bf325f4f30fe80757c))
+- Use Find+Limit instead of First for optional queries ([0c51f8b](https://gitlab.com/starshadow/software/capacitarr/-/commit/0c51f8b2ef1cc8d41da0cf93a9ce448f881eea31))
+- *(dashboard)* Use dateRange dropdown for sparkline labels and improve color contrast ([9c03735](https://gitlab.com/starshadow/software/capacitarr/-/commit/9c037353fbc14c97858c8c39f0821a9034df8102))
+- *(navbar)* Inline Serenity SVG so currentColor inherits text color ([837c651](https://gitlab.com/starshadow/software/capacitarr/-/commit/837c651ad2a53103ef561443e005d633382a5eb4))
+- *(dashboard)* Display sparkline timestamps in browser local timezone ([43edd0d](https://gitlab.com/starshadow/software/capacitarr/-/commit/43edd0d10d27c4ece21cf5277f07af6c62eca528))
+- Sparkline accuracy, tooltips, and visual quality ([e48d60c](https://gitlab.com/starshadow/software/capacitarr/-/commit/e48d60c38cfe36e9de64cf9ba1322e2fbc4270c2))
 ## [1.0.0-rc.3] - 2026-03-05
 
 ### 🚀 Features
