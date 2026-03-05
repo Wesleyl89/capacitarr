@@ -99,7 +99,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 
 			// Write: create an audit log entry
-			log := AuditLog{
+			log := AuditLogEntry{
 				MediaName: fmt.Sprintf("concurrent-test-%d", idx),
 				MediaType: "movie",
 				Reason:    "test",
@@ -129,7 +129,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Verify all writes landed
 	var count int64
-	database.Model(&AuditLog{}).Where("reason = ?", "test").Count(&count)
+	database.Model(&AuditLogEntry{}).Where("reason = ?", "test").Count(&count)
 	if count != goroutines {
 		t.Errorf("Expected %d audit logs, got %d", goroutines, count)
 	}
@@ -180,9 +180,9 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		t.Fatalf("Migration failed: %v", err)
 	}
 
-	// Test DATETIME round-trip via AuditLog.CreatedAt
+	// Test DATETIME round-trip via AuditLogEntry.CreatedAt
 	now := time.Now().Truncate(time.Second)
-	log := AuditLog{
+	log := AuditLogEntry{
 		MediaName: "type-test",
 		MediaType: "series",
 		Reason:    "round-trip-test",
@@ -194,7 +194,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		t.Fatalf("Failed to create audit log: %v", err)
 	}
 
-	var retrieved AuditLog
+	var retrieved AuditLogEntry
 	if err := database.First(&retrieved, log.ID).Error; err != nil {
 		t.Fatalf("Failed to retrieve audit log: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 	}
 
 	// NULL round-trip — ScoreDetails is nullable TEXT
-	logWithNull := AuditLog{
+	logWithNull := AuditLogEntry{
 		MediaName: "null-test",
 		MediaType: "movie",
 		Reason:    "null-round-trip",
@@ -249,7 +249,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		t.Fatalf("Failed to create audit log with null fields: %v", err)
 	}
 
-	var retrievedNull AuditLog
+	var retrievedNull AuditLogEntry
 	if err := database.First(&retrievedNull, logWithNull.ID).Error; err != nil {
 		t.Fatalf("Failed to retrieve null audit log: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 
 	// Zero-value DATETIME — verify it doesn't panic or corrupt
 	var zeroTime time.Time
-	logZero := AuditLog{
+	logZero := AuditLogEntry{
 		MediaName: "zero-time-test",
 		MediaType: "movie",
 		Reason:    "zero-time",
@@ -272,7 +272,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		t.Fatalf("Failed to create audit log with zero time: %v", err)
 	}
 
-	var retrievedZero AuditLog
+	var retrievedZero AuditLogEntry
 	if err := database.First(&retrievedZero, logZero.ID).Error; err != nil {
 		t.Fatalf("Failed to retrieve zero-time audit log: %v", err)
 	}

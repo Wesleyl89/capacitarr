@@ -60,14 +60,14 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 	integrationID := uint(1)
 
 	// Seed entries with various statuses
-	entries := []db.AuditLog{
+	entries := []db.ApprovalQueueItem{
 		{
 			MediaName:     "Orphaned Movie 1",
 			MediaType:     "movie",
 			Reason:        "Score: 0.80",
-			Action:        "Approved",
+			Status: "Approved",
 			SizeBytes:     2000000000,
-			IntegrationID: &integrationID,
+			IntegrationID: integrationID,
 			ExternalID:    "ext-100",
 			CreatedAt:     time.Now().Add(-1 * time.Hour),
 		},
@@ -75,9 +75,9 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 			MediaName:     "Orphaned Movie 2",
 			MediaType:     "movie",
 			Reason:        "Score: 0.65",
-			Action:        "Approved",
+			Status: "Approved",
 			SizeBytes:     3000000000,
-			IntegrationID: &integrationID,
+			IntegrationID: integrationID,
 			ExternalID:    "ext-101",
 			CreatedAt:     time.Now().Add(-2 * time.Hour),
 		},
@@ -85,9 +85,9 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 			MediaName:     "Queued Movie",
 			MediaType:     "movie",
 			Reason:        "Score: 0.90",
-			Action:        "Queued for Approval",
+			Status: "Queued for Approval",
 			SizeBytes:     1500000000,
-			IntegrationID: &integrationID,
+			IntegrationID: integrationID,
 			ExternalID:    "ext-200",
 			CreatedAt:     time.Now().Add(-30 * time.Minute),
 		},
@@ -95,9 +95,9 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 			MediaName:     "Deleted Movie",
 			MediaType:     "movie",
 			Reason:        "Score: 0.95",
-			Action:        "Deleted",
+			Status: "Deleted",
 			SizeBytes:     4000000000,
-			IntegrationID: &integrationID,
+			IntegrationID: integrationID,
 			ExternalID:    "ext-300",
 			CreatedAt:     time.Now().Add(-3 * time.Hour),
 		},
@@ -105,9 +105,9 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 			MediaName:     "Rejected Movie",
 			MediaType:     "movie",
 			Reason:        "Score: 0.50",
-			Action:        "Rejected",
+			Status: "Rejected",
 			SizeBytes:     1000000000,
-			IntegrationID: &integrationID,
+			IntegrationID: integrationID,
 			ExternalID:    "ext-400",
 			CreatedAt:     time.Now().Add(-4 * time.Hour),
 		},
@@ -121,7 +121,7 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 
 	// Verify initial state: 2 "Approved" entries exist
 	var approvedCount int64
-	database.Model(&db.AuditLog{}).Where("action = ?", "Approved").Count(&approvedCount)
+	database.Model(&db.ApprovalQueueItem{}).Where("action = ?", "Approved").Count(&approvedCount)
 	if approvedCount != 2 {
 		t.Fatalf("Expected 2 Approved entries before recovery, got %d", approvedCount)
 	}
@@ -130,36 +130,36 @@ func TestRecoverOrphanedApprovals(t *testing.T) {
 	RecoverOrphanedApprovals()
 
 	// Verify: "Approved" entries were reverted to "Queued for Approval"
-	database.Model(&db.AuditLog{}).Where("action = ?", "Approved").Count(&approvedCount)
+	database.Model(&db.ApprovalQueueItem{}).Where("action = ?", "Approved").Count(&approvedCount)
 	if approvedCount != 0 {
 		t.Errorf("Expected 0 Approved entries after recovery, got %d", approvedCount)
 	}
 
 	// Verify: the two formerly-Approved entries are now "Queued for Approval"
 	var queuedCount int64
-	database.Model(&db.AuditLog{}).Where("action = ?", "Queued for Approval").Count(&queuedCount)
+	database.Model(&db.ApprovalQueueItem{}).Where("action = ?", "Queued for Approval").Count(&queuedCount)
 	if queuedCount != 3 { // 2 recovered + 1 originally queued
 		t.Errorf("Expected 3 'Queued for Approval' entries (2 recovered + 1 original), got %d", queuedCount)
 	}
 
 	// Verify: "Deleted" entry was NOT modified
-	var deleted db.AuditLog
+	var deleted db.ApprovalQueueItem
 	database.Where("media_name = ?", "Deleted Movie").First(&deleted)
-	if deleted.Action != "Deleted" {
-		t.Errorf("Expected 'Deleted' entry to be unchanged, got action %q", deleted.Action)
+	if deleted.Status != "Deleted" {
+		t.Errorf("Expected 'Deleted' entry to be unchanged, got action %q", deleted.Status)
 	}
 
 	// Verify: "Rejected" entry was NOT modified
-	var rejected db.AuditLog
+	var rejected db.ApprovalQueueItem
 	database.Where("media_name = ?", "Rejected Movie").First(&rejected)
-	if rejected.Action != "Rejected" {
-		t.Errorf("Expected 'Rejected' entry to be unchanged, got action %q", rejected.Action)
+	if rejected.Status != "Rejected" {
+		t.Errorf("Expected 'Rejected' entry to be unchanged, got action %q", rejected.Status)
 	}
 
 	// Verify: originally "Queued for Approval" entry was NOT modified
-	var queued db.AuditLog
+	var queued db.ApprovalQueueItem
 	database.Where("media_name = ?", "Queued Movie").First(&queued)
-	if queued.Action != "Queued for Approval" {
-		t.Errorf("Expected 'Queued for Approval' entry to be unchanged, got action %q", queued.Action)
+	if queued.Status != "Queued for Approval" {
+		t.Errorf("Expected 'Queued for Approval' entry to be unchanged, got action %q", queued.Status)
 	}
 }

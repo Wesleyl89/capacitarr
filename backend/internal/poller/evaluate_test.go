@@ -60,7 +60,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 	integrationID := uint(1)
 
 	// Simulate first engine run: create initial entry
-	firstEntry := db.AuditLog{
+	firstEntry := db.AuditLogEntry{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 5.50 (high score)",
@@ -68,12 +68,11 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 		Action:        actionName,
 		SizeBytes:     1000000000,
 		IntegrationID: &integrationID,
-		ExternalID:    "ext-123",
 		CreatedAt:     time.Now().Add(-1 * time.Hour),
 	}
 
 	// Run the dedup logic (mirrors evaluate.go approval dedup path)
-	var existing db.AuditLog
+	var existing db.AuditLogEntry
 	result := db.DB.Where(
 		"media_name = ? AND media_type = ? AND action = ?",
 		mediaName, mediaType, actionName,
@@ -84,7 +83,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 			"score_details":  firstEntry.ScoreDetails,
 			"size_bytes":     firstEntry.SizeBytes,
 			"created_at":     firstEntry.CreatedAt,
-			"external_id":    firstEntry.ExternalID,
+			"external_id":    firstEntry.IntegrationID,
 			"integration_id": firstEntry.IntegrationID,
 		})
 	} else {
@@ -93,13 +92,13 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 
 	// Verify: one entry exists
 	var count int64
-	database.Model(&db.AuditLog{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
+	database.Model(&db.AuditLogEntry{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
 	if count != 1 {
 		t.Fatalf("Expected 1 audit entry after first run, got %d", count)
 	}
 
 	// Simulate second engine run: updated score and size
-	secondEntry := db.AuditLog{
+	secondEntry := db.AuditLogEntry{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 6.20 (higher score)",
@@ -107,12 +106,11 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 		Action:        actionName,
 		SizeBytes:     1100000000,
 		IntegrationID: &integrationID,
-		ExternalID:    "ext-123",
 		CreatedAt:     time.Now(),
 	}
 
 	// Run the dedup logic again (should update, not create)
-	var existing2 db.AuditLog
+	var existing2 db.AuditLogEntry
 	result2 := db.DB.Where(
 		"media_name = ? AND media_type = ? AND action = ?",
 		mediaName, mediaType, actionName,
@@ -123,7 +121,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 			"score_details":  secondEntry.ScoreDetails,
 			"size_bytes":     secondEntry.SizeBytes,
 			"created_at":     secondEntry.CreatedAt,
-			"external_id":    secondEntry.ExternalID,
+			"external_id":    secondEntry.IntegrationID,
 			"integration_id": secondEntry.IntegrationID,
 		})
 	} else {
@@ -131,13 +129,13 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 	}
 
 	// Verify: still only one entry
-	database.Model(&db.AuditLog{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
+	database.Model(&db.AuditLogEntry{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 audit entry after second run (dedup), got %d", count)
 	}
 
 	// Verify: the entry was updated with the new values
-	var updated db.AuditLog
+	var updated db.AuditLogEntry
 	database.Where("media_name = ? AND action = ?", mediaName, actionName).First(&updated)
 	if updated.Reason != "Score: 6.20 (higher score)" {
 		t.Errorf("Expected updated reason, got %q", updated.Reason)
@@ -157,7 +155,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 	integrationID := uint(1)
 
 	// Create an entry that was approved by the user
-	approvedEntry := db.AuditLog{
+	approvedEntry := db.AuditLogEntry{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 4.00 (approved)",
@@ -165,13 +163,12 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 		Action:        "Approved",
 		SizeBytes:     500000000,
 		IntegrationID: &integrationID,
-		ExternalID:    "ext-456",
 		CreatedAt:     time.Now().Add(-30 * time.Minute),
 	}
 	database.Create(&approvedEntry)
 
 	// Now simulate the engine trying to re-queue this item for approval
-	newEntry := db.AuditLog{
+	newEntry := db.AuditLogEntry{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 4.50 (re-evaluated)",
@@ -179,12 +176,11 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 		Action:        "Queued for Approval",
 		SizeBytes:     550000000,
 		IntegrationID: &integrationID,
-		ExternalID:    "ext-456",
 		CreatedAt:     time.Now(),
 	}
 
 	// Run the approval dedup logic (WHERE action = "Queued for Approval")
-	var existing db.AuditLog
+	var existing db.AuditLogEntry
 	result := db.DB.Where(
 		"media_name = ? AND media_type = ? AND action = ?",
 		mediaName, mediaType, "Queued for Approval",
@@ -195,7 +191,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 			"score_details":  newEntry.ScoreDetails,
 			"size_bytes":     newEntry.SizeBytes,
 			"created_at":     newEntry.CreatedAt,
-			"external_id":    newEntry.ExternalID,
+			"external_id":    newEntry.IntegrationID,
 			"integration_id": newEntry.IntegrationID,
 		})
 	} else {
@@ -204,7 +200,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 	}
 
 	// Verify: the approved entry is untouched
-	var approved db.AuditLog
+	var approved db.AuditLogEntry
 	database.Where("media_name = ? AND action = ?", mediaName, "Approved").First(&approved)
 	if approved.ID == 0 {
 		t.Fatal("Expected approved entry to still exist")
@@ -217,7 +213,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 	}
 
 	// Verify: a new "Queued for Approval" entry was created (separate from the approved one)
-	var queued db.AuditLog
+	var queued db.AuditLogEntry
 	database.Where("media_name = ? AND action = ?", mediaName, "Queued for Approval").First(&queued)
 	if queued.ID == 0 {
 		t.Fatal("Expected new 'Queued for Approval' entry to be created")
@@ -228,7 +224,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 
 	// Verify: total entries = 2 (one approved, one queued)
 	var total int64
-	database.Model(&db.AuditLog{}).Where("media_name = ?", mediaName).Count(&total)
+	database.Model(&db.AuditLogEntry{}).Where("media_name = ?", mediaName).Count(&total)
 	if total != 2 {
 		t.Errorf("Expected 2 total entries (1 approved + 1 queued), got %d", total)
 	}

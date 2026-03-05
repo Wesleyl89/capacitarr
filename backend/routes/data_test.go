@@ -23,7 +23,7 @@ func seedDataForReset(t *testing.T, database *gorm.DB) {
 
 	// Audit logs
 	for i := 0; i < 3; i++ {
-		if err := database.Create(&db.AuditLog{
+		if err := database.Create(&db.AuditLogEntry{
 			MediaName: "Test Movie",
 			MediaType: "movie",
 			Reason:    "Score: 0.5",
@@ -97,7 +97,7 @@ func TestDataReset_ClearsAllData(t *testing.T) {
 
 	// Verify data was seeded
 	var auditCount, historyCount, statsCount, diskCount int64
-	database.Model(&db.AuditLog{}).Count(&auditCount)
+	database.Model(&db.AuditLogEntry{}).Count(&auditCount)
 	database.Model(&db.LibraryHistory{}).Count(&historyCount)
 	database.Model(&db.EngineRunStats{}).Count(&statsCount)
 	database.Model(&db.DiskGroup{}).Count(&diskCount)
@@ -150,7 +150,7 @@ func TestDataReset_ClearsAllData(t *testing.T) {
 	}
 
 	// Verify deleted tables are actually empty
-	database.Model(&db.AuditLog{}).Count(&auditCount)
+	database.Model(&db.AuditLogEntry{}).Count(&auditCount)
 	database.Model(&db.LibraryHistory{}).Count(&historyCount)
 	database.Model(&db.EngineRunStats{}).Count(&statsCount)
 
@@ -268,7 +268,7 @@ func TestDataReset_PreservesCustomRules(t *testing.T) {
 	}
 
 	// Seed some data that should be cleared
-	if err := database.Create(&db.AuditLog{
+	if err := database.Create(&db.AuditLogEntry{
 		MediaName: "Test", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 100,
 	}).Error; err != nil {
 		t.Fatalf("Failed to seed audit log: %v", err)

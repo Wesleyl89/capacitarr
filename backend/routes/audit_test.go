@@ -24,7 +24,7 @@ func seedAuditLogs(t *testing.T, database *gorm.DB, n int) {
 		if i%2 == 0 {
 			action = "Dry-Run"
 		}
-		log := db.AuditLog{
+		log := db.AuditLogEntry{
 			MediaName: fmt.Sprintf("Test Media %d", i),
 			MediaType: "movie",
 			Reason:    "Score: 0.85",
@@ -51,7 +51,7 @@ func TestGetAuditLogs_Empty(t *testing.T) {
 	}
 
 	var resp struct {
-		Data   []db.AuditLog `json:"data"`
+		Data   []db.AuditLogEntry `json:"data"`
 		Total  int64         `json:"total"`
 		Limit  int           `json:"limit"`
 		Offset int           `json:"offset"`
@@ -89,7 +89,7 @@ func TestGetAuditLogs_WithData(t *testing.T) {
 	}
 
 	var resp struct {
-		Data   []db.AuditLog `json:"data"`
+		Data   []db.AuditLogEntry `json:"data"`
 		Total  int64         `json:"total"`
 		Limit  int           `json:"limit"`
 		Offset int           `json:"offset"`
@@ -157,7 +157,7 @@ func TestGetAuditLogs_Pagination(t *testing.T) {
 			}
 
 			var resp struct {
-				Data   []db.AuditLog `json:"data"`
+				Data   []db.AuditLogEntry `json:"data"`
 				Total  int64         `json:"total"`
 				Limit  int           `json:"limit"`
 				Offset int           `json:"offset"`
@@ -209,7 +209,7 @@ func TestGetAuditLogs_FilterByAction(t *testing.T) {
 			}
 
 			var resp struct {
-				Data  []db.AuditLog `json:"data"`
+				Data  []db.AuditLogEntry `json:"data"`
 				Total int64         `json:"total"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -228,7 +228,7 @@ func TestGetAuditLogs_SearchFilter(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Seed specific named items
-	logs := []db.AuditLog{
+	logs := []db.AuditLogEntry{
 		{MediaName: "Inception", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 1000},
 		{MediaName: "Interstellar", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 2000},
 		{MediaName: "The Dark Knight", MediaType: "movie", Reason: "test", Action: "Dry-Run", SizeBytes: 3000},
@@ -248,7 +248,7 @@ func TestGetAuditLogs_SearchFilter(t *testing.T) {
 	}
 
 	var resp struct {
-		Data  []db.AuditLog `json:"data"`
+		Data  []db.AuditLogEntry `json:"data"`
 		Total int64         `json:"total"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -268,7 +268,7 @@ func TestGetAuditLogs_Sorting(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Seed items with distinct sizes
-	logs := []db.AuditLog{
+	logs := []db.AuditLogEntry{
 		{MediaName: "Small", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 100},
 		{MediaName: "Large", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 9000},
 		{MediaName: "Medium", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 5000},
@@ -288,7 +288,7 @@ func TestGetAuditLogs_Sorting(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []db.AuditLog `json:"data"`
+		Data []db.AuditLogEntry `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
@@ -358,7 +358,7 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint) {
 		t.Fatalf("Failed to seed integration: %v", err)
 	}
 
-	entry := db.AuditLog{
+	entry := db.AuditLogEntry{
 		MediaName:     "Approval Test Movie",
 		MediaType:     "movie",
 		Reason:        "Score: 0.75 (WatchHistory: 0.5, Size: 0.8)",
@@ -366,7 +366,6 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint) {
 		Action:        "Queued for Approval",
 		SizeBytes:     5000000,
 		IntegrationID: &integration.ID,
-		ExternalID:    "123",
 		CreatedAt:     time.Now(),
 	}
 	if err := database.Create(&entry).Error; err != nil {
@@ -406,7 +405,7 @@ func TestApproveAuditEntry_HappyPath(t *testing.T) {
 	}
 
 	// Verify the audit entry was updated to "Approved"
-	var updated db.AuditLog
+	var updated db.AuditLogEntry
 	if err := database.First(&updated, auditID).Error; err != nil {
 		t.Fatalf("Failed to find updated audit entry: %v", err)
 	}
@@ -433,7 +432,7 @@ func TestApproveAuditEntry_NotQueued(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Create an entry with action "Dry-Run" (not "Queued for Approval")
-	entry := db.AuditLog{
+	entry := db.AuditLogEntry{
 		MediaName: "Not Queued Movie",
 		MediaType: "movie",
 		Reason:    "Score: 0.50",
@@ -488,7 +487,7 @@ func TestApproveAuditEntry_DeletionsDisabled(t *testing.T) {
 	}
 
 	// Verify the audit entry was NOT changed (still "Queued for Approval")
-	var entry db.AuditLog
+	var entry db.AuditLogEntry
 	if err := database.First(&entry, auditID).Error; err != nil {
 		t.Fatalf("Failed to find audit entry: %v", err)
 	}
@@ -521,7 +520,7 @@ func TestRejectAuditEntry_HappyPath(t *testing.T) {
 	}
 
 	// Verify the audit entry was updated to "Rejected"
-	var updated db.AuditLog
+	var updated db.AuditLogEntry
 	if err := database.First(&updated, auditID).Error; err != nil {
 		t.Fatalf("Failed to find updated audit entry: %v", err)
 	}
@@ -557,7 +556,7 @@ func TestGetRecentAuditLogs_Empty(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var logs []db.AuditLog
+	var logs []db.AuditLogEntry
 	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
@@ -580,7 +579,7 @@ func TestGetRecentAuditLogs_DefaultLimit(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var logs []db.AuditLog
+	var logs []db.AuditLogEntry
 	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
@@ -603,7 +602,7 @@ func TestGetRecentAuditLogs_CustomLimit(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var logs []db.AuditLog
+	var logs []db.AuditLogEntry
 	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
@@ -626,7 +625,7 @@ func TestGetRecentAuditLogs_LimitCapped(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var logs []db.AuditLog
+	var logs []db.AuditLogEntry
 	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
@@ -650,7 +649,7 @@ func TestGetRecentAuditLogs_OrderedByNewest(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var logs []db.AuditLog
+	var logs []db.AuditLogEntry
 	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}

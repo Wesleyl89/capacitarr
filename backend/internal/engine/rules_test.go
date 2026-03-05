@@ -508,35 +508,8 @@ func TestApplyRules_AlwaysKeepReturnsImmediately(t *testing.T) {
 	}
 }
 
-func TestLegacyEffect(t *testing.T) {
-	tests := []struct {
-		name      string
-		ruleType  string
-		intensity string
-		expected  string
-	}{
-		{"protect absolute", "protect", "absolute", "always_keep"},
-		{"protect strong", "protect", "strong", "prefer_keep"},
-		{"protect slight", "protect", "slight", "lean_keep"},
-		{"protect default", "protect", "", "lean_keep"},
-		{"target absolute", "target", "absolute", "always_remove"},
-		{"target strong", "target", "strong", "prefer_remove"},
-		{"target slight", "target", "slight", "lean_remove"},
-		{"target default", "target", "", "lean_remove"},
-		{"empty type defaults to lean_keep", "", "", "lean_keep"},
-		{"unknown type defaults to lean_keep", "unknown", "unknown", "lean_keep"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := legacyEffect(tc.ruleType, tc.intensity)
-			if result != tc.expected {
-				t.Errorf("legacyEffect(%q, %q) = %q, want %q",
-					tc.ruleType, tc.intensity, result, tc.expected)
-			}
-		})
-	}
-}
+// TestLegacyEffect removed — legacyEffect() and the deprecated Type/Intensity
+// fields were removed in the service-layer-event-bus refactor.
 
 func TestMatchesRule_LastPlayed(t *testing.T) {
 	recentPlay := time.Now().Add(-5 * 24 * time.Hour) // 5 days ago
@@ -707,19 +680,16 @@ func TestApplyRules_LegacyFallback(t *testing.T) {
 	}{
 		{
 			name:     "Legacy absolute protect",
-			rule:     db.CustomRule{Enabled: true, Type: "protect", Field: "title", Operator: "==", Value: "the matrix", Intensity: "absolute"},
 			isAbs:    true,
 			modifier: 0.0,
 		},
 		{
 			name:     "Legacy strong target",
-			rule:     db.CustomRule{Enabled: true, Type: "target", Field: "rating", Operator: ">", Value: "8.0", Intensity: "strong"},
 			isAbs:    false,
 			modifier: 3.0,
 		},
 		{
 			name:     "Legacy default protect",
-			rule:     db.CustomRule{Enabled: true, Type: "protect", Field: "rating", Operator: ">", Value: "8.0"},
 			isAbs:    false,
 			modifier: 0.5,
 		},
