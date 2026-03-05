@@ -3,7 +3,7 @@
 **Date:** 2026-03-05
 **Branch:** `docs/site-polish-plan`
 **Scope:** Pages site accuracy, documentation corrections, credits update, GitLab repo stats widget
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
 ---
 
@@ -36,20 +36,21 @@ Additionally, this plan adds a Maintainerr credit callout, a GitLab repo stats w
 
 **Goal:** Fix all factual inaccuracies in documentation and site content.
 **Risk:** 🟢 Low — text-only changes, no logic changes.
+**Status:** ✅ Complete
 
 ### Step 1.1: Fix "Nuxt 3" → "Nuxt 4" References
 
 The app uses Nuxt 4. The README already says "Nuxt 4" but two files still say "Nuxt 3":
 
-- [ ] `site/app/pages/index.vue:252` — Change `Built with Go, Nuxt 3, and SQLite` → `Built with Go, Nuxt 4, and SQLite`
-- [ ] `frontend/app/pages/help.vue:654` — Change `'Nuxt 3'` → `'Nuxt 4'` in `techStack.frontend` array
+- [x] `site/app/pages/index.vue:252` — Change `Built with Go, Nuxt 3, and SQLite` → `Built with Go, Nuxt 4, and SQLite`
+- [x] `frontend/app/pages/help.vue:654` — Change `'Nuxt 3'` → `'Nuxt 4'` in `techStack.frontend` array
 
 ### Step 1.2: Fix Quick Start "Create a Disk Group" Section
 
 Disk groups are determined automatically from integrations — users don't create them manually. The entire Step 5 in quick start needs rewriting.
 
-- [ ] `docs/quick-start.md:56-61` — Rewrite "## 5. Create a Disk Group" section. Replace with explanation that disk groups are automatically detected from integration root folders. Users configure **thresholds** and **targets** on the auto-detected groups via Settings → General (or wherever the threshold UI lives).
-- [ ] Renumber remaining steps if needed (Step 6→5, Step 7→6), or keep step count and just update the content of Step 5.
+- [x] `docs/quick-start.md:56-61` — Rewrite "## 5. Create a Disk Group" section. Replace with explanation that disk groups are automatically detected from integration root folders. Users configure **thresholds** and **targets** on the auto-detected groups via Settings → General (or wherever the threshold UI lives).
+- [x] Renumber remaining steps if needed (Step 6→5, Step 7→6), or keep step count and just update the content of Step 5. — Kept as Step 5, renamed to "Configure Disk Thresholds".
 
 **Suggested replacement for Step 5:**
 
@@ -71,7 +72,7 @@ To configure when cleanup triggers:
 
 The FAQ answer says "You can define multiple disk groups, each with their own integrations, thresholds, and targets." This is inaccurate.
 
-- [ ] `site/app/components/FaqSection.vue:25-27` — Rewrite the disk groups Q&A:
+- [x] `site/app/components/FaqSection.vue:25-27` — Rewrite the disk groups Q&A:
 
 **Suggested replacement:**
 
@@ -86,13 +87,13 @@ The FAQ answer says "You can define multiple disk groups, each with their own in
 
 The scoring factor was renamed from "Availability" to "Series Status." Update all remaining references:
 
-- [ ] `site/app/components/FaqSection.vue:22` — Change `age, file size, popularity, recency, rating, and availability` → `age, file size, popularity, recency, rating, and series status`
-- [ ] `docs/quick-start.md:72` — Change `**Availability** — Content available from more sources scores higher` → `**Series Status** — Ended shows score higher for deletion than continuing shows`
-- [ ] `README.md:7` — Change `watch history, recency, file size, ratings, age, and availability` → `watch history, recency, file size, ratings, age, and series status`
+- [x] `site/app/components/FaqSection.vue:22` — Change `age, file size, popularity, recency, rating, and availability` → `age, file size, popularity, recency, rating, and series status`
+- [x] `docs/quick-start.md:72` — Change `**Availability** — Content available from more sources scores higher` → `**Series Status** — Ended shows score higher for deletion than continuing shows`
+- [x] `README.md:7` — Change `watch history, recency, file size, ratings, age, and availability` → `watch history, recency, file size, ratings, age, and series status`
 
 ### Step 1.5: Fix `docs/index.md` Disk Group Wording
 
-- [ ] `docs/index.md:8` — Change `Group services by shared disk` to wording that makes clear disk groups are automatic. E.g.: `Disk groups are auto-detected — Capacitarr tracks capacity per root folder across your integrations.`
+- [x] `docs/index.md:8` — Change `Group services by shared disk` to wording that makes clear disk groups are automatic. E.g.: `Disk groups are auto-detected — Capacitarr tracks capacity per root folder across your integrations.`
 
 ---
 
@@ -100,12 +101,13 @@ The scoring factor was renamed from "Availability" to "Series Status." Update al
 
 **Goal:** Add Maintainerr as a special callout in credits.
 **Risk:** 🟢 Low — additive content only.
+**Status:** ✅ Complete
 
 ### Step 2.1: Update CONTRIBUTORS.md
 
 Add a "Credits & Acknowledgments" section that calls out the *arr community and Maintainerr specifically.
 
-- [ ] `CONTRIBUTORS.md` — Add a new section after "Contributors":
+- [x] `CONTRIBUTORS.md` — Add a new section after "Contributors":
 
 ```markdown
 ## Credits & Acknowledgments
@@ -126,7 +128,7 @@ Capacitarr exists because of the incredible *arr ecosystem. Special thanks to:
 
 ### Step 2.2: Update Frontend Help Page Credits
 
-- [ ] `frontend/app/pages/help.vue:660-666` — Add Maintainerr to the `credits` array with special positioning (before "The *arr community" or as an expanded entry):
+- [x] `frontend/app/pages/help.vue:660-666` — Add Maintainerr to the `credits` array with special positioning (before "The *arr community" or as an expanded entry):
 
 ```typescript
 const credits = [
@@ -145,6 +147,7 @@ const credits = [
 
 **Goal:** Add a compact repo stats display in the site header, inspired by Maintainerr's GitHub widget.
 **Risk:** 🟡 Medium — new component, API integration, needs fallback handling.
+**Status:** ✅ Complete
 
 ### Design
 
@@ -169,7 +172,7 @@ For Capacitarr on GitLab, the equivalent useful stats are:
 
 ### Step 3.1: Create Build-Time Stats Fetcher
 
-- [ ] Create `site/scripts/fetch-repo-stats.mjs` — Script that fetches project stats from the GitLab public API and writes to `site/app/repo-stats.json`:
+- [x] Create `site/scripts/fetch-repo-stats.mjs` — Script that fetches project stats from the GitLab public API and writes to `site/app/repo-stats.json`:
 
 ```javascript
 // Fetches: star_count, forks_count, latest release tag_name
@@ -177,11 +180,11 @@ For Capacitarr on GitLab, the equivalent useful stats are:
 // Called during site build (prebuild hook in package.json)
 ```
 
-- [ ] Update `site/package.json` — Add `"prebuild": "node scripts/fetch-repo-stats.mjs"` before the generate script
+- [x] Update `site/package.json` — Add `"prebuild": "node scripts/fetch-repo-stats.mjs"` before the generate script
 
 ### Step 3.2: Create RepoStats Component
 
-- [ ] Create `site/app/components/RepoStats.vue` — Compact inline stats display:
+- [x] Create `site/app/components/RepoStats.vue` — Compact inline stats display:
   - GitLab icon + "starshadow/capacitarr" (linked to repo)
   - Tag icon + version (from build-time JSON)
   - Star icon + count
@@ -191,7 +194,7 @@ For Capacitarr on GitLab, the equivalent useful stats are:
 
 ### Step 3.3: Integrate into Header
 
-- [ ] `site/app/components/AppHeader.vue` — Add `<RepoStats />` in the `#right` template slot, before the theme toggle and GitLab link button. Replace the existing standalone GitLab icon button since the stats widget already links to the repo.
+- [x] `site/app/components/AppHeader.vue` — Add `<RepoStats />` in the `#right` template slot, before the theme toggle and GitLab link button. Replace the existing standalone GitLab icon button since the stats widget already links to the repo.
 
 ---
 
@@ -199,12 +202,13 @@ For Capacitarr on GitLab, the equivalent useful stats are:
 
 **Goal:** Fix minor issues found during audit.
 **Risk:** 🟢 Low
+**Status:** ✅ Complete
 
 ### Step 4.1: Remove "Nuxt UI Docs" Link from TOC
 
 The TOC sidebar bottom links to "Nuxt UI Docs" — this is a leftover from the template and not useful for Capacitarr users.
 
-- [ ] `site/app/app.config.ts:42-49` — Remove or replace the `toc.bottom.links` entry. Replace with a link to the GitLab repo or remove entirely.
+- [x] `site/app/app.config.ts:42-49` — Remove or replace the `toc.bottom.links` entry. Replace with a link to the GitLab repo or remove entirely.
 
 ### Step 4.2: Verify Synced Docs Accuracy
 
@@ -215,8 +219,8 @@ The `site/scripts/sync-docs.mjs` copies these docs to the site:
 
 After Phase 1 changes, run `node scripts/sync-docs.mjs` (or the build) to verify all synced docs reflect the fixes.
 
-- [ ] Run site build/sync and verify `content/docs/quick-start.md` has the updated disk group and series status wording
-- [ ] Spot-check other synced docs for any remaining inaccuracies
+- [x] Run site build/sync and verify `content/docs/quick-start.md` has the updated disk group and series status wording
+- [x] Spot-check other synced docs for any remaining inaccuracies
 
 ---
 
@@ -224,38 +228,39 @@ After Phase 1 changes, run `node scripts/sync-docs.mjs` (or the build) to verify
 
 **Goal:** Systematic review of every content surface on the site to catch any remaining issues.
 **Risk:** 🟢 Low — read-only audit that may produce additional fix items.
+**Status:** ✅ Complete — No additional issues found beyond those already fixed in Phases 1–4.
 
 ### Step 5.1: Site Landing Page Audit
 
 Review every text string on `site/app/pages/index.vue`:
 
-- [ ] Hero section — tagline, description, button labels
-- [ ] Features section (6 cards) — titles and descriptions match actual capabilities
-- [ ] Stats section (`AnimatedStats.vue`) — "9+ Integrations", "6 Scoring Dimensions", "100% Open Source", "0 Required Cloud Services" — verify all numbers are current
-- [ ] Comparison section (`ComparisonSection.vue`) — "before/after" claims are accurate
-- [ ] FAQ section (`FaqSection.vue`) — all 6 Q&A pairs are factually correct (disk groups and availability already fixed in Phase 1)
-- [ ] About section — license, tech stack (already fixed in Phase 1)
-- [ ] How-it-works section — 3 steps are accurate
-- [ ] Terminal animation — commands shown are correct
-- [ ] CTA section — links work
+- [x] Hero section — tagline, description, button labels
+- [x] Features section (6 cards) — titles and descriptions match actual capabilities
+- [x] Stats section (`AnimatedStats.vue`) — "9+ Integrations", "6 Scoring Dimensions", "100% Open Source", "0 Required Cloud Services" — verify all numbers are current
+- [x] Comparison section (`ComparisonSection.vue`) — "before/after" claims are accurate
+- [x] FAQ section (`FaqSection.vue`) — all 6 Q&A pairs are factually correct (disk groups and availability already fixed in Phase 1)
+- [x] About section — license, tech stack (already fixed in Phase 1)
+- [x] How-it-works section — 3 steps are accurate
+- [x] Terminal animation — commands shown are correct
+- [x] CTA section — links work
 
 ### Step 5.2: Documentation Content Audit
 
 Review each doc file for accuracy against the current codebase:
 
-- [ ] `docs/index.md` — overview, steps, links
-- [ ] `docs/quick-start.md` — all steps match actual UI flow (already partially fixed in Phase 1)
-- [ ] `docs/configuration.md` — all env vars are current, defaults are correct
-- [ ] `docs/deployment.md` — reverse proxy examples, env var table
-- [ ] `docs/scoring.md` — factor names, raw score tables, rule effects, tiebreaker methods
-- [ ] `docs/api/README.md` — API overview
-- [ ] `docs/api/examples.md` — API examples match current endpoints
-- [ ] `docs/api/workflows.md` — workflow descriptions match current behavior
-- [ ] `docs/api/versioning.md` — versioning policy
+- [x] `docs/index.md` — overview, steps, links
+- [x] `docs/quick-start.md` — all steps match actual UI flow (already partially fixed in Phase 1)
+- [x] `docs/configuration.md` — all env vars are current, defaults are correct
+- [x] `docs/deployment.md` — reverse proxy examples, env var table
+- [x] `docs/scoring.md` — factor names, raw score tables, rule effects, tiebreaker methods
+- [x] `docs/api/README.md` — API overview
+- [x] `docs/api/examples.md` — API examples match current endpoints
+- [x] `docs/api/workflows.md` — workflow descriptions match current behavior
+- [x] `docs/api/versioning.md` — versioning policy
 
 ### Step 5.3: README Audit
 
-- [ ] `README.md` — features list, configuration table, architecture diagram, scoring factors table, project structure, all links
+- [x] `README.md` — features list, configuration table, architecture diagram, scoring factors table, project structure, all links
 
 ---
 
@@ -280,22 +285,22 @@ Review each doc file for accuracy against the current codebase:
 
 ## Execution Order
 
-| Phase | Risk | Effort | Priority | Description |
-|-------|------|--------|----------|-------------|
-| Phase 1 | 🟢 Low | 🟢 Low | **P1** | Content accuracy fixes |
-| Phase 2 | 🟢 Low | 🟢 Low | **P2** | Credits & Maintainerr acknowledgment |
-| Phase 4 | 🟢 Low | 🟢 Low | **P3** | Misc site cleanup |
-| Phase 3 | 🟡 Medium | 🟡 Medium | **P4** | GitLab repo stats widget |
-| Phase 5 | 🟢 Low | 🟡 Medium | **P5** | Full regression audit |
+| Phase | Risk | Effort | Priority | Status | Description |
+|-------|------|--------|----------|--------|-------------|
+| Phase 1 | 🟢 Low | 🟢 Low | **P1** | ✅ | Content accuracy fixes |
+| Phase 2 | 🟢 Low | 🟢 Low | **P2** | ✅ | Credits & Maintainerr acknowledgment |
+| Phase 4 | 🟢 Low | 🟢 Low | **P3** | ✅ | Misc site cleanup |
+| Phase 3 | 🟡 Medium | 🟡 Medium | **P4** | ✅ | GitLab repo stats widget |
+| Phase 5 | 🟢 Low | 🟡 Medium | **P5** | ✅ | Full regression audit |
 
 ---
 
 ## Success Criteria
 
-- [ ] No "Nuxt 3" references in project source files (excluding node_modules, plan docs)
-- [ ] No instructions telling users to "create" disk groups
-- [ ] No "availability" as a scoring factor name (all converted to "series status")
-- [ ] Maintainerr credited in CONTRIBUTORS.md and frontend help page
-- [ ] GitLab repo stats visible in site header
-- [ ] Site build completes successfully after all changes
-- [ ] All synced docs reflect the updated content
+- [x] No "Nuxt 3" references in project source files (excluding node_modules, plan docs)
+- [x] No instructions telling users to "create" disk groups
+- [x] No "availability" as a scoring factor name (all converted to "series status")
+- [x] Maintainerr credited in CONTRIBUTORS.md and frontend help page
+- [x] GitLab repo stats visible in site header
+- [x] Site build completes successfully after all changes
+- [x] All synced docs reflect the updated content
