@@ -38,6 +38,7 @@
   "nav.builtBy": "{name} tarafından geliştirildi",
   "nav.inspiredBy": "İlham kaynağı",
   "nav.tagline": "O disk için para ödedin, kullan!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Tema",
   "nav.mode": "Mod",
   "nav.modeLight": "Açık",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Tüm Toplanan Verileri Temizle",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Onaylamak için DELETE yazın",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Motor Kontrolü",
   "engine.executionMode": "Yürütme Modu",
   "engine.lastRun": "Son Çalışma",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "İpuçları ve En İyi Uygulamalar"
+  "help.tipsAndBestPractices": "İpuçları ve En İyi Uygulamalar",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

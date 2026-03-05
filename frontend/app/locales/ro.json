@@ -38,6 +38,7 @@
   "nav.builtBy": "Creat de {name}",
   "nav.inspiredBy": "Inspirat de",
   "nav.tagline": "Ai plătit pentru discul acela, folosește-l!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Temă",
   "nav.mode": "Mod",
   "nav.modeLight": "Deschis",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Șterge Toate Datele Colectate",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Tastează DELETE pentru confirmare",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Controlul Motorului",
   "engine.executionMode": "Modul de Execuție",
   "engine.lastRun": "Ultima Rulare",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "Sfaturi și Bune Practici"
+  "help.tipsAndBestPractices": "Sfaturi și Bune Practici",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

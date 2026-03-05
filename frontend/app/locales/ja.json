@@ -38,6 +38,7 @@
   "nav.builtBy": "{name} が開発",
   "nav.inspiredBy": "インスピレーション",
   "nav.tagline": "そのディスクにお金を払ったのだから、使いましょう！",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "テーマ",
   "nav.mode": "モード",
   "nav.modeLight": "ライト",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "収集済みデータをすべてクリア",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "確認のため DELETE と入力してください",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "エンジン制御",
   "engine.executionMode": "実行モード",
   "engine.lastRun": "前回の実行",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "ヒントとベストプラクティス"
+  "help.tipsAndBestPractices": "ヒントとベストプラクティス",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

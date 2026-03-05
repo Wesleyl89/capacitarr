@@ -38,6 +38,7 @@
   "nav.builtBy": "由 {name} 開發",
   "nav.inspiredBy": "靈感來源",
   "nav.tagline": "花了錢買的硬碟，就該好好用！",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "佈景主題",
   "nav.mode": "模式",
   "nav.modeLight": "淺色",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "清除所有收集的資料",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "輸入 DELETE 以確認",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "引擎控制",
   "engine.executionMode": "執行模式",
   "engine.lastRun": "上次執行",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "秘訣與最佳做法"
+  "help.tipsAndBestPractices": "秘訣與最佳做法",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

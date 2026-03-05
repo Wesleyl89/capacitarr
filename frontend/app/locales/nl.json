@@ -38,6 +38,7 @@
   "nav.builtBy": "Gebouwd door {name}",
   "nav.inspiredBy": "Geïnspireerd door",
   "nav.tagline": "Je hebt voor die schijf betaald, gebruik hem!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Thema",
   "nav.mode": "Modus",
   "nav.modeLight": "Licht",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Alle Verzamelde Gegevens Wissen",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Typ DELETE om te bevestigen",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Motorbesturing",
   "engine.executionMode": "Uitvoeringsmodus",
   "engine.lastRun": "Laatste Uitvoering",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "Tips en Best Practices"
+  "help.tipsAndBestPractices": "Tips en Best Practices",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

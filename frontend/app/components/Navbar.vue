@@ -18,8 +18,13 @@
               <span class="text-[10px] text-muted-foreground/50 leading-none font-mono">
                 UI v{{ uiVersion }} · API {{ apiVersion || '···' }}
               </span>
-              <span class="text-[10px] text-muted-foreground/40 leading-none italic mt-0.5">
-                You paid for that disk, use it!
+              <span class="text-[10px] text-muted-foreground/40 leading-none italic mt-0.5 inline-flex items-center gap-1">
+                <img
+                  src="~/assets/images/serenity.svg"
+                  alt=""
+                  class="inline-block w-3.5 h-3.5 opacity-40"
+                />
+                {{ $t('nav.slogan') }}
               </span>
             </div>
           </NuxtLink>
@@ -126,6 +131,44 @@
                       class="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5"
                     />
                   </button>
+                </div>
+              </div>
+            </UiPopoverContent>
+          </UiPopover>
+
+          <!-- Update Available Indicator -->
+          <UiPopover v-if="updateAvailable">
+            <UiPopoverTrigger as-child>
+              <UiButton variant="ghost" size="icon" :aria-label="$t('update.title')">
+                <span class="relative">
+                  <component :is="ArrowUpCircleIcon" class="w-5 h-5 text-green-500" />
+                  <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 ring-2 ring-background" />
+                </span>
+              </UiButton>
+            </UiPopoverTrigger>
+            <UiPopoverContent align="end" class="w-72 p-4">
+              <div class="space-y-3">
+                <h4 class="text-sm font-semibold">{{ $t('update.title') }}</h4>
+                <p class="text-xs text-muted-foreground">{{ $t('update.available') }}</p>
+                <div class="space-y-1 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-muted-foreground">{{ $t('update.currentVersion') }}</span>
+                    <span class="font-mono">{{ apiVersion || uiVersion }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-muted-foreground">{{ $t('update.latestVersion') }}</span>
+                    <span class="font-mono text-green-500">{{ latestVersion }}</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between pt-1">
+                  <a
+                    :href="releaseUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs font-medium text-primary hover:underline"
+                  >
+                    {{ $t('update.viewRelease') }}
+                  </a>
                 </div>
               </div>
             </UiPopoverContent>
@@ -270,13 +313,14 @@ import {
   CheckCircleIcon,
   InfoIcon,
   GlobeIcon,
+  ArrowUpCircleIcon,
 } from 'lucide-vue-next';
 import type { ThemeMeta } from '~/composables/useTheme';
 import type { InAppNotification } from '~/types/api';
 
 const { mode: colorMode, setMode } = useAppColorMode();
 const { theme, setTheme, themes } = useTheme();
-const { uiVersion, apiVersion } = useVersion();
+const { uiVersion, apiVersion, updateAvailable, latestVersion, releaseUrl } = useVersion();
 const {
   unreadCount,
   notifications,

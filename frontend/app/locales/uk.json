@@ -38,6 +38,7 @@
   "nav.builtBy": "Створено {name}",
   "nav.inspiredBy": "Натхненне",
   "nav.tagline": "Ви заплатили за цей диск, використовуйте його!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Тема",
   "nav.mode": "Режим",
   "nav.modeLight": "Світлий",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Очистити Всі Зібрані Дані",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Введіть DELETE для підтвердження",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Керування Двигуном",
   "engine.executionMode": "Режим Виконання",
   "engine.lastRun": "Останній Запуск",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "Поради та Найкращі Практики"
+  "help.tipsAndBestPractices": "Поради та Найкращі Практики",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

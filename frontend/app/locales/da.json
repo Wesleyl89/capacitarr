@@ -38,6 +38,7 @@
   "nav.builtBy": "Bygget af {name}",
   "nav.inspiredBy": "Inspireret af",
   "nav.tagline": "Du betalte for den disk, brug den!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Tema",
   "nav.mode": "Tilstand",
   "nav.modeLight": "Lys",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Ryd Alle Indsamlede Data",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Skriv DELETE for at bekræfte",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Motorstyring",
   "engine.executionMode": "Udførelsestilstand",
   "engine.lastRun": "Sidste Kørsel",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
   "connection.restored": "Connection restored",
-  "help.tipsAndBestPractices": "Tips og Bedste Praksis"
+  "help.tipsAndBestPractices": "Tips og Bedste Praksis",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

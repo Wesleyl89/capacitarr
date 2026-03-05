@@ -196,11 +196,53 @@
     </UiCardContent>
   </UiCard>
 
+  <!-- Check for Updates -->
+  <UiCard
+    v-motion
+    :initial="{ opacity: 0, y: 12 }"
+    :enter="{ opacity: 1, y: 0, transition: { delay: 250 } }"
+    class="overflow-hidden"
+  >
+    <UiCardHeader class="border-b border-border">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-green-600 flex items-center justify-center">
+          <component :is="RefreshCwIcon" class="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <UiCardTitle class="text-base">
+            {{ $t('settings.checkForUpdates') }}
+          </UiCardTitle>
+          <UiCardDescription>{{ $t('settings.checkForUpdatesDesc') }}</UiCardDescription>
+        </div>
+      </div>
+    </UiCardHeader>
+    <UiCardContent class="pt-5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <UiSwitch
+            :model-value="checkForUpdatesEnabled"
+            :aria-label="$t('settings.checkForUpdates')"
+            @update:model-value="(v: boolean) => onCheckForUpdatesToggle(v)"
+          />
+          <div>
+            <span class="text-sm font-medium">
+              {{ $t('settings.checkForUpdates') }}
+            </span>
+            <p class="text-xs text-muted-foreground">
+              {{ $t('settings.checkForUpdatesDesc') }}
+            </p>
+          </div>
+        </div>
+        <SaveIndicator :status="saveStatus.checkForUpdates" />
+      </div>
+    </UiCardContent>
+  </UiCard>
+
   <!-- Danger Zone -->
   <UiCard
     v-motion
     :initial="{ opacity: 0, y: 12 }"
-    :enter="{ opacity: 1, y: 0, transition: { delay: 300 } }"
+    :enter="{ opacity: 1, y: 0, transition: { delay: 350 } }"
     class="overflow-hidden border-destructive/50"
   >
     <UiCardHeader class="border-b border-destructive/30">
@@ -343,6 +385,7 @@ import {
   HardDriveIcon,
   AlertTriangleIcon,
   Trash2Icon,
+  RefreshCwIcon,
 } from 'lucide-vue-next';
 import type { PreferenceSet, ApiError } from '~/types/api';
 import SaveIndicator from '~/components/settings/SaveIndicator.vue';
@@ -358,6 +401,7 @@ initFields([
   'defaultTarget',
   'deletionsEnabled',
   'logLevel',
+  'checkForUpdates',
 ]);
 
 // ─── Settings state ──────────────────────────────────────────────────────────
@@ -367,6 +411,7 @@ const logLevel = ref('info');
 const defaultThreshold = ref(85);
 const defaultTarget = ref(75);
 const deletionsEnabled = ref(true);
+const checkForUpdatesEnabled = ref(true);
 const showDeletionConfirmDialog = ref(false);
 const showResetDialog = ref(false);
 const resettingData = ref(false);
@@ -405,6 +450,12 @@ watch(logLevel, (newVal, oldVal) => {
     autoSavePreference('logLevel', 'logLevel', newVal);
   }
 });
+
+// ─── Check for Updates Toggle ────────────────────────────────────────────────
+function onCheckForUpdatesToggle(checked: boolean) {
+  checkForUpdatesEnabled.value = checked;
+  autoSavePreference('checkForUpdates', 'checkForUpdates', checked);
+}
 
 // ─── Deletion Safety Toggle ──────────────────────────────────────────────────
 function onDeletionToggle(checked: boolean) {
@@ -457,6 +508,9 @@ async function fetchPreferences() {
     }
     if (prefs?.logLevel) {
       logLevel.value = prefs.logLevel;
+    }
+    if (prefs?.checkForUpdates !== undefined) {
+      checkForUpdatesEnabled.value = prefs.checkForUpdates;
     }
   } catch {
     // Silently ignored — UI has no further handling

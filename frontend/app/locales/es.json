@@ -38,6 +38,7 @@
   "nav.builtBy": "Creado por {name}",
   "nav.inspiredBy": "Inspirado por",
   "nav.tagline": "¡Pagaste por ese disco, úsalo!",
+  "nav.slogan": "I aim to misbehave.",
   "nav.theme": "Tema",
   "nav.mode": "Modo",
   "nav.modeLight": "Claro",
@@ -234,6 +235,8 @@
   "settings.clearAllData": "Borrar Todos los Datos Recopilados",
   "settings.clearDataDesc": "Removes all audit logs, capacity history, and engine stats. Disk group thresholds and targets are preserved. Integrations, rules, and preferences are preserved.",
   "settings.typeDeleteToConfirm": "Escriba DELETE para confirmar",
+  "settings.checkForUpdates": "Check for Updates",
+  "settings.checkForUpdatesDesc": "Periodically check for new Capacitarr releases. No data is sent — only a public API is queried.",
   "engine.control": "Control del Motor",
   "engine.executionMode": "Modo de Ejecución",
   "engine.lastRun": "Última Ejecución",
@@ -358,5 +361,10 @@
   "help.aboutCapacitarr": "Acerca de Capacitarr",
   "connection.lost": "Conexión con el servidor perdida — reintentando…",
   "connection.restored": "Conexión restablecida",
-  "help.tipsAndBestPractices": "Consejos y Mejores Prácticas"
+  "help.tipsAndBestPractices": "Consejos y Mejores Prácticas",
+  "update.title": "Update Available",
+  "update.available": "A new version of Capacitarr is available.",
+  "update.currentVersion": "Current Version",
+  "update.latestVersion": "Latest Version",
+  "update.viewRelease": "View Release Notes"
 }

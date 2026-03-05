@@ -55,6 +55,7 @@ export interface PreferenceSet {
   executionMode: string;
   tiebreakerMethod: string;
   deletionsEnabled: boolean;
+  checkForUpdates: boolean;
   updatedAt: string;
 }
 
