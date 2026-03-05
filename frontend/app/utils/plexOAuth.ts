@@ -285,8 +285,8 @@ export class PlexOAuth {
   private closePopup(): void {
     try {
       this.popup?.close();
-    } catch {
-      // Cross-origin or already closed — ignore
+    } catch (err) {
+      console.warn('[PlexOAuth] closePopup failed:', err)
     }
     this.popup = null;
   }

@@ -278,8 +278,8 @@ async function fetchPreferences() {
         prefs as PreferenceSet & { snoozeDurationHours?: number }
       ).snoozeDurationHours!;
     }
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[SettingsGeneral] fetchPreferences failed:', err)
   }
 }
 

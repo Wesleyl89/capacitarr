@@ -66,8 +66,8 @@ export function useConnectionHealth() {
           _polling.value = false;
           onConnectionRestored();
         }
-      } catch {
-        // Still unreachable — keep polling
+      } catch (err) {
+        console.warn('[ConnectionHealth] health poll failed:', err)
       }
     }, 5000);
   }

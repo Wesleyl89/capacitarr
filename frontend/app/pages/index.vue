@@ -761,8 +761,8 @@ async function fetchDashboardData(silent = false) {
     allIntegrations.value = integrations as IntegrationConfig[];
     if (dStats) dashboardStats.value = dStats as DashboardStats;
     lastUpdated.value = new Date();
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Dashboard] fetchDashboardData failed:', err)
   } finally {
     if (!silent) loading.value = false;
   }

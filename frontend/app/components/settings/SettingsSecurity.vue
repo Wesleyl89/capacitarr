@@ -308,8 +308,8 @@ async function fetchApiKey() {
       apiKey.value = '••••••••••••••••••••••••••••••••';
       if (result.hint) apiKeyHint.value = result.hint;
     }
-  } catch {
-    // Silently fail — no API key yet
+  } catch (err) {
+    console.warn('[SettingsSecurity] fetchApiKey failed:', err)
   }
 }
 

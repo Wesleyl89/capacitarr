@@ -64,8 +64,8 @@ const diskGroups = ref<DiskGroup[]>([]);
 async function fetchDiskGroups() {
   try {
     diskGroups.value = (await api('/api/v1/disk-groups')) as DiskGroup[];
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Rules] fetchDiskGroups failed:', err)
   }
 }
 
@@ -108,8 +108,8 @@ async function fetchPreferences() {
     if (data?.id) {
       Object.assign(prefs, data);
     }
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Rules] fetchPreferences failed:', err)
   }
 }
 
@@ -139,16 +139,16 @@ const allIntegrations = ref<IntegrationConfig[]>([]);
 async function fetchIntegrations() {
   try {
     allIntegrations.value = (await api('/api/v1/integrations')) as IntegrationConfig[];
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Rules] fetchIntegrations failed:', err)
   }
 }
 
 async function fetchRules() {
   try {
     rules.value = (await api('/api/v1/custom-rules')) as CustomRule[];
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Rules] fetchRules failed:', err)
   }
 }
 
@@ -237,8 +237,8 @@ async function fetchPreview() {
     preview.value = data.items || [];
     diskContext.value = data.diskContext || null;
     previewFetchedAt.value = new Date().toISOString();
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Rules] fetchPreview failed:', err)
   } finally {
     previewLoading.value = false;
   }

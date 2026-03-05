@@ -512,8 +512,8 @@ async function fetchPreferences() {
     if (prefs?.checkForUpdates !== undefined) {
       checkForUpdatesEnabled.value = prefs.checkForUpdates;
     }
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[SettingsAdvanced] fetchPreferences failed:', err)
   }
 }
 

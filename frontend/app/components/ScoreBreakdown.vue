@@ -180,8 +180,8 @@ const factors = computed<ScoreFactor[]>(() => {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed as ScoreFactor[];
       }
-    } catch {
-      // Fall through to legacy parsing
+    } catch (err) {
+      console.warn('[ScoreBreakdown] parseScoreDetails failed:', err)
     }
   }
   return [];

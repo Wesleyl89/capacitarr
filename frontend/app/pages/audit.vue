@@ -405,8 +405,8 @@ async function fetchLogs(append = false) {
       }
       total.value = data.total;
     }
-  } catch {
-    // Silently ignored — UI has no further handling
+  } catch (err) {
+    console.warn('[Audit] fetchLogs failed:', err)
   } finally {
     pending.value = false;
     loadingMore.value = false;
