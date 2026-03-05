@@ -220,11 +220,7 @@
                 {{ $t('dashboard.viewAll') }}
               </NuxtLink>
             </div>
-            <UiScrollArea
-              v-if="recentActivity.length > 0"
-              class="pr-3"
-              style="height: 70px"
-            >
+            <UiScrollArea v-if="recentActivity.length > 0" class="pr-3" style="height: 70px">
               <div
                 v-for="entry in recentActivity"
                 :key="entry.id"

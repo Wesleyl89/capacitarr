@@ -20,6 +20,7 @@ body = """
             ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/-/commit/{{ commit.id }}))\
             {% for footer in commit.footers %}\
                 {% if footer.token == "Reported-by" %} — reported by {{ footer.value }}{% endif %}\
+                {% if footer.token == "Closes" %} ([#{{ footer.value | trim_start_matches(pat="#") }}](<REPO>/-/issues/{{ footer.value | trim_start_matches(pat="#") }})){% endif %}\
             {% endfor %}\
     {% endfor %}
 {% endfor %}

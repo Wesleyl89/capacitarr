@@ -161,11 +161,28 @@ function parseUserAgent(ua: string): UAInfo {
 // Client ID persistence
 // ---------------------------------------------------------------------------
 
+/**
+ * Generate a UUID v4 using `crypto.getRandomValues`.
+ *
+ * Unlike `crypto.randomUUID()`, `getRandomValues` is available in
+ * **non-secure contexts** (plain HTTP on a LAN IP), which is common
+ * for self-hosted apps.
+ */
+function generateUUID(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // Set version (4) and variant (RFC 4122)
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Return a persistent per-browser UUID, generating one if absent. */
 function getClientId(): string {
   let id = localStorage.getItem(CLIENT_ID_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = generateUUID();
     localStorage.setItem(CLIENT_ID_KEY, id);
   }
   return id;
