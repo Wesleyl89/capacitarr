@@ -32,6 +32,7 @@
 - *(approval)* Show season approve/snooze buttons and align size column ([87f13e3](https://gitlab.com/starshadow/software/capacitarr/-/commit/87f13e357b0a23c25898c6d833691bb3b1793f26))
 - Correct site and docs content accuracy ([e116e51](https://gitlab.com/starshadow/software/capacitarr/-/commit/e116e510f33a57f5f7bda2c842b44eced206cd23))
 - *(site)* Replace Nuxt UI Docs TOC link with GitLab repo link ([e7c262d](https://gitlab.com/starshadow/software/capacitarr/-/commit/e7c262d2e42f5ad8855284f9c95a0cd563dc07a9))
+- Resolve golangci-lint issues and align local linting with CI ([44df36f](https://gitlab.com/starshadow/software/capacitarr/-/commit/44df36f70ecbd929c9f25273f1c0ad017fafcea0))
 ## [1.0.0-rc.1] - 2026-03-03
 
 ### 🐛 Bug Fixes

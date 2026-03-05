@@ -13,8 +13,6 @@ import (
 	"capacitarr/internal/integrations"
 )
 
-
-
 // RegisterIntegrationRoutes adds integration management endpoints
 func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 	// List all integrations

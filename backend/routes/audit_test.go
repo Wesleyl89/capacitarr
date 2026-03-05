@@ -434,8 +434,8 @@ func TestGetAuditLogs_Unauthenticated(t *testing.T) {
 }
 
 // seedApprovalEntry creates an integration and a "Queued for Approval" audit log entry.
-// Returns the audit log ID and integration ID.
-func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint, integrationID uint) {
+// Returns the audit log ID.
+func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint) {
 	t.Helper()
 
 	// Create an integration config (needed for approve to look up the client)
@@ -465,7 +465,7 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint, integrati
 		t.Fatalf("Failed to seed approval audit entry: %v", err)
 	}
 
-	return entry.ID, integration.ID
+	return entry.ID
 }
 
 func TestApproveAuditEntry_HappyPath(t *testing.T) {
@@ -478,7 +478,7 @@ func TestApproveAuditEntry_HappyPath(t *testing.T) {
 	// worker goroutine processes asynchronously and would panic on a nil DB.
 	db.DB = database
 
-	auditID, _ := seedApprovalEntry(t, database)
+	auditID := seedApprovalEntry(t, database)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
 		fmt.Sprintf("/api/audit/%d/approve", auditID), nil)
@@ -551,7 +551,7 @@ func TestRejectAuditEntry_HappyPath(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	auditID, _ := seedApprovalEntry(t, database)
+	auditID := seedApprovalEntry(t, database)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
 		fmt.Sprintf("/api/audit/%d/reject", auditID), nil)

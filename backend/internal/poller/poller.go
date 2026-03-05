@@ -32,13 +32,13 @@ func Start() func() {
 		timer := time.NewTimer(getPollInterval())
 		defer timer.Stop()
 		for {
-		select {
-		case <-timer.C:
-			safePoll()
-			timer.Reset(getPollInterval())
-		case <-RunNowCh:
-			slog.Info("Manual run triggered via API", "component", "poller")
-			safePoll()
+			select {
+			case <-timer.C:
+				safePoll()
+				timer.Reset(getPollInterval())
+			case <-RunNowCh:
+				slog.Info("Manual run triggered via API", "component", "poller")
+				safePoll()
 				// Don't reset the timer — let the next scheduled tick proceed normally
 			case <-done:
 				return

@@ -188,49 +188,51 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 			CreatedAt:     time.Now(),
 		}
 
-	// Dry-run dedup: upsert instead of creating duplicates. Each media item
-	// appears only once in the audit log; timestamp reflects the most recent evaluation.
-	if actionName == "Dry-Run" {
-		var existing db.AuditLog
-		result := db.DB.Where(
-			"media_name = ? AND media_type = ? AND action = ?",
-			ev.Item.Title, string(ev.Item.Type), "Dry-Run",
-		).First(&existing)
-		if result.Error == nil {
-			db.DB.Model(&existing).Updates(map[string]interface{}{
-				"reason":        logEntry.Reason,
-				"score_details": logEntry.ScoreDetails,
-				"size_bytes":    logEntry.SizeBytes,
-				"created_at":    logEntry.CreatedAt,
-			})
-		} else {
+		// Dedup logic varies by action type.
+		switch actionName {
+		case "Dry-Run":
+			// Dry-run dedup: upsert instead of creating duplicates. Each media item
+			// appears only once in the audit log; timestamp reflects the most recent evaluation.
+			var existing db.AuditLog
+			result := db.DB.Where(
+				"media_name = ? AND media_type = ? AND action = ?",
+				ev.Item.Title, string(ev.Item.Type), "Dry-Run",
+			).First(&existing)
+			if result.Error == nil {
+				db.DB.Model(&existing).Updates(map[string]interface{}{
+					"reason":        logEntry.Reason,
+					"score_details": logEntry.ScoreDetails,
+					"size_bytes":    logEntry.SizeBytes,
+					"created_at":    logEntry.CreatedAt,
+				})
+			} else {
+				db.DB.Create(&logEntry)
+			}
+		case "Queued for Approval":
+			// Approval dedup: upsert like Dry-Run to prevent accumulation across engine runs.
+			// Only touches entries still in "Queued for Approval" state — approved/rejected/
+			// snoozed entries keep their state because the WHERE clause won't match them.
+			var existing db.AuditLog
+			result := db.DB.Where(
+				"media_name = ? AND media_type = ? AND action = ?",
+				ev.Item.Title, string(ev.Item.Type), "Queued for Approval",
+			).First(&existing)
+			if result.Error == nil {
+				db.DB.Model(&existing).Updates(map[string]interface{}{
+					"reason":         logEntry.Reason,
+					"score_details":  logEntry.ScoreDetails,
+					"size_bytes":     logEntry.SizeBytes,
+					"created_at":     logEntry.CreatedAt,
+					"external_id":    logEntry.ExternalID,
+					"integration_id": logEntry.IntegrationID,
+				})
+			} else {
+				db.DB.Create(&logEntry)
+			}
+		default:
+			// Auto mode always creates new entries (real deletions)
 			db.DB.Create(&logEntry)
 		}
-	} else if actionName == "Queued for Approval" {
-		// Approval dedup: upsert like Dry-Run to prevent accumulation across engine runs.
-		// Only touches entries still in "Queued for Approval" state — approved/rejected/
-		// snoozed entries keep their state because the WHERE clause won't match them.
-		var existing db.AuditLog
-		result := db.DB.Where(
-			"media_name = ? AND media_type = ? AND action = ?",
-			ev.Item.Title, string(ev.Item.Type), "Queued for Approval",
-		).First(&existing)
-		if result.Error == nil {
-			db.DB.Model(&existing).Updates(map[string]interface{}{
-				"reason":         logEntry.Reason,
-				"score_details":  logEntry.ScoreDetails,
-				"size_bytes":     logEntry.SizeBytes,
-				"created_at":     logEntry.CreatedAt,
-				"external_id":    logEntry.ExternalID,
-				"integration_id": logEntry.IntegrationID,
-			})
-		} else {
-			db.DB.Create(&logEntry)
-		}
-	} else {
-		// Auto mode always creates new entries (real deletions)
-		db.DB.Create(&logEntry)
-	}
 
 		bytesFreed += ev.Item.SizeBytes
 		atomic.AddInt64(&lastRunFlagged, 1)

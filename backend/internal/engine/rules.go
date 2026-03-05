@@ -12,6 +12,8 @@ import (
 	"capacitarr/internal/integrations"
 )
 
+const boolTrue = "true"
+
 // applyRules checks if a media item meets any custom rules and applies score modifiers.
 // Uses the new "effect" field for the combined keep/remove spectrum.
 // Implements "Keep Always Wins" conflict resolution:
@@ -237,7 +239,7 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 		matched := numberMatch(float64(item.EpisodeCount), cond, ruleNum)
 		return matched, fmt.Sprintf("%d", item.EpisodeCount)
 	case "monitored":
-		expected := val == "true"
+		expected := val == boolTrue
 		matched := item.Monitored == expected
 		return matched, fmt.Sprintf("%v", item.Monitored)
 	case "playcount":
@@ -248,7 +250,7 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 		matched := numberMatch(float64(item.PlayCount), cond, ruleNum)
 		return matched, fmt.Sprintf("%d", item.PlayCount)
 	case "requested":
-		expected := val == "true"
+		expected := val == boolTrue
 		matched := item.IsRequested == expected
 		return matched, fmt.Sprintf("%v", item.IsRequested)
 	case "requestcount":
@@ -311,10 +313,10 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 		return false, actual
 	case "incollection":
 		inCollection := len(item.Collections) > 0
-		ruleBool := val == "true"
+		ruleBool := val == boolTrue
 		return inCollection == ruleBool, fmt.Sprintf("%d collections", len(item.Collections))
 	case "watchedbyreq":
-		ruleBool := val == "true"
+		ruleBool := val == boolTrue
 		return item.WatchedByRequestor == ruleBool, fmt.Sprintf("watched by requestor: %v", item.WatchedByRequestor)
 	}
 

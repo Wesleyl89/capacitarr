@@ -2,21 +2,27 @@
 
 # ─── Code Quality ─────────────────────────────────────────────────────────────
 
-## Run ESLint (auto-fix) + Go vet
+## Run ESLint (auto-fix) + golangci-lint (matches CI)
 lint:
 	@echo "→ Linting frontend..."
 	cd frontend && pnpm lint:fix
-	@echo "→ Linting backend..."
-	cd backend && go vet ./...
+	@echo "→ Formatting backend (gofmt)..."
+	gofmt -w backend/
+	@echo "→ Linting backend (golangci-lint — same as CI)..."
+	@echo "→ Ensuring go:embed directory exists..."
+	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
+	cd backend && golangci-lint run ./...
 	@echo "✓ Lint complete"
 
 ## Run Prettier (auto-fix)
 format:
 	@echo "→ Formatting frontend..."
 	cd frontend && pnpm format
+	@echo "→ Formatting backend (gofmt)..."
+	gofmt -w backend/
 	@echo "✓ Format complete"
 
-## Verify code quality (no auto-fixes — CI-safe)
+## Verify code quality (no auto-fixes — CI-safe, matches CI pipeline exactly)
 check:
 	@echo "→ Checking frontend lint..."
 	cd frontend && pnpm lint
@@ -24,8 +30,8 @@ check:
 	cd frontend && pnpm format:check
 	@echo "→ Ensuring go:embed directory exists..."
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
-	@echo "→ Checking backend..."
-	cd backend && go vet ./...
+	@echo "→ Checking backend (golangci-lint — same as CI)..."
+	cd backend && golangci-lint run ./...
 	@echo "✓ All checks passed"
 
 # ─── Standalone Builds ────────────────────────────────────────────────────────
@@ -73,9 +79,9 @@ help:
 	@echo "================================"
 	@echo ""
 	@echo "Code Quality:"
-	@echo "  make lint            - Auto-fix lint issues (ESLint + go vet)"
-	@echo "  make format          - Auto-format code (Prettier)"
-	@echo "  make check           - Verify code quality (CI-safe, no auto-fix)"
+	@echo "  make lint            - Auto-fix lint issues (ESLint + golangci-lint)"
+	@echo "  make format          - Auto-format code (Prettier + gofmt)"
+	@echo "  make check           - Verify code quality (matches CI pipeline exactly)"
 	@echo ""
 	@echo "Standalone Builds:"
 	@echo "  make build:frontend  - Build frontend SPA"

@@ -92,9 +92,9 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			_, _ = w.Write([]byte(`[{"id":1,"name":"eBook"},{"id":2,"name":"Audiobook"}]`))
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			_, _ = w.Write([]byte(`[{"id":1,"label":"sci-fi"},{"id":2,"label":"classic"}]`))
 		case "/api/v1/book":
 			resp := []readarrBook{
@@ -217,9 +217,9 @@ func TestReadarrClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v1/book":
 			_, _ = w.Write([]byte(`{not valid json}`))
@@ -240,9 +240,9 @@ func TestReadarrClient_GetMediaItems_EmptyResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/v1/qualityprofile":
+		case testLidarrPathQuality:
 			_, _ = w.Write([]byte(`[]`))
-		case "/api/v1/tag":
+		case testLidarrPathTag:
 			_, _ = w.Write([]byte(`[]`))
 		case "/api/v1/book":
 			_, _ = w.Write([]byte(`[]`))
@@ -299,7 +299,7 @@ func TestReadarrClient_GetRootFolders(t *testing.T) {
 
 func TestReadarrClient_GetQualityProfiles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/qualityprofile" {
+		if r.URL.Path == testLidarrPathQuality {
 			resp := []struct {
 				ID   int    `json:"id"`
 				Name string `json:"name"`
@@ -332,7 +332,7 @@ func TestReadarrClient_GetQualityProfiles(t *testing.T) {
 
 func TestReadarrClient_GetTags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/tag" {
+		if r.URL.Path == testLidarrPathTag {
 			resp := []struct {
 				ID    int    `json:"id"`
 				Label string `json:"label"`

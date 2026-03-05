@@ -356,5 +356,3 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 		return c.JSON(http.StatusOK, result)
 	})
 }
-
-
