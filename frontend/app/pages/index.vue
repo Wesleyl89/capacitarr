@@ -677,78 +677,125 @@ const lastUpdated = ref<Date | null>(null);
 const isAutoRefreshing = ref(false);
 const refreshKey = ref(0);
 
-// Icon component for activity events
+// Icon component for activity events — covers all 34 typed event types
 function eventIcon(eventType: string) {
   switch (eventType) {
+    // Engine
     case 'engine_start':
       return PlayIcon;
     case 'engine_complete':
       return CheckCircle2Icon;
     case 'engine_error':
       return AlertCircleIcon;
-    case 'engine_paused':
-      return PauseIcon;
-    case 'engine_resumed':
-      return PlayIcon;
     case 'engine_mode_changed':
       return SettingsIcon;
+    case 'manual_run_triggered':
+      return PlayIcon;
+    // Settings
+    case 'settings_changed':
+      return SettingsIcon;
+    case 'threshold_changed':
+      return SlidersHorizontalIcon;
+    // Auth
+    case 'login':
+      return UserIcon;
+    case 'password_changed':
+      return KeyIcon;
+    case 'username_changed':
+      return UserIcon;
+    case 'api_key_generated':
+      return KeyIcon;
+    // Integrations
+    case 'integration_added':
+    case 'integration_updated':
+    case 'integration_removed':
+    case 'integration_test':
+    case 'integration_test_failed':
+      return PlugIcon;
+    // Approval
     case 'approval_approved':
       return CheckCircle2Icon;
     case 'approval_rejected':
       return XCircleIcon;
+    case 'approval_unsnoozed':
+    case 'approval_bulk_unsnoozed':
+      return AlarmClockOffIcon;
+    case 'approval_orphans_recovered':
+      return RefreshCwIcon;
+    // Deletion
+    case 'deletion_success':
+    case 'deletion_dry_run':
+      return Trash2Icon;
+    case 'deletion_failed':
+      return AlertCircleIcon;
+    // Rules
     case 'rule_created':
       return PlusCircleIcon;
     case 'rule_updated':
       return PencilIcon;
     case 'rule_deleted':
       return Trash2Icon;
-    case 'integration_test_failed':
-      return AlertCircleIcon;
+    // Notifications
+    case 'notification_channel_added':
+    case 'notification_channel_updated':
+    case 'notification_channel_removed':
+      return BellIcon;
+    case 'notification_sent':
+      return BellRingIcon;
+    case 'notification_delivery_failed':
+      return BellOffIcon;
+    // Data
+    case 'data_reset':
+      return DatabaseIcon;
+    // System
     case 'server_started':
       return PowerIcon;
-    case 'password_changed':
-      return KeyIcon;
-    case 'login':
-      return UserIcon;
-    case 'settings_changed':
-      return SettingsIcon;
-    case 'integration_added':
-      return PlugIcon;
-    case 'integration_removed':
-      return PlugIcon;
-    case 'integration_test':
-      return PlugIcon;
     default:
       return ActivityIcon;
   }
 }
 
-// Color class for activity event icons
+// Color class for activity event icons — covers all 34 typed event types
 function eventIconClass(eventType: string): string {
   switch (eventType) {
     case 'engine_start':
     case 'engine_mode_changed':
+    case 'manual_run_triggered':
+    case 'threshold_changed':
+    case 'approval_unsnoozed':
+    case 'approval_bulk_unsnoozed':
     case 'rule_created':
       return 'text-primary';
     case 'engine_complete':
-    case 'engine_resumed':
     case 'approval_approved':
     case 'server_started':
     case 'integration_added':
     case 'integration_test':
+    case 'deletion_success':
+    case 'notification_channel_added':
+    case 'notification_sent':
       return 'text-success';
     case 'engine_error':
     case 'approval_rejected':
     case 'rule_deleted':
     case 'integration_test_failed':
     case 'integration_removed':
+    case 'deletion_failed':
+    case 'data_reset':
+    case 'notification_channel_removed':
+    case 'notification_delivery_failed':
       return 'text-destructive';
-    case 'engine_paused':
+    case 'deletion_dry_run':
+    case 'approval_orphans_recovered':
       return 'text-warning';
     case 'rule_updated':
     case 'password_changed':
+    case 'username_changed':
+    case 'api_key_generated':
     case 'login':
     case 'settings_changed':
+    case 'integration_updated':
+    case 'notification_channel_updated':
       return 'text-muted-foreground';
     default:
       return 'text-muted-foreground';
