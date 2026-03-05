@@ -71,9 +71,9 @@ func Start() *cron.Cron {
 		slog.Error("Failed to add notification cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
-	// 7. Prune old activity events — keep the last 500 rows
+	// 7. Prune old activity events — fixed 7-day retention
 	_, err = c.AddFunc("@daily", func() {
-		pruneActivityEvents(500)
+		pruneActivityEvents()
 	})
 	if err != nil {
 		slog.Error("Failed to add activity events cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -180,24 +180,14 @@ func pruneEngineRunStats(keep int) {
 	}
 }
 
-// pruneActivityEvents keeps only the most recent `keep` rows in activity_events.
-func pruneActivityEvents(keep int) {
-	var count int64
-	db.DB.Model(&db.ActivityEvent{}).Count(&count)
-	if count <= int64(keep) {
-		return
-	}
-
-	var cutoffRow db.ActivityEvent
-	result := db.DB.Order("created_at DESC").Offset(keep).Limit(1).First(&cutoffRow)
-	if result.Error != nil {
-		return
-	}
-
-	deleted := db.DB.Where("created_at <= ?", cutoffRow.CreatedAt).Delete(&db.ActivityEvent{})
+// pruneActivityEvents removes activity events older than 7 days.
+// Activity events are transient dashboard context, not permanent records.
+func pruneActivityEvents() {
+	cutoff := time.Now().UTC().AddDate(0, 0, -7)
+	deleted := db.DB.Where("created_at < ?", cutoff).Delete(&db.ActivityEvent{})
 	if deleted.Error != nil {
 		slog.Error("Failed to prune activity events", "component", "jobs", "operation", "prune_activity_events", "error", deleted.Error)
 	} else if deleted.RowsAffected > 0 {
-		slog.Info("Pruned old activity events", "component", "jobs", "deleted", deleted.RowsAffected, "kept", keep)
+		slog.Info("Pruned old activity events", "component", "jobs", "deleted", deleted.RowsAffected, "retention", "7 days")
 	}
 }
