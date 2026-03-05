@@ -396,7 +396,7 @@ async function fetchLogs(append = false) {
     }
     params.set('sort_by', auditSortBy.value);
     params.set('sort_dir', auditSortDir.value);
-    const data = (await api(`/api/v1/audit?${params.toString()}`)) as AuditResponse;
+    const data = (await api(`/api/v1/audit-log?${params.toString()}`)) as AuditResponse;
     if (data?.data) {
       if (append) {
         logs.value = [...logs.value, ...data.data];

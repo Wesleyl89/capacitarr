@@ -84,23 +84,41 @@ export interface CustomRule {
 // Audit Log
 // ---------------------------------------------------------------------------
 
-export interface AuditLog {
+export interface AuditLogEntry {
   id: number;
   mediaName: string;
   mediaType: string;
   reason: string;
   scoreDetails: string;
-  action: string;
+  action: 'deleted' | 'dry_run' | 'dry_delete';
   sizeBytes: number;
-  snoozedUntil?: string;
+  integrationId?: number;
   createdAt: string;
 }
 
+/** @deprecated Use AuditLogEntry instead */
+export type AuditLog = AuditLogEntry;
+
 export interface AuditResponse {
-  data: AuditLog[];
+  data: AuditLogEntry[];
   total: number;
   limit: number;
   offset: number;
+}
+
+export interface ApprovalQueueItem {
+  id: number;
+  mediaName: string;
+  mediaType: string;
+  reason: string;
+  scoreDetails: string;
+  sizeBytes: number;
+  integrationId: number;
+  externalId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  snoozedUntil?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------

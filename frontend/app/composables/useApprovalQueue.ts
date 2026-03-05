@@ -59,9 +59,9 @@ export function useApprovalQueue() {
       // Fetch preview + all three audit states in parallel
       const [previewData, pendingAudit, rejectedAudit, approvedAudit] = await Promise.all([
         api('/api/v1/preview') as Promise<PreviewResponse>,
-        api('/api/v1/audit?action=Queued+for+Approval&limit=1000') as Promise<AuditResponse>,
-        api('/api/v1/audit?action=Rejected&limit=1000') as Promise<AuditResponse>,
-        api('/api/v1/audit?action=Approved&limit=1000') as Promise<AuditResponse>,
+        api('/api/v1/approval-queue?status=pending&limit=1000') as Promise<AuditResponse>,
+        api('/api/v1/approval-queue?status=rejected&limit=1000') as Promise<AuditResponse>,
+        api('/api/v1/approval-queue?status=approved&limit=1000') as Promise<AuditResponse>,
       ]);
 
       // Group seasons under shows using shared utility
@@ -278,7 +278,7 @@ export function useApprovalQueue() {
 
     try {
       await Promise.all(
-        group.auditIds.map((id) => api(`/api/v1/audit/${id}/approve`, { method: 'POST' })),
+        group.auditIds.map((id) => api(`/api/v1/approval-queue/${id}/approve`, { method: 'POST' })),
       );
       addToast('Group approved for deletion', 'success');
     } catch (e: unknown) {
@@ -309,7 +309,7 @@ export function useApprovalQueue() {
 
     try {
       await Promise.all(
-        group.auditIds.map((id) => api(`/api/v1/audit/${id}/reject`, { method: 'POST' })),
+        group.auditIds.map((id) => api(`/api/v1/approval-queue/${id}/reject`, { method: 'POST' })),
       );
       addToast('Group snoozed', 'info');
       // Background refresh to get accurate snooze duration from server
@@ -332,7 +332,7 @@ export function useApprovalQueue() {
 
     try {
       await Promise.all(
-        group.auditIds.map((id) => api(`/api/v1/audit/${id}/unsnooze`, { method: 'POST' })),
+        group.auditIds.map((id) => api(`/api/v1/approval-queue/${id}/unsnooze`, { method: 'POST' })),
       );
       addToast('Snooze removed — group re-queued for approval', 'success');
       // Background refresh to sync with server state
@@ -348,7 +348,7 @@ export function useApprovalQueue() {
   /** Approve a single season by its audit ID, then refresh the queue */
   async function approveSeason(auditId: number) {
     try {
-      await api(`/api/v1/audit/${auditId}/approve`, { method: 'POST' });
+      await api(`/api/v1/approval-queue/${auditId}/approve`, { method: 'POST' });
       addToast('Season approved for deletion', 'success');
       fetchQueue();
     } catch (e: unknown) {
@@ -364,7 +364,7 @@ export function useApprovalQueue() {
   /** Snooze a single season by its audit ID, then refresh the queue */
   async function snoozeSeason(auditId: number) {
     try {
-      await api(`/api/v1/audit/${auditId}/reject`, { method: 'POST' });
+      await api(`/api/v1/approval-queue/${auditId}/reject`, { method: 'POST' });
       addToast('Season snoozed', 'info');
       fetchQueue();
     } catch {
