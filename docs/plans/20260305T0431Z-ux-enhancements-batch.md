@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-05
 **Branch:** `feature/ux-enhancements-batch`
-**Status:** 🔲 Not Started
+**Status:** ✅ Complete
 **Size:** L (200–400 lines changed)
 
 ## Overview
@@ -39,11 +39,11 @@ Replace the `Delete` with an `Update` that zeroes only the scraped/transient fie
 
 | # | Task | Files | Status |
 |---|------|-------|--------|
-| 1.1 | Change `Delete(&db.DiskGroup{})` to `Update` zeroing `total_bytes` and `used_bytes` only | `backend/routes/data.go` | 🔲 |
-| 1.2 | Update response summary key from `diskGroups` (deleted count) to `diskGroupsReset` (updated count) | `backend/routes/data.go` | 🔲 |
-| 1.3 | Update test to verify thresholds survive the reset | `backend/routes/data_test.go` | 🔲 |
-| 1.4 | Update frontend description text to clarify thresholds are preserved | `frontend/app/components/settings/SettingsAdvanced.vue` | 🔲 |
-| 1.5 | Update confirmation dialog text similarly | `frontend/app/components/settings/SettingsAdvanced.vue` | 🔲 |
+| 1.1 | Change `Delete(&db.DiskGroup{})` to `Update` zeroing `total_bytes` and `used_bytes` only | `backend/routes/data.go` | ✅ |
+| 1.2 | Update response summary key from `diskGroups` (deleted count) to `diskGroupsReset` (updated count) | `backend/routes/data.go` | ✅ |
+| 1.3 | Update test to verify thresholds survive the reset | `backend/routes/data_test.go` | ✅ |
+| 1.4 | Update frontend description text to clarify thresholds are preserved | `frontend/app/components/settings/SettingsAdvanced.vue` | ✅ |
+| 1.5 | Update confirmation dialog text similarly | `frontend/app/components/settings/SettingsAdvanced.vue` | ✅ |
 
 ---
 
@@ -98,16 +98,16 @@ Add `CheckForUpdates` boolean to `PreferenceSet` model (default: true). Users ca
 
 | # | Task | Files | Status |
 |---|------|-------|--------|
-| 2.1 | Add `CheckForUpdates` field to `PreferenceSet` model | `backend/internal/db/models.go` | 🔲 |
-| 2.2 | Create `backend/routes/version.go` with update check endpoint + in-memory cache | `backend/routes/version.go` | 🔲 |
-| 2.3 | Register the new route in API router | `backend/routes/api.go` | 🔲 |
-| 2.4 | Write tests for the version check endpoint | `backend/routes/version_test.go` | 🔲 |
-| 2.5 | Create Serenity SVG icon file | `frontend/app/assets/images/serenity.svg` | 🔲 |
-| 2.6 | Update slogan text from "You paid for that disk, use it!" to "I aim to misbehave." with Serenity icon | `frontend/app/components/Navbar.vue` | 🔲 |
-| 2.7 | Extend `useVersion` composable to call `/api/v1/version/check` on mount + 6h interval | `frontend/app/composables/useVersion.ts` | 🔲 |
-| 2.8 | Add update icon button to navbar right-side icons with popover | `frontend/app/components/Navbar.vue` | 🔲 |
-| 2.9 | Add "Check for updates" toggle to Settings > Advanced | `frontend/app/components/settings/SettingsAdvanced.vue` | 🔲 |
-| 2.10 | Add i18n keys for update-related strings | `frontend/app/locales/*.json` | 🔲 |
+| 2.1 | Add `CheckForUpdates` field to `PreferenceSet` model | `backend/internal/db/models.go` | ✅ |
+| 2.2 | Create `backend/routes/version.go` with update check endpoint + in-memory cache | `backend/routes/version.go` | ✅ |
+| 2.3 | Register the new route in API router | `backend/routes/api.go` | ✅ |
+| 2.4 | Write tests for the version check endpoint | `backend/routes/version_test.go` | ✅ |
+| 2.5 | Create Serenity SVG icon file | `frontend/app/assets/images/serenity.svg` | ✅ |
+| 2.6 | Update slogan text from "You paid for that disk, use it!" to "I aim to misbehave." with Serenity icon | `frontend/app/components/Navbar.vue` | ✅ |
+| 2.7 | Extend `useVersion` composable to call `/api/v1/version/check` on mount + 6h interval | `frontend/app/composables/useVersion.ts` | ✅ |
+| 2.8 | Add update icon button to navbar right-side icons with popover | `frontend/app/components/Navbar.vue` | ✅ |
+| 2.9 | Add "Check for updates" toggle to Settings > Advanced | `frontend/app/components/settings/SettingsAdvanced.vue` | ✅ |
+| 2.10 | Add i18n keys for update-related strings | `frontend/app/locales/*.json` | ✅ |
 
 ---
 
@@ -218,26 +218,26 @@ flowchart LR
 
 | # | Task | Files | Status |
 |---|------|-------|--------|
-| 3.1 | Add `Deleted` field to `EngineRunStats` model (default 0, auto-migrated by GORM) | `backend/internal/db/models.go` | 🔲 |
-| 3.2 | Add `RunStatsID` field to `deleteJob` struct | `backend/internal/poller/delete.go` | 🔲 |
-| 3.3 | Refactor engine run to create stats row before evaluation, update after | `backend/internal/poller/poller.go` | 🔲 |
-| 3.4 | Pass `runStatsID` when queueing deletion jobs in evaluate | `backend/internal/poller/evaluate.go` | 🔲 |
-| 3.5 | Increment `Deleted` counter in deletion worker on successful deletion | `backend/internal/poller/delete.go` | 🔲 |
-| 3.6 | Update `QueueDeletion()` public function signature to accept `runStatsID` | `backend/internal/poller/delete.go` | 🔲 |
-| 3.7 | Update approval route to pass `runStatsID` when calling `QueueDeletion()` | `backend/routes/audit.go` | 🔲 |
-| 3.8 | Create `backend/routes/engine_history.go` with history endpoint | `backend/routes/engine_history.go` | 🔲 |
-| 3.9 | Register the new route in API router | `backend/routes/api.go` | 🔲 |
-| 3.10 | Write tests for the engine history endpoint | `backend/routes/engine_history_test.go` | 🔲 |
-| 3.11 | Switch main sparkline data source from `/audit/activity` to `/engine/history`; change colors from primary/destructive to chart-1/chart-2 | `frontend/app/pages/index.vue` | 🔲 |
-| 3.12 | Add duration sparkline (left) to dashboard engine activity card | `frontend/app/pages/index.vue` | 🔲 |
-| 3.13 | Add freed bytes sparkline (right) to dashboard engine activity card | `frontend/app/pages/index.vue` | 🔲 |
-| 3.14 | Extend `useThemeColors` to expose `chart1Color`, `chart2Color`, `chart3Color`, `chart4Color` | `frontend/app/composables/useThemeColors.ts` | 🔲 |
-| 3.15 | Add localStorage toggle for mini sparkline visibility | `frontend/app/pages/index.vue` | 🔲 |
-| 3.16 | Remove `fetchActivityData()` function and `/audit/activity` call from dashboard | `frontend/app/pages/index.vue` | 🔲 |
-| 3.17 | Remove `GET /audit/activity` endpoint from backend (only consumer is the dashboard) | `backend/routes/audit.go` | 🔲 |
-| 3.18 | Remove `audit/activity` tests | `backend/routes/audit_test.go` | 🔲 |
-| 3.19 | Remove `audit/activity` from OpenAPI spec | `docs/api/openapi.yaml` | 🔲 |
-| 3.20 | Add i18n keys for duration/freed sparkline labels | `frontend/app/locales/*.json` | 🔲 |
+| 3.1 | Add `Deleted` field to `EngineRunStats` model (default 0, auto-migrated by GORM) | `backend/internal/db/models.go` | ✅ |
+| 3.2 | Add `RunStatsID` field to `deleteJob` struct | `backend/internal/poller/delete.go` | ✅ |
+| 3.3 | Refactor engine run to create stats row before evaluation, update after | `backend/internal/poller/poller.go` | ✅ |
+| 3.4 | Pass `runStatsID` when queueing deletion jobs in evaluate | `backend/internal/poller/evaluate.go` | ✅ |
+| 3.5 | Increment `Deleted` counter in deletion worker on successful deletion | `backend/internal/poller/delete.go` | ✅ |
+| 3.6 | Update `QueueDeletion()` public function signature to accept `runStatsID` | `backend/internal/poller/delete.go` | ✅ |
+| 3.7 | Update approval route to pass `runStatsID` when calling `QueueDeletion()` | `backend/routes/audit.go` | ✅ |
+| 3.8 | Create `backend/routes/engine_history.go` with history endpoint | `backend/routes/engine_history.go` | ✅ |
+| 3.9 | Register the new route in API router | `backend/routes/api.go` | ✅ |
+| 3.10 | Write tests for the engine history endpoint | `backend/routes/engine_history_test.go` | ✅ |
+| 3.11 | Switch main sparkline data source from `/audit/activity` to `/engine/history`; change colors from primary/destructive to chart-1/chart-2 | `frontend/app/pages/index.vue` | ✅ |
+| 3.12 | Add duration sparkline (left) to dashboard engine activity card | `frontend/app/pages/index.vue` | ✅ |
+| 3.13 | Add freed bytes sparkline (right) to dashboard engine activity card | `frontend/app/pages/index.vue` | ✅ |
+| 3.14 | Extend `useThemeColors` to expose `chart1Color`, `chart2Color`, `chart3Color`, `chart4Color` | `frontend/app/composables/useThemeColors.ts` | ✅ |
+| 3.15 | Add localStorage toggle for mini sparkline visibility | `frontend/app/pages/index.vue` | ✅ |
+| 3.16 | Remove `fetchActivityData()` function and `/audit/activity` call from dashboard | `frontend/app/pages/index.vue` | ✅ |
+| 3.17 | Remove `GET /audit/activity` endpoint from backend (only consumer is the dashboard) | `backend/routes/audit.go` | ✅ |
+| 3.18 | Remove `audit/activity` tests | `backend/routes/audit_test.go` | ✅ |
+| 3.19 | Remove `audit/activity` from OpenAPI spec | `docs/api/openapi.yaml` | ✅ |
+| 3.20 | Add i18n keys for duration/freed sparkline labels | `frontend/app/locales/*.json` | ✅ |
 
 > **Note:** `GET /api/v1/audit/activity` has only one consumer (the dashboard `index.vue`). The audit log page (`/audit`) does not use it — it uses `/audit` and `/audit/grouped` instead. Since no real release has shipped yet, we remove it entirely rather than deprecating.
 
@@ -260,9 +260,9 @@ Replace bare `catch {}` with `catch (err) { console.warn('[Dashboard] ...', err)
 
 | # | Task | Files | Status |
 |---|------|-------|--------|
-| 4.1 | Replace bare `catch {}` in `fetchDashboardData()` with `console.warn` | `frontend/app/pages/index.vue` | 🔲 |
-| 4.2 | Replace bare `catch {}` in `fetchActivityData()` with `console.warn` | `frontend/app/pages/index.vue` | 🔲 |
-| 4.3 | Audit other components for bare `catch {}` blocks and fix similarly | Various frontend files | 🔲 |
+| 4.1 | Replace bare `catch {}` in `fetchDashboardData()` with `console.warn` | `frontend/app/pages/index.vue` | ✅ |
+| 4.2 | Replace bare `catch {}` in `fetchActivityData()` with `console.warn` | `frontend/app/pages/index.vue` | ✅ |
+| 4.3 | Audit other components for bare `catch {}` blocks and fix similarly | Various frontend files | ✅ |
 
 ---
 
@@ -270,9 +270,9 @@ Replace bare `catch {}` with `catch (err) { console.warn('[Dashboard] ...', err)
 
 | # | Task | Status |
 |---|------|--------|
-| V.1 | All existing tests pass (`go test ./...`) | 🔲 |
-| V.2 | New tests pass for data reset, version check, and engine history | 🔲 |
-| V.3 | Frontend builds without errors | 🔲 |
+| V.1 | All existing tests pass (`go test ./...`) | ✅ |
+| V.2 | New tests pass for data reset, version check, and engine history | ✅ |
+| V.3 | Frontend builds without errors | ✅ |
 | V.4 | Docker build succeeds (`docker compose up --build`) | 🔲 |
 | V.5 | Manual verification: data reset preserves thresholds | 🔲 |
 | V.6 | Manual verification: update icon appears/hides correctly | 🔲 |
