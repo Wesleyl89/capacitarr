@@ -41,9 +41,9 @@ export default defineAppConfig({
     bottom: {
       title: 'Resources',
       links: [{
-        icon: 'i-lucide-book-open',
-        label: 'Nuxt UI Docs',
-        to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
+        icon: 'i-simple-icons-gitlab',
+        label: 'View on GitLab',
+        to: 'https://gitlab.com/starshadow/software/capacitarr',
         target: '_blank',
       }],
     },
