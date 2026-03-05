@@ -782,11 +782,11 @@ async function fetchDashboardData(silent = false) {
 // --- Sparkline: engine history (flagged + deleted per engine run) ---
 
 const flaggedSeries = computed(() =>
-  engineHistoryData.value.map((p) => ({ x: p.timestamp, y: p.flagged })),
+  engineHistoryData.value.map((p) => ({ x: new Date(p.timestamp).getTime(), y: p.flagged })),
 );
 
 const deletedSeries = computed(() =>
-  engineHistoryData.value.map((p) => ({ x: p.timestamp, y: p.deleted })),
+  engineHistoryData.value.map((p) => ({ x: new Date(p.timestamp).getTime(), y: p.deleted })),
 );
 
 const sparklineSeries = computed(() => {
@@ -820,7 +820,7 @@ const sparklineOptions = computed(() => ({
   tooltip: {
     enabled: true,
     shared: true,
-    x: { show: true },
+    x: { show: true, format: 'MMM dd, yyyy HH:mm' },
     y: {
       formatter: (val: number, opts: SparklineTooltipOpts) => {
         const label = opts?.seriesIndex === 1 ? 'deleted' : 'flagged';
@@ -829,7 +829,7 @@ const sparklineOptions = computed(() => ({
     },
     theme: 'dark',
   },
-  xaxis: { type: 'category' as const },
+  xaxis: { type: 'datetime' as const, labels: { datetimeUTC: false } },
 }));
 
 // --- Mini sparklines: duration + freed bytes ---
@@ -854,14 +854,20 @@ const totalFreedBytes = computed(() =>
 const durationSparklineSeries = computed(() => [
   {
     name: 'Duration',
-    data: engineHistoryData.value.map((p) => ({ x: p.timestamp, y: p.durationMs })),
+    data: engineHistoryData.value.map((p) => ({
+      x: new Date(p.timestamp).getTime(),
+      y: p.durationMs,
+    })),
   },
 ]);
 
 const freedSparklineSeries = computed(() => [
   {
     name: 'Freed',
-    data: engineHistoryData.value.map((p) => ({ x: p.timestamp, y: p.freedBytes })),
+    data: engineHistoryData.value.map((p) => ({
+      x: new Date(p.timestamp).getTime(),
+      y: p.freedBytes,
+    })),
   },
 ]);
 
@@ -885,10 +891,10 @@ function miniSparklineOptions(color: string) {
     },
     tooltip: {
       enabled: true,
-      x: { show: true },
+      x: { show: true, format: 'MMM dd, yyyy HH:mm' },
       theme: 'dark',
     },
-    xaxis: { type: 'category' as const },
+    xaxis: { type: 'datetime' as const, labels: { datetimeUTC: false } },
   };
 }
 
