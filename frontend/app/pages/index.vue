@@ -153,14 +153,14 @@
         <div v-if="flaggedSeries.length > 0 || deletedSeries.length > 0" class="mb-3">
           <div class="flex items-center gap-3 mb-1">
             <span class="text-[11px] text-muted-foreground/70">
-              {{ $t('dashboard.engineActivityTitle') }} · {{ $t('dashboard.last7Days') }}
+              {{ $t('dashboard.engineActivityTitle') }} · {{ dateRangeLabel }}
             </span>
             <span class="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: chart1Color }" />
+              <span class="w-2 h-2 rounded-full bg-primary" />
               {{ $t('dashboard.flagged') }}
             </span>
             <span class="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: chart2Color }" />
+              <span class="w-2 h-2 rounded-full bg-destructive" />
               {{ $t('dashboard.deleted') }}
             </span>
           </div>
@@ -195,7 +195,7 @@
           <!-- Run Duration -->
           <div class="rounded-lg bg-muted px-3 py-2">
             <div class="text-[11px] text-muted-foreground mb-0.5">
-              {{ $t('dashboard.runDuration') }} · {{ $t('dashboard.last7Days') }}
+              {{ $t('dashboard.runDuration') }} · {{ dateRangeLabel }}
             </div>
             <div class="text-[11px] text-muted-foreground/70 mb-1">
               {{ $t('dashboard.avgDuration', { avg: avgDurationMs + 'ms' }) }} ·
@@ -214,7 +214,7 @@
           <!-- Space Freed -->
           <div class="rounded-lg bg-muted px-3 py-2">
             <div class="text-[11px] text-muted-foreground mb-0.5">
-              {{ $t('dashboard.spaceFreed') }} · {{ $t('dashboard.last7Days') }}
+              {{ $t('dashboard.spaceFreed') }} · {{ dateRangeLabel }}
             </div>
             <div class="text-[11px] text-muted-foreground/70 mb-1">
               {{ $t('dashboard.totalFreed', { total: formatBytes(totalFreedBytes) }) }}
@@ -560,7 +560,7 @@ import type {
 
 const { t } = useI18n();
 const api = useApi();
-const { chart1Color, chart2Color, chart3Color, chart4Color } = useThemeColors();
+const { primaryColor, destructiveColor, successColor, chart3Color } = useThemeColors();
 
 // Use shared engine control composable for isRunning detection + toast on completion
 const {
@@ -807,7 +807,7 @@ const sparklineOptions = computed(() => ({
     animations: { enabled: true, easing: 'easeinout', speed: 400 },
   },
   stroke: { curve: 'smooth' as const, width: 2 },
-  colors: [chart1Color.value, chart2Color.value],
+  colors: [primaryColor.value, destructiveColor.value],
   fill: {
     type: 'gradient',
     gradient: {
@@ -892,8 +892,8 @@ function miniSparklineOptions(color: string) {
   };
 }
 
-const durationSparklineOptions = computed(() => miniSparklineOptions(chart3Color.value));
-const freedSparklineOptions = computed(() => miniSparklineOptions(chart4Color.value));
+const durationSparklineOptions = computed(() => miniSparklineOptions(successColor.value));
+const freedSparklineOptions = computed(() => miniSparklineOptions(chart3Color.value));
 
 // Re-fetch engine history when time range changes
 watch(dateRange, () => {
