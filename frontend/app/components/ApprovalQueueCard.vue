@@ -428,29 +428,35 @@ onUnmounted(() => {
                     >{{ season.title }}</span
                   >
                   <!-- Size (right-aligned before action icons) -->
-                  <span class="text-muted-foreground shrink-0 tabular-nums">{{
+                  <span class="text-muted-foreground shrink-0 tabular-nums w-16 text-right">{{
                     formatBytes(season.sizeBytes)
                   }}</span>
-                  <!-- Season-level actions -->
+                  <!-- Season-level actions (uses season auditId if available, otherwise group actions) -->
                   <div class="flex items-center gap-1 shrink-0">
                     <UiButton
-                      v-if="season.auditId !== null"
+                      v-if="group.auditIds.length > 0"
                       variant="ghost"
                       size="sm"
                       class="h-6 w-6 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
                       :aria-label="t('approval.approve')"
-                      @click.stop="approveSeason(season.auditId!)"
+                      @click.stop="
+                        season.auditId !== null
+                          ? approveSeason(season.auditId)
+                          : approveGroup(group)
+                      "
                     >
                       <CheckIcon class="h-3.5 w-3.5" />
                     </UiButton>
                     <UiButton
-                      v-if="season.auditId !== null"
+                      v-if="group.auditIds.length > 0"
                       variant="ghost"
                       size="sm"
                       class="h-6 w-6 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                       :aria-label="t('approval.snooze')"
                       :title="t('approval.snooze')"
-                      @click.stop="snoozeSeason(season.auditId!)"
+                      @click.stop="
+                        season.auditId !== null ? snoozeSeason(season.auditId) : rejectGroup(group)
+                      "
                     >
                       <AlarmClockIcon class="h-3.5 w-3.5" />
                     </UiButton>
