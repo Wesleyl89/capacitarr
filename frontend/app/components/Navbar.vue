@@ -21,11 +21,20 @@
               <span
                 class="text-[10px] text-muted-foreground/40 leading-none italic mt-0.5 inline-flex items-center gap-1"
               >
-                <img
-                  src="~/assets/images/serenity.svg"
-                  alt=""
-                  class="inline-block w-3.5 h-3.5 opacity-40"
-                />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  class="inline-block w-3.5 h-3.5"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3 L14 7 L14 14 L13 16 L12 18 L11 16 L10 14 L10 7 Z" />
+                  <path d="M10 9 L7 11 L6 14 L7 15 L8 14 L10 12 Z" />
+                  <path d="M14 9 L17 11 L18 14 L17 15 L16 14 L14 12 Z" />
+                  <path d="M10 14 L5 17 L6 18 L10 16 Z" />
+                  <path d="M14 14 L19 17 L18 18 L14 16 Z" />
+                  <path d="M11 18 L12 21 L13 18 Z" />
+                </svg>
                 {{ $t('nav.slogan') }}
               </span>
             </div>
