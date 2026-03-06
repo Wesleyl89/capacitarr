@@ -24,6 +24,8 @@
   "common.saving": "Zapisywanie…",
   "common.saved": "Zapisano",
   "common.settings": "Ustawienia",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Panel",
   "nav.scoringEngine": "Silnik Oceniania",
   "nav.auditLog": "Dziennik Audytu",

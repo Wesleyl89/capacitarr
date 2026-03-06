@@ -24,6 +24,8 @@
   "common.saving": "Gemmer…",
   "common.saved": "Gemt",
   "common.settings": "Indstillinger",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Instrumentbræt",
   "nav.scoringEngine": "Scoringsmotor",
   "nav.auditLog": "Revisionslog",

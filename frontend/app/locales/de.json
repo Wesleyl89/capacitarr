@@ -24,6 +24,8 @@
   "common.saving": "Speichern…",
   "common.saved": "Gespeichert",
   "common.settings": "Einstellungen",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Dashboard",
   "nav.scoringEngine": "Bewertungsmodul",
   "nav.auditLog": "Prüfprotokoll",

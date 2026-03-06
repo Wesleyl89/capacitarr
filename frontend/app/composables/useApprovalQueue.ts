@@ -17,6 +17,7 @@ export interface ApprovalGroup {
   totalSizeBytes: number;
   score: number;
   seasonCount: number;
+  posterUrl?: string;
   seasons: ReadonlyArray<{
     title: string;
     sizeBytes: number;
@@ -187,6 +188,7 @@ export function useApprovalQueue() {
           totalSizeBytes: totalSize,
           score: bestScore,
           seasonCount: group.isShowGroup ? group.items.length : 0,
+          posterUrl: group.items[0]?.posterUrl || undefined,
           seasons,
           state,
           auditIds,

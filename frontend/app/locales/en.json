@@ -24,6 +24,8 @@
   "common.saving": "Saving…",
   "common.saved": "Saved",
   "common.settings": "Settings",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
 
   "nav.dashboard": "Dashboard",
   "nav.scoringEngine": "Scoring Engine",

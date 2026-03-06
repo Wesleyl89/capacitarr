@@ -24,6 +24,8 @@
   "common.saving": "保存中…",
   "common.saved": "保存済み",
   "common.settings": "設定",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "ダッシュボード",
   "nav.scoringEngine": "スコアリングエンジン",
   "nav.auditLog": "監査ログ",

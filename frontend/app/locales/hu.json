@@ -24,6 +24,8 @@
   "common.saving": "Mentés…",
   "common.saved": "Mentve",
   "common.settings": "Beállítások",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Kezelőpanel",
   "nav.scoringEngine": "Pontozó Motor",
   "nav.auditLog": "Audit Napló",

@@ -24,6 +24,8 @@
   "common.saving": "저장 중…",
   "common.saved": "저장됨",
   "common.settings": "설정",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "대시보드",
   "nav.scoringEngine": "스코어링 엔진",
   "nav.auditLog": "감사 로그",

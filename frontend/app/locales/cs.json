@@ -24,6 +24,8 @@
   "common.saving": "Ukládání…",
   "common.saved": "Uloženo",
   "common.settings": "Nastavení",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Přehled",
   "nav.scoringEngine": "Bodovací Modul",
   "nav.auditLog": "Auditní Protokol",

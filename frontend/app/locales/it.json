@@ -24,6 +24,8 @@
   "common.saving": "Salvataggio…",
   "common.saved": "Salvato",
   "common.settings": "Impostazioni",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Pannello",
   "nav.scoringEngine": "Motore di Punteggio",
   "nav.auditLog": "Registro di Audit",

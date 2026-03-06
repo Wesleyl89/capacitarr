@@ -24,6 +24,8 @@
   "common.saving": "Se salvează…",
   "common.saved": "Salvat",
   "common.settings": "Setări",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Panou",
   "nav.scoringEngine": "Motor de Punctaj",
   "nav.auditLog": "Jurnal de Audit",

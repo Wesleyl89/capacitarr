@@ -24,6 +24,8 @@
   "common.saving": "Lagrer…",
   "common.saved": "Lagret",
   "common.settings": "Innstillinger",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Dashbord",
   "nav.scoringEngine": "Scoringsmotor",
   "nav.auditLog": "Revisjonslogg",

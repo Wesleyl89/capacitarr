@@ -24,6 +24,8 @@
   "common.saving": "保存中…",
   "common.saved": "已保存",
   "common.settings": "设置",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "仪表盘",
   "nav.scoringEngine": "评分引擎",
   "nav.auditLog": "审计日志",

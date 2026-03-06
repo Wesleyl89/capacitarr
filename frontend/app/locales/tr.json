@@ -24,6 +24,8 @@
   "common.saving": "Kaydediliyor…",
   "common.saved": "Kaydedildi",
   "common.settings": "Ayarlar",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Pano",
   "nav.scoringEngine": "Puanlama Motoru",
   "nav.auditLog": "Denetim Günlüğü",

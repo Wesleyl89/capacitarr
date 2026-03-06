@@ -24,6 +24,8 @@
   "common.saving": "Sparar…",
   "common.saved": "Sparat",
   "common.settings": "Inställningar",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Instrumentpanel",
   "nav.scoringEngine": "Poängmotor",
   "nav.auditLog": "Revisionslogg",

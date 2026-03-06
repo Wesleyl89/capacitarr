@@ -24,6 +24,8 @@
   "common.saving": "Opslaan…",
   "common.saved": "Opgeslagen",
   "common.settings": "Instellingen",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Dashboard",
   "nav.scoringEngine": "Scoringsmodule",
   "nav.auditLog": "Auditlogboek",

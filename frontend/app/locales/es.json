@@ -24,6 +24,8 @@
   "common.saving": "Guardando…",
   "common.saved": "Guardado",
   "common.settings": "Configuración",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Panel",
   "nav.scoringEngine": "Motor de Puntuación",
   "nav.auditLog": "Registro de Auditoría",

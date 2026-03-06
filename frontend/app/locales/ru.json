@@ -24,6 +24,8 @@
   "common.saving": "Сохранение…",
   "common.saved": "Сохранено",
   "common.settings": "Настройки",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Панель управления",
   "nav.scoringEngine": "Движок Оценки",
   "nav.auditLog": "Журнал Аудита",

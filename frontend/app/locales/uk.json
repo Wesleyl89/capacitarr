@@ -24,6 +24,8 @@
   "common.saving": "Збереження…",
   "common.saved": "Збережено",
   "common.settings": "Налаштування",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Панель керування",
   "nav.scoringEngine": "Двигун Оцінювання",
   "nav.auditLog": "Журнал Аудиту",

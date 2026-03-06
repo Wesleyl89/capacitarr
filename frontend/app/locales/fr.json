@@ -24,6 +24,8 @@
   "common.saving": "Enregistrement…",
   "common.saved": "Enregistré",
   "common.settings": "Paramètres",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Tableau de bord",
   "nav.scoringEngine": "Moteur de notation",
   "nav.auditLog": "Journal d'audit",

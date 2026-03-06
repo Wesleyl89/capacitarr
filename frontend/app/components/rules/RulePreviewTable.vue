@@ -47,6 +47,7 @@
       <div v-else>
         <!-- Search & Filters -->
         <div class="flex flex-col sm:flex-row gap-3 mb-4">
+          <ViewModeToggle />
           <div class="relative flex-1">
             <SearchIcon
               class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none"
@@ -109,6 +110,37 @@
           No items match filters.
         </div>
 
+        <!-- Grid View -->
+        <div v-else-if="viewMode === 'grid'" class="max-h-[600px] overflow-y-auto">
+          <div
+            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
+          >
+            <MediaPosterCard
+              v-for="(group, groupIdx) in renderedGroups"
+              :key="group.key"
+              :title="group.entry.item.title"
+              :poster-url="group.entry.item.posterUrl"
+              :year="group.entry.item.year"
+              :media-type="group.entry.item.type"
+              :score="group.entry.isProtected ? undefined : group.entry.score"
+              :size-bytes="group.entry.item.sizeBytes"
+              :is-protected="group.entry.isProtected"
+              :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
+              @click="selectPreviewItem(group.entry)"
+            />
+          </div>
+          <!-- Progressive rendering indicator -->
+          <div
+            v-if="renderedGroups.length < filteredGroupedPreview.length"
+            class="flex items-center justify-center py-3 text-xs text-muted-foreground gap-2"
+          >
+            <component :is="LoaderCircleIcon" class="w-3.5 h-3.5 animate-spin" />
+            Showing {{ renderedGroups.length }} of {{ filteredGroupedPreview.length }} — scroll for
+            more
+          </div>
+        </div>
+
+        <!-- List/Table View -->
         <div
           v-else
           ref="tableScrollRef"
@@ -304,6 +336,8 @@ import { formatBytes } from '~/utils/format';
 import { groupEvaluatedItems } from '~/utils/groupPreview';
 import type { PreviewGroup } from '~/utils/groupPreview';
 import type { EvaluatedItem, SelectedDetailItem } from '~/types/api';
+
+const { viewMode } = useDisplayPrefs();
 
 const props = defineProps<{
   preview: EvaluatedItem[];

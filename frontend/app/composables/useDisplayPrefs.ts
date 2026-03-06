@@ -18,6 +18,18 @@ export function useDisplayPrefs() {
     if (import.meta.client) localStorage.setItem('capacitarr_timezone', tz);
   }
 
+  const viewMode = useState<'list' | 'grid'>('displayViewMode', () => {
+    if (import.meta.client) {
+      return (localStorage.getItem('capacitarr_viewMode') as 'list' | 'grid') || 'list';
+    }
+    return 'list';
+  });
+
+  function setViewMode(mode: 'list' | 'grid') {
+    viewMode.value = mode;
+    if (import.meta.client) localStorage.setItem('capacitarr_viewMode', mode);
+  }
+
   const showExactDates = useState('displayExactDates', () => {
     if (import.meta.client) {
       return localStorage.getItem('capacitarr_exactDates') === 'true';
@@ -56,9 +68,11 @@ export function useDisplayPrefs() {
     timezone,
     clockFormat,
     showExactDates,
+    viewMode,
     setTimezone,
     setClockFormat,
     setShowExactDates,
+    setViewMode,
     formatTimestamp,
   };
 }

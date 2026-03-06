@@ -24,6 +24,8 @@
   "common.saving": "Tallennetaan…",
   "common.saved": "Tallennettu",
   "common.settings": "Asetukset",
+  "common.viewList": "List view",
+  "common.viewGrid": "Grid view",
   "nav.dashboard": "Kojelauta",
   "nav.scoringEngine": "Pisteytysmoottori",
   "nav.auditLog": "Tarkastusloki",

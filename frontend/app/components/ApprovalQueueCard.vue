@@ -12,6 +12,7 @@ import { formatBytes } from '~/utils/format';
 import type { ApprovalGroup } from '~/composables/useApprovalQueue';
 
 const { t } = useI18n();
+const { viewMode } = useDisplayPrefs();
 const {
   pendingItems,
   snoozedItems,
@@ -328,7 +329,8 @@ onUnmounted(() => {
             {{ t('approval.subtitle') }}
           </UiCardDescription>
         </div>
-        <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+          <ViewModeToggle />
           <UiBadge
             v-if="pendingItems.length > 0"
             variant="default"
@@ -409,7 +411,24 @@ onUnmounted(() => {
                 </UiButton>
               </div>
             </div>
-            <div class="space-y-1.5">
+            <!-- Grid view for pending items -->
+            <div
+              v-if="viewMode === 'grid'"
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"
+            >
+              <MediaPosterCard
+                v-for="group in pendingItems"
+                :key="group.key"
+                :title="group.showTitle"
+                :poster-url="group.posterUrl"
+                :media-type="group.type"
+                :score="group.score"
+                :size-bytes="group.totalSizeBytes"
+                @click="showDetail(group)"
+              />
+            </div>
+            <!-- List view for pending items -->
+            <div v-else class="space-y-1.5">
               <div v-for="group in pendingItems" :key="group.key">
                 <div
                   class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
@@ -600,7 +619,24 @@ onUnmounted(() => {
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               {{ t('approval.snoozed') }}
             </h4>
-            <div class="space-y-1.5">
+            <!-- Grid view for snoozed items -->
+            <div
+              v-if="viewMode === 'grid'"
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 opacity-75"
+            >
+              <MediaPosterCard
+                v-for="group in snoozedItems"
+                :key="group.key"
+                :title="group.showTitle"
+                :poster-url="group.posterUrl"
+                :media-type="group.type"
+                :score="group.score"
+                :size-bytes="group.totalSizeBytes"
+                @click="showDetail(group)"
+              />
+            </div>
+            <!-- List view for snoozed items -->
+            <div v-else class="space-y-1.5">
               <div
                 v-for="group in snoozedItems"
                 :key="group.key"
@@ -656,7 +692,24 @@ onUnmounted(() => {
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               {{ t('approval.inProgress') }}
             </h4>
-            <div class="space-y-1.5">
+            <!-- Grid view for approved items -->
+            <div
+              v-if="viewMode === 'grid'"
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 opacity-60"
+            >
+              <MediaPosterCard
+                v-for="group in approvedItems"
+                :key="group.key"
+                :title="group.showTitle"
+                :poster-url="group.posterUrl"
+                :media-type="group.type"
+                :score="group.score"
+                :size-bytes="group.totalSizeBytes"
+                @click="showDetail(group)"
+              />
+            </div>
+            <!-- List view for approved items -->
+            <div v-else class="space-y-1.5">
               <div
                 v-for="group in approvedItems"
                 :key="group.key"
