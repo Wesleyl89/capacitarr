@@ -360,8 +360,7 @@ const {
   markAsRead,
   markAllAsRead,
   clearAll,
-  startPolling,
-  stopPolling,
+  start: startNotifications,
 } = useNotifications();
 
 /** Map severity to icon component */
@@ -411,11 +410,7 @@ function onNotifClick(notif: InAppNotification) {
 }
 
 onMounted(() => {
-  startPolling();
-});
-
-onUnmounted(() => {
-  stopPolling();
+  startNotifications();
 });
 
 const router = useRouter();

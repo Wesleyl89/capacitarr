@@ -1,79 +1,24 @@
 package routes
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
-	"capacitarr/internal/db"
+	"capacitarr/internal/services"
 )
 
 // RegisterDataRoutes registers data management endpoints on the protected group.
-func RegisterDataRoutes(g *echo.Group, database *gorm.DB) {
-	g.DELETE("/data/reset", handleDataReset(database))
+func RegisterDataRoutes(g *echo.Group, reg *services.Registry) {
+	g.DELETE("/data/reset", handleDataReset(reg))
 }
 
-func handleDataReset(database *gorm.DB) echo.HandlerFunc {
+func handleDataReset(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		summary := map[string]int64{}
-
-		// 1. Delete all audit_log entries
-		res := database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.AuditLogEntry{})
-		if res.Error != nil {
-			slog.Error("Failed to clear audit logs", "component", "api", "operation", "clear_audit_logs", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear audit logs"})
+		summary, err := reg.Data.Reset()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-		summary["auditLog"] = res.RowsAffected
-
-		// 1b. Delete all approval_queue entries
-		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.ApprovalQueueItem{})
-		if res.Error != nil {
-			slog.Error("Failed to clear approval queue", "component", "api", "operation", "clear_approval_queue", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear approval queue"})
-		}
-		summary["approvalQueue"] = res.RowsAffected
-
-		// 2. Delete all library_histories
-		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.LibraryHistory{})
-		if res.Error != nil {
-			slog.Error("Failed to clear library history", "component", "api", "operation", "clear_library_history", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear library history"})
-		}
-		summary["libraryHistories"] = res.RowsAffected
-
-		// 3. Delete all engine_run_stats
-		res = database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&db.EngineRunStats{})
-		if res.Error != nil {
-			slog.Error("Failed to clear engine run stats", "component", "api", "operation", "clear_engine_stats", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clear engine run stats"})
-		}
-		summary["engineRunStats"] = res.RowsAffected
-
-		// 4. Reset transient fields on disk_groups (preserve user thresholds)
-		res = database.Model(&db.DiskGroup{}).Where("1 = 1").Updates(map[string]interface{}{
-			"total_bytes": 0,
-			"used_bytes":  0,
-		})
-		if res.Error != nil {
-			slog.Error("Failed to reset disk groups", "component", "api", "operation", "reset_disk_groups", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reset disk groups"})
-		}
-		summary["diskGroupsReset"] = res.RowsAffected
-
-		// 5. Reset transient fields on integration_configs
-		res = database.Model(&db.IntegrationConfig{}).Where("1 = 1").Updates(map[string]interface{}{
-			"media_size_bytes": 0,
-			"media_count":      0,
-			"last_sync":        nil,
-			"last_error":       "",
-		})
-		if res.Error != nil {
-			slog.Error("Failed to reset integration stats", "component", "api", "operation", "reset_integration_stats", "error", res.Error)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reset integration stats"})
-		}
-		summary["integrationsReset"] = res.RowsAffected
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"status":  "success",

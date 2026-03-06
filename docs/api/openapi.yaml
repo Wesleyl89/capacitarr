@@ -924,13 +924,16 @@ paths:
   # ===========================================================================
   # Audit
   # ===========================================================================
-  /audit:
+  # ===========================================================================
+  # Audit Log (history — append-only deletions and dry-runs)
+  # ===========================================================================
+  /audit-log:
     get:
-      operationId: listAuditLogs
-      tags: [Audit]
-      summary: List audit logs
+      operationId: listAuditLog
+      tags: [Audit Log]
+      summary: List audit log entries
       description: |
-        Returns paginated audit logs with optional filtering and sorting.
+        Returns paginated audit log entries (permanent history of deletions and dry-runs).
         The default sort is by `created_at` descending (newest first).
       parameters:
         - name: limit
@@ -956,7 +959,7 @@ paths:
           description: Filter by action type
           schema:
             type: string
-            enum: [Deleted, Dry-Run]
+            enum: [deleted, dry_run, dry_delete]
         - name: sort_by
           in: query
           description: Column to sort by
@@ -977,19 +980,46 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuditResponse"
+                $ref: "#/components/schemas/AuditLogResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /audit/grouped:
+  /audit-log/recent:
     get:
-      operationId: getAuditGrouped
-      tags: [Audit]
-      summary: Get grouped audit logs
+      operationId: getAuditLogRecent
+      tags: [Audit Log]
+      summary: Get recent audit log entries
+      description: Returns the most recent audit log entries for the dashboard mini-feed.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of records to return
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLogEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /audit-log/grouped:
+    get:
+      operationId: getAuditLogGrouped
+      tags: [Audit Log]
+      summary: Get grouped audit log entries
       description: |
-        Returns audit logs grouped by TV show title for season/episode entries.
+        Returns audit log entries grouped by TV show title for season/episode entries.
         Non-TV entries are returned as standalone items. Useful for a tree-style
         audit view.
       parameters:
@@ -1002,7 +1032,7 @@ paths:
             maximum: 2000
       responses:
         "200":
-          description: Grouped audit results
+          description: Grouped audit log results
           content:
             application/json:
               schema:
@@ -1014,13 +1044,44 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /audit/{id}/approve:
-    post:
-      operationId: approveAuditEntry
-      tags: [Audit]
-      summary: Approve a queued audit entry for deletion
+  # ===========================================================================
+  # Approval Queue (active items in the approval workflow)
+  # ===========================================================================
+  /approval-queue:
+    get:
+      operationId: listApprovalQueue
+      tags: [Approval Queue]
+      summary: List approval queue items
       description: |
-        Approves a "Queued for Approval" audit entry, moving it to "Approved"
+        Returns items in the approval queue. Optionally filter by status.
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Approval queue items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalQueueItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /approval-queue/{id}/approve:
+    post:
+      operationId: approveQueueItem
+      tags: [Approval Queue]
+      summary: Approve a queued item for deletion
+      description: |
+        Approves a pending approval queue item, moving it to "approved"
         status and queuing the associated media item for background deletion.
 
         Requires that deletions are enabled in settings. If deletions are
@@ -1029,7 +1090,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: Audit log entry ID
+          description: Approval queue item ID
           schema:
             type: integer
       responses:
@@ -1044,49 +1105,152 @@ paths:
                     type: string
                     example: "approved"
         "400":
-          description: Bad request — entry is not queued for approval, has no integration, or integration type is unsupported
+          description: Bad request — item is not in pending status
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Entry is not queued for approval"
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Audit entry not found
+          description: Item not found
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Audit entry not found"
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Conflict — deletions are disabled in settings
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Deletions are currently disabled in settings. Enable deletions before approving items."
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
-        "503":
-          description: Deletion queue is full
+
+  /approval-queue/{id}/reject:
+    post:
+      operationId: rejectQueueItem
+      tags: [Approval Queue]
+      summary: Reject (snooze) a queued item
+      description: |
+        Rejects a pending approval queue item, setting its status to "rejected"
+        and applying a snooze period. The item will not appear in the queue
+        until the snooze expires or it is manually unsnoozed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Approval queue item ID
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item rejected and snoozed
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error:
+                  status:
                     type: string
-                    example: "Deletion queue is full, try again later"
+                    example: "rejected"
+        "400":
+          description: Bad request — item is not in pending status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /approval-queue/{id}/unsnooze:
+    post:
+      operationId: unsnoozeQueueItem
+      tags: [Approval Queue]
+      summary: Unsnooze a rejected item
+      description: |
+        Returns a rejected (snoozed) approval queue item to pending status,
+        clearing the snooze period. The item will reappear in the queue.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Approval queue item ID
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item unsnoozed and returned to pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "unsnoozed"
+        "400":
+          description: Bad request — item is not in rejected status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ===========================================================================
+  # SSE (Server-Sent Events)
+  # ===========================================================================
+  /events:
+    get:
+      operationId: subscribeEvents
+      tags: [Events]
+      summary: Subscribe to real-time events via SSE
+      description: |
+        Opens a long-lived Server-Sent Events (SSE) connection that streams
+        typed events in real-time. Events include engine runs, deletions,
+        config changes, approval actions, and more (34 event types total).
+
+        Supports reconnection replay via the `Last-Event-ID` header.
+        A keepalive comment is sent every 30 seconds to prevent proxy timeouts.
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          description: Resume from this event ID on reconnection. Events after this ID will be replayed from a ring buffer (up to 100 events).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Each event follows the SSE format:
+                  ```
+                  id: <event-id>
+                  event: <event-type>
+                  data: <json-payload>
+                  ```
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   # ===========================================================================
   # Data
@@ -2052,8 +2216,9 @@ components:
       required: [id, totalBytesReclaimed, totalItemsRemoved, totalEngineRuns]
 
     # ---- Audit ----
-    AuditLog:
+    AuditLogEntry:
       type: object
+      description: A permanent record of a deletion or dry-run action (append-only)
       properties:
         id:
           type: integer
@@ -2066,7 +2231,7 @@ components:
           example: season
         reason:
           type: string
-          description: Human-readable score summary (legacy format)
+          description: Human-readable score summary
           example: "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
         scoreDetails:
           type: string
@@ -2074,24 +2239,29 @@ components:
           example: '[{"name":"Watch History","rawScore":1.0,"weight":10,"contribution":0.4,"type":"weight"}]'
         action:
           type: string
-          enum: [Deleted, Dry-Run]
-          example: Dry-Run
+          enum: [deleted, dry_run, dry_delete]
+          example: deleted
         sizeBytes:
           type: integer
           format: int64
           example: 5368709120
+        integrationId:
+          type: integer
+          nullable: true
+          description: FK to integration (nullable — preserved when integration is deleted)
+          example: 1
         createdAt:
           type: string
           format: date-time
       required: [id, mediaName, mediaType, reason, action, sizeBytes, createdAt]
 
-    AuditResponse:
+    AuditLogResponse:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/AuditLog"
+            $ref: "#/components/schemas/AuditLogEntry"
         total:
           type: integer
           description: Total number of records matching the filter
@@ -2103,6 +2273,56 @@ components:
           type: integer
           example: 0
       required: [data, total, limit, offset]
+
+    ApprovalQueueItem:
+      type: object
+      description: An item in the approval queue (state machine — pending/approved/rejected)
+      properties:
+        id:
+          type: integer
+          example: 1
+        mediaName:
+          type: string
+          example: "Breaking Bad - Season 1"
+        mediaType:
+          type: string
+          enum: [movie, show, season, episode, artist, album, book]
+          example: season
+        reason:
+          type: string
+          description: Human-readable score summary
+          example: "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
+        scoreDetails:
+          type: string
+          description: JSON-encoded array of ScoreFactor objects
+        sizeBytes:
+          type: integer
+          format: int64
+          example: 5368709120
+        integrationId:
+          type: integer
+          description: FK to integration (required)
+          example: 1
+        externalId:
+          type: string
+          description: External ID in the source integration
+          example: "12345"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: pending
+        snoozedUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: When snooze expires (rejected items only)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, mediaName, mediaType, reason, sizeBytes, integrationId, status, createdAt, updatedAt]
 
     EngineHistoryPoint:
       type: object
@@ -2146,11 +2366,11 @@ components:
         group:
           $ref: "#/components/schemas/AuditGroup"
         entry:
-          $ref: "#/components/schemas/AuditLog"
+          $ref: "#/components/schemas/AuditLogEntry"
 
     AuditGroup:
       type: object
-      description: A group of audit entries belonging to the same TV show
+      description: A group of audit log entries belonging to the same TV show
       properties:
         showTitle:
           type: string
@@ -2158,7 +2378,7 @@ components:
         children:
           type: array
           items:
-            $ref: "#/components/schemas/AuditLog"
+            $ref: "#/components/schemas/AuditLogEntry"
         totalSize:
           type: integer
           format: int64

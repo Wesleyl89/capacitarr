@@ -76,7 +76,7 @@ func (s *EventBusSubscriber) handle(event events.Event) {
 			case "slack":
 				err = SendSlack(c.WebhookURL, ne)
 			case "inapp":
-				err = SendInApp(ne)
+				err = SendInApp(s.database, ne)
 			default:
 				slog.Warn("Unknown notification channel type", "component", "notifications", "type", c.Type)
 				return
@@ -90,6 +90,12 @@ func (s *EventBusSubscriber) handle(event events.Event) {
 					"event", ne.Type,
 					"error", err,
 				)
+				s.bus.Publish(events.NotificationDeliveryFailedEvent{
+					ChannelID:   c.ID,
+					ChannelType: c.Type,
+					Name:        c.Name,
+					Error:       err.Error(),
+				})
 			} else {
 				slog.Debug("Notification sent via event bus subscriber",
 					"component", "notifications",
@@ -97,6 +103,12 @@ func (s *EventBusSubscriber) handle(event events.Event) {
 					"type", c.Type,
 					"event", ne.Type,
 				)
+				s.bus.Publish(events.NotificationSentEvent{
+					ChannelID:   c.ID,
+					ChannelType: c.Type,
+					Name:        c.Name,
+					TriggerType: ne.Type,
+				})
 			}
 		}()
 	}
@@ -106,6 +118,19 @@ func (s *EventBusSubscriber) handle(event events.Event) {
 // Returns empty notifType if the event doesn't trigger notifications.
 func mapToNotification(event events.Event) (NotificationEvent, string) {
 	switch e := event.(type) {
+	// Threshold events
+	case events.ThresholdChangedEvent:
+		return NotificationEvent{
+			Type:    EventThresholdBreach,
+			Title:   "Threshold Changed",
+			Message: e.EventMessage(),
+			Fields: map[string]string{
+				"Mount":     e.MountPath,
+				"Threshold": fmt.Sprintf("%.0f%%", e.ThresholdPct),
+				"Target":    fmt.Sprintf("%.0f%%", e.TargetPct),
+			},
+		}, EventThresholdBreach
+
 	// Engine events
 	case events.EngineCompleteEvent:
 		return NotificationEvent{
@@ -115,7 +140,6 @@ func mapToNotification(event events.Event) (NotificationEvent, string) {
 			Fields: map[string]string{
 				"Evaluated": fmt.Sprintf("%d", e.Evaluated),
 				"Flagged":   fmt.Sprintf("%d", e.Flagged),
-				"Deleted":   fmt.Sprintf("%d", e.Deleted),
 				"Duration":  fmt.Sprintf("%dms", e.DurationMs),
 			},
 		}, EventEngineComplete

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,10 +11,12 @@ import (
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/integrations"
+	"capacitarr/internal/services"
 )
 
 // RegisterIntegrationRoutes adds integration management endpoints
-func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
+func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
+	database := reg.DB
 	// List all integrations
 	g.GET("/integrations", func(c echo.Context) error {
 		configs := make([]db.IntegrationConfig, 0)
@@ -79,16 +80,14 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 
 		config.ID = 0 // Ensure auto-increment
 		config.Enabled = true
-		if err := database.Create(&config).Error; err != nil {
+		created, createErr := reg.Integration.Create(config)
+		if createErr != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create integration"})
 		}
 
-		// Log integration added activity event
-		db.LogActivity(database, db.EventIntegrationAdded, fmt.Sprintf("Integration added: %s (%s)", config.Name, config.Type))
-
 		// Mask API key in response
-		config.APIKey = maskAPIKey(config.APIKey)
-		return c.JSON(http.StatusCreated, config)
+		created.APIKey = maskAPIKey(created.APIKey)
+		return c.JSON(http.StatusCreated, created)
 	})
 
 	// Update integration
@@ -125,34 +124,26 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		}
 		existing.Enabled = update.Enabled
 
-		if err := database.Save(&existing).Error; err != nil {
+		updated, updateErr := reg.Integration.Update(existing.ID, existing)
+		if updateErr != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update integration"})
 		}
 
 		// Mask API key in response
-		existing.APIKey = maskAPIKey(existing.APIKey)
-		return c.JSON(http.StatusOK, existing)
+		updated.APIKey = maskAPIKey(updated.APIKey)
+		return c.JSON(http.StatusOK, updated)
 	})
 
 	// Delete integration
 	g.DELETE("/integrations/:id", func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
-		// Look up the integration before deleting to include its name in the activity event
-		var existing db.IntegrationConfig
-		if lookupErr := database.First(&existing, id).Error; lookupErr != nil {
+		if deleteErr := reg.Integration.Delete(uint(id)); deleteErr != nil {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "Integration not found"})
 		}
-
-		if err := database.Delete(&db.IntegrationConfig{}, id).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete integration"})
-		}
-
-		// Log integration removed activity event
-		db.LogActivity(database, db.EventIntegrationRemoved, fmt.Sprintf("Integration removed: %s (%s)", existing.Name, existing.Type))
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "Integration deleted"})
 	})
@@ -182,12 +173,13 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		if req.Type == intTypeTautulli {
 			tautulli := integrations.NewTautulliClient(req.URL, req.APIKey)
 			if err := tautulli.TestConnection(); err != nil {
-				db.LogActivity(database, db.EventIntegrationTestFailed, fmt.Sprintf("Integration test failed: %s — %s", req.Type, err.Error()))
+				reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
 				return c.JSON(http.StatusOK, map[string]interface{}{
 					"success": false,
 					"error":   err.Error(),
 				})
 			}
+			reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"success": true,
 				"message": "Connection successful",
@@ -197,25 +189,26 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 		if req.Type == intTypeOverseerr {
 			overseerr := integrations.NewOverseerrClient(req.URL, req.APIKey)
 			if err := overseerr.TestConnection(); err != nil {
-				db.LogActivity(database, db.EventIntegrationTestFailed, fmt.Sprintf("Integration test failed: %s — %s", req.Type, err.Error()))
+				reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
 				return c.JSON(http.StatusOK, map[string]interface{}{
 					"success": false,
 					"error":   err.Error(),
 				})
 			}
+			reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"success": true,
 				"message": "Connection successful",
 			})
 		}
 
-		client := CreateClient(req.Type, req.URL, req.APIKey)
+		client := integrations.NewClient(req.Type, req.URL, req.APIKey)
 		if client == nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown integration type"})
 		}
 
 		if err := client.TestConnection(); err != nil {
-			db.LogActivity(database, db.EventIntegrationTestFailed, fmt.Sprintf("Integration test failed: %s — %s", req.Type, err.Error()))
+			reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
@@ -227,8 +220,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			RuleValueCache.InvalidatePrefix(strconv.Itoa(*req.IntegrationID) + ":")
 		}
 
-		// Log integration test activity event
-		db.LogActivity(database, db.EventIntegrationTest, fmt.Sprintf("Integration test successful: %s", req.Type))
+		reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"success": true,
@@ -248,7 +240,7 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 
 		results := make([]map[string]interface{}, 0)
 		for _, cfg := range configs {
-			client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+			client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
 			if client == nil {
 				continue
 			}
@@ -295,24 +287,6 @@ func RegisterIntegrationRoutes(g *echo.Group, database *gorm.DB) {
 			"results": results,
 		})
 	})
-}
-
-// CreateClient creates the appropriate integration client based on type
-func CreateClient(intType, url, apiKey string) integrations.Integration {
-	switch intType {
-	case intTypeSonarr:
-		return integrations.NewSonarrClient(url, apiKey)
-	case intTypeRadarr:
-		return integrations.NewRadarrClient(url, apiKey)
-	case intTypeLidarr:
-		return integrations.NewLidarrClient(url, apiKey)
-	case intTypeReadarr:
-		return integrations.NewReadarrClient(url, apiKey)
-	case intTypePlex:
-		return integrations.NewPlexClient(url, apiKey)
-	default:
-		return nil
-	}
 }
 
 // updateDiskGroup creates or updates a disk group from discovered disk space

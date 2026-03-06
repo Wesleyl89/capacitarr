@@ -20,8 +20,8 @@ func RegisterActivityRoutes(g *echo.Group, database *gorm.DB) {
 				limit = parsed
 			}
 		}
-		if limit > 50 {
-			limit = 50
+		if limit > 100 {
+			limit = 100
 		}
 
 		events := make([]db.ActivityEvent, 0, limit)

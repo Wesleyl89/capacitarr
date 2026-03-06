@@ -12,10 +12,14 @@ Capacitarr integrates with your *arr apps, media servers, and request managers t
 - **Cascading Rule Builder** — Visual rule builder with `always_keep`, `prefer_keep`, `prefer_delete`, and `always_delete` actions
 - **Multi-Integration Support** — Connects to Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Overseerr, and Tautulli
 - **Disk Group Monitoring** — Tracks capacity across multiple disk groups with configurable thresholds
+- **Real-Time Updates** — Server-Sent Events (SSE) push engine state, deletions, and activity to the browser instantly — no polling
+- **Approval Queue** — Review and approve deletion candidates before they are removed, with snooze and bulk operations
 - **Score Transparency** — Full per-item score breakdowns showing each factor's contribution
-- **Audit Trail** — Complete history of every engine action (deletions, evaluations, errors)
-- **Themeable UI** — Light/dark mode with customizable accent colors
-- **Reverse Proxy Ready** — Subdirectory deployments, proxy authentication (Authelia, Authentik, Organizr)
+- **Complete Audit Trail** — Separate approval queue (state machine) and audit log (permanent deletion history)
+- **34 Activity Event Types** — Every user-visible action is tracked and streamable via SSE
+- **Notifications** — Discord, Slack, and in-app notifications driven by the event bus
+- **Themeable UI** — Light/dark mode with customizable accent colors, 22 languages
+- **Reverse Proxy Ready** — Subdirectory deployments, proxy authentication (Authelia, Authentik, Organizr), SSE-compatible
 - **Single Container** — Go backend + Nuxt 4 frontend + SQLite database in one Docker image
 - **PUID/PGID Support** — Runs as any user/group for proper volume permissions
 
@@ -107,19 +111,24 @@ For the complete configuration reference including subdirectory deployment and p
 
 Capacitarr is a single-container application that bundles a Go backend, a Nuxt 4 (Vue 3) frontend, and a SQLite database. The frontend is statically generated at build time and embedded into the Go binary via `go:embed`, producing a single self-contained executable.
 
+The backend uses a **service layer** pattern — all business logic lives in injectable services, not in route handlers. A typed **event bus** publishes 34 event types that drive activity logging, notifications, and real-time UI updates via **Server-Sent Events (SSE)**.
+
 ```mermaid
 flowchart TD
     subgraph CONTAINER["Docker Container"]
-        FRONTEND["Nuxt 4 Frontend<br/>Vue 3 + Tailwind CSS 4 + shadcn-vue + Lucide"]
-        BACKEND["Go Backend<br/>Echo framework + GORM"]
+        FRONTEND["Nuxt 4 Frontend<br/>Vue 3 + Tailwind CSS 4 + shadcn-vue"]
+        BACKEND["Go Backend<br/>Echo + GORM + Service Layer"]
         DB["SQLite Database<br/>/config/capacitarr.db"]
         ENGINE["Scoring Engine<br/>Weighted factors + protection rules"]
-        POLLER["Capacity Poller<br/>Scheduled disk monitoring"]
+        POLLER["Engine Orchestrator<br/>Scheduled disk monitoring"]
+        EVENT_BUS["Event Bus<br/>Typed pub/sub fan-out"]
 
-        FRONTEND -->|"REST API"| BACKEND
+        FRONTEND -->|"REST API + SSE"| BACKEND
         BACKEND --> DB
         BACKEND --> ENGINE
         BACKEND --> POLLER
+        BACKEND --> EVENT_BUS
+        EVENT_BUS -->|"SSE"| FRONTEND
     end
 
     subgraph ARR_APPS["*arr Apps"]
@@ -148,10 +157,12 @@ flowchart TD
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Nuxt 4, Vue 3, Tailwind CSS 4, shadcn-vue, Lucide, ApexCharts | Dashboard UI, rule builder, score visualization |
-| **Backend** | Go, Echo, GORM | REST API, authentication, integration clients, scheduling |
-| **Database** | SQLite | Configuration, audit logs, engine statistics |
+| **Frontend** | Nuxt 4, Vue 3, Tailwind CSS 4, shadcn-vue, Lucide, ApexCharts | Dashboard UI, rule builder, real-time updates via SSE |
+| **Backend** | Go, Echo, GORM, Service Layer, Event Bus | REST API, SSE, authentication, integration clients, scheduling |
+| **Database** | SQLite | Configuration, approval queue, audit log, engine statistics |
 | **Container** | Alpine Linux, multi-stage Docker build | Minimal runtime image (~30 MB) |
+
+For the full architecture documentation, see [docs/architecture.md](docs/architecture.md).
 
 ## Scoring Algorithm
 
@@ -203,28 +214,36 @@ The container exposes port **2187** and serves both the Go backend API and the N
 
 ```
 capacitarr/
-├── backend/                  # Go backend
-│   ├── main.go               # Application entrypoint
+├── backend/                        # Go backend
+│   ├── main.go                     # Application entrypoint, wiring
 │   ├── internal/
-│   │   ├── config/           # Environment variable loading
-│   │   ├── db/               # SQLite models, migrations
-│   │   ├── engine/           # Scoring + rule evaluation
-│   │   ├── integrations/     # *arr, Plex, Jellyfin, Emby, Overseerr clients
-│   │   ├── jobs/             # Cron scheduling
-│   │   ├── poller/           # Capacity polling + deletion logic
-│   │   └── logger/           # Structured logging
-│   └── routes/               # REST API handlers + middleware
-├── frontend/                 # Nuxt 4 frontend
+│   │   ├── config/                 # Environment variable loading
+│   │   ├── db/                     # SQLite models, single baseline migration
+│   │   ├── engine/                 # Scoring + rule evaluation
+│   │   ├── events/                 # Event bus, typed events, SSE broadcaster, activity persister
+│   │   ├── integrations/           # *arr, Plex, Jellyfin, Emby, Overseerr, Tautulli clients
+│   │   ├── jobs/                   # Cron scheduling (retention cleanup, time-series rollups)
+│   │   ├── notifications/          # Discord, Slack, in-app notification dispatcher
+│   │   ├── poller/                 # Engine orchestrator + deletion worker
+│   │   ├── services/               # Service layer (business logic)
+│   │   └── logger/                 # Structured logging
+│   └── routes/                     # REST API handlers + middleware
+├── frontend/                       # Nuxt 4 frontend
 │   ├── app/
-│   │   ├── components/       # Vue components (shadcn-vue based)
-│   │   ├── composables/      # Vue composables
-│   │   ├── pages/            # Nuxt pages (dashboard, rules, settings, audit)
-│   │   └── assets/css/       # Tailwind CSS + theme variables
-│   └── nuxt.config.ts        # Nuxt configuration
-├── docs/                     # Documentation
-├── docker-compose.yml        # Development/deployment compose file
-├── Dockerfile                # Multi-stage build (Node → Go → Alpine)
-└── entrypoint.sh             # Container entrypoint (PUID/PGID handling)
+│   │   ├── components/             # Vue components (shadcn-vue based)
+│   │   ├── composables/            # Vue composables (useEventStream, useEngineControl, etc.)
+│   │   ├── pages/                  # Nuxt pages (dashboard, audit, rules, settings, help)
+│   │   ├── locales/                # i18n translations (22 languages)
+│   │   └── assets/css/             # Tailwind CSS + theme variables
+│   └── nuxt.config.ts              # Nuxt configuration
+├── site/                           # Project marketing site (Nuxt UI Pro)
+├── docs/                           # Documentation
+│   ├── api/                        # OpenAPI spec, examples, workflows
+│   └── plans/                      # Internal plan documents
+├── docker-compose.yml              # Development/deployment compose file
+├── Dockerfile                      # Multi-stage build (Node → Go → Alpine)
+├── Makefile                        # CI/CD targets (lint, test, security, build)
+└── entrypoint.sh                   # Container entrypoint (PUID/PGID handling)
 ```
 
 ## Contributing
@@ -243,9 +262,11 @@ Full documentation is available on the [Capacitarr documentation site](https://c
 
 Key documentation pages:
 
+- [Architecture](docs/architecture.md) — Service layer, event bus, SSE, and database schema
 - [Configuration Reference](docs/configuration.md) — All environment variables and examples
-- [Deployment Guide](docs/deployment.md) — Reverse proxy, subdirectory, and proxy auth setup
+- [Deployment Guide](docs/deployment.md) — Reverse proxy, SSE proxy, subdirectory, and proxy auth setup
 - [Scoring Algorithm](docs/scoring.md) — Detailed scoring factor documentation
+- [API Reference](docs/api/README.md) — REST API and SSE endpoint documentation
 - [Releasing](docs/releasing.md) — Release process and versioning
 
 ## License

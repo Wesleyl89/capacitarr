@@ -24,9 +24,12 @@ import (
 
 	"capacitarr/internal/config"
 	"capacitarr/internal/db"
+	"capacitarr/internal/events"
 	"capacitarr/internal/jobs"
 	"capacitarr/internal/logger"
+	"capacitarr/internal/notifications"
 	"capacitarr/internal/poller"
+	"capacitarr/internal/services"
 	"capacitarr/routes"
 )
 
@@ -103,8 +106,17 @@ func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
 			}
 		}
 
-		// File not found — serve the SPA fallback (200.html or index.html)
-		// Nuxt generates 200.html specifically for SPA catch-all hosting
+		// If the requested path looks like a static resource (has a file extension),
+		// return 404 instead of the SPA fallback. This prevents requests for
+		// non-existent .json, .js, .css files from receiving HTML responses
+		// (which causes JSON parse errors on the client).
+		if ext := filepath.Ext(reqPath); ext != "" {
+			return echo.NewHTTPError(http.StatusNotFound)
+		}
+
+		// File not found and has no extension — serve the SPA fallback
+		// (200.html or index.html). Nuxt generates 200.html specifically for
+		// SPA catch-all hosting (client-side Vue Router handles the route).
 		if fallback, fbErr := fsys.Open("200.html"); fbErr == nil {
 			_ = fallback.Close()
 			return serveEmbeddedFile(c, fsys, "200.html")
@@ -154,12 +166,40 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ─── Event Bus + Subscribers ───────────────────────────────────────────
+	bus := events.NewEventBus()
+
+	// Activity Persister — writes all events to the activity_events table
+	activityPersister := events.NewActivityPersister(db.DB, bus)
+	activityPersister.Start()
+
+	// SSE Broadcaster — fans out events to connected browser tabs
+	sseBroadcaster := events.NewSSEBroadcaster(bus)
+	sseBroadcaster.Start()
+
+	// Notification Subscriber — dispatches notifications via configured channels
+	notifSubscriber := notifications.NewEventBusSubscriber(db.DB, bus)
+	notifSubscriber.Start()
+
+	slog.Info("Event bus started", "component", "main", "subscribers", "activity_persister, sse_broadcaster, notification_subscriber")
+
+	// ─── Service Registry ──────────────────────────────────────────────────
+	reg := services.NewRegistry(db.DB, bus, cfg)
+
+	// Start the background deletion worker (replaces old init() goroutine)
+	reg.Deletion.Start()
+
 	// Recover any approvals that were orphaned by a previous shutdown
-	poller.RecoverOrphanedApprovals()
+	if count, err := reg.Approval.RecoverOrphans(); err != nil {
+		slog.Error("Failed to recover orphaned approvals", "component", "main", "error", err)
+	} else if count > 0 {
+		slog.Info("Recovered orphaned approvals on startup", "component", "main", "count", count)
+	}
 
 	// Initialize background jobs
-	pollerStop := poller.Start() // Poll interval configured via DB preferences (default 5 min)
-	cronScheduler := jobs.Start()
+	pollerInstance := poller.New(reg)
+	pollerInstance.Start()
+	cronScheduler := jobs.Start(db.DB)
 
 	// Initialize Echo instance
 	e := echo.New()
@@ -213,7 +253,7 @@ func main() {
 	// Remove trailing slash from prefix for clean route joining
 	prefix = strings.TrimRight(prefix, "/")
 	apiGroup := e.Group(prefix + "/api/v1")
-	routes.RegisterAPIRoutes(apiGroup, db.DB, cfg, version, commit, buildDate)
+	routes.RegisterAPIRoutes(apiGroup, reg, version, commit, buildDate, sseBroadcaster)
 
 	// Serve the embedded Nuxt static frontend with SPA fallback
 	fsys := getSubFS()
@@ -226,8 +266,8 @@ func main() {
 		e.GET("/*", spaHandler(fsys, ""))
 	}
 
-	// Log server start activity event
-	db.LogActivity(db.DB, db.EventServerStarted, fmt.Sprintf("Capacitarr started (v%s)", version))
+	// Publish server start event to the event bus
+	bus.Publish(events.ServerStartedEvent{Version: version})
 
 	slog.Info("Server initialized, starting listener", "component", "main", "port", cfg.Port)
 
@@ -239,10 +279,18 @@ func main() {
 		slog.Info("Received shutdown signal", "component", "main", "signal", sig)
 
 		// Stop background jobs
-		pollerStop()
+		pollerInstance.Stop()
 		cronScheduler.Stop()
-		poller.StopWorker()
 		routes.RuleValueCache.Close()
+
+		// Stop services
+		reg.Deletion.Stop()
+
+		// Stop event bus infrastructure
+		notifSubscriber.Stop()
+		sseBroadcaster.Stop()
+		activityPersister.Stop()
+		bus.Close()
 
 		// Shutdown HTTP server with 10s deadline
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -176,41 +175,4 @@ func RegisterAuditRoutes(g *echo.Group, database *gorm.DB) {
 		})
 	})
 
-	// Legacy endpoints (redirect to new paths for backward compatibility)
-	g.GET("/audit/recent", func(c echo.Context) error {
-		return c.Redirect(http.StatusMovedPermanently, "/api/audit-log/recent?"+c.QueryString())
-	})
-	g.GET("/audit/grouped", func(c echo.Context) error {
-		return c.Redirect(http.StatusMovedPermanently, "/api/audit-log/grouped?"+c.QueryString())
-	})
-	g.GET("/audit", func(c echo.Context) error {
-		return c.Redirect(http.StatusMovedPermanently, "/api/audit-log?"+c.QueryString())
-	})
-}
-
-// parseDuration parses shorthand duration strings like "1h", "24h", "7d", "30d".
-func parseDuration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, fmt.Errorf("empty duration")
-	}
-
-	suffix := s[len(s)-1:]
-	numStr := s[:len(s)-1]
-
-	n, err := strconv.Atoi(numStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid duration number: %s", numStr)
-	}
-
-	switch suffix {
-	case "h":
-		return time.Duration(n) * time.Hour, nil
-	case "d":
-		return time.Duration(n) * 24 * time.Hour, nil
-	case "m":
-		return time.Duration(n) * time.Minute, nil
-	default:
-		return 0, fmt.Errorf("unsupported duration suffix: %s", suffix)
-	}
 }

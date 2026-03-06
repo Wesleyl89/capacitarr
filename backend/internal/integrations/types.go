@@ -110,6 +110,30 @@ const (
 	IntegrationTypeEmby IntegrationType = "emby"
 )
 
+// NewClient constructs an Integration client for the given integration type.
+// Returns nil if the type is not a primary media-managing integration
+// (e.g. tautulli, overseerr are enrichment-only and don't implement Integration).
+func NewClient(intType, url, apiKey string) Integration {
+	switch IntegrationType(intType) {
+	case IntegrationTypeSonarr:
+		return NewSonarrClient(url, apiKey)
+	case IntegrationTypeRadarr:
+		return NewRadarrClient(url, apiKey)
+	case IntegrationTypeLidarr:
+		return NewLidarrClient(url, apiKey)
+	case IntegrationTypeReadarr:
+		return NewReadarrClient(url, apiKey)
+	case IntegrationTypePlex:
+		return NewPlexClient(url, apiKey)
+	case IntegrationTypeTautulli, IntegrationTypeOverseerr, IntegrationTypeJellyfin, IntegrationTypeEmby:
+		// These are enrichment-only clients that don't implement the full
+		// Integration interface (no DeleteMediaItem). Use their dedicated
+		// constructors (NewTautulliClient, etc.) directly.
+		return nil
+	}
+	return nil
+}
+
 // NameValue is a simple label/value pair used for rule value options.
 type NameValue struct {
 	Value string `json:"value"`

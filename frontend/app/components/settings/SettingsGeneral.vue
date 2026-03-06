@@ -271,12 +271,8 @@ async function fetchPreferences() {
     if (prefs?.tiebreakerMethod) {
       engineTiebreakerMethod.value = prefs.tiebreakerMethod;
     }
-    if (
-      (prefs as PreferenceSet & { snoozeDurationHours?: number })?.snoozeDurationHours !== undefined
-    ) {
-      snoozeDurationHours.value = (
-        prefs as PreferenceSet & { snoozeDurationHours?: number }
-      ).snoozeDurationHours!;
+    if (prefs?.snoozeDurationHours !== undefined) {
+      snoozeDurationHours.value = prefs.snoozeDurationHours;
     }
   } catch (err) {
     console.warn('[SettingsGeneral] fetchPreferences failed:', err);

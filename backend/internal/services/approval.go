@@ -114,6 +114,53 @@ func (s *ApprovalService) Unsnooze(entryID uint) (*db.ApprovalQueueItem, error) 
 	return &entry, nil
 }
 
+// UpsertPending creates or updates a pending approval queue item.
+// If a pending entry for the same media already exists, it is updated.
+// Returns true if a new entry was created, false if updated.
+func (s *ApprovalService) UpsertPending(item db.ApprovalQueueItem) (bool, error) {
+	item.Status = db.StatusPending
+	now := time.Now().UTC()
+
+	var existing db.ApprovalQueueItem
+	result := s.db.Where(
+		"media_name = ? AND media_type = ? AND status = ?",
+		item.MediaName, item.MediaType, db.StatusPending,
+	).First(&existing)
+
+	if result.Error == nil {
+		// Update existing pending entry
+		if err := s.db.Model(&existing).Updates(map[string]interface{}{
+			"reason":         item.Reason,
+			"score_details":  item.ScoreDetails,
+			"size_bytes":     item.SizeBytes,
+			"integration_id": item.IntegrationID,
+			"external_id":    item.ExternalID,
+			"updated_at":     now,
+		}).Error; err != nil {
+			return false, fmt.Errorf("failed to update pending entry: %w", err)
+		}
+		return false, nil
+	}
+
+	// Create new pending entry
+	item.CreatedAt = now
+	item.UpdatedAt = now
+	if err := s.db.Create(&item).Error; err != nil {
+		return false, fmt.Errorf("failed to create pending entry: %w", err)
+	}
+	return true, nil
+}
+
+// IsSnoozed checks if a media item is currently snoozed (rejected with an active snooze window).
+func (s *ApprovalService) IsSnoozed(mediaName, mediaType string) bool {
+	var count int64
+	s.db.Model(&db.ApprovalQueueItem{}).Where(
+		"media_name = ? AND media_type = ? AND status = ? AND snoozed_until IS NOT NULL AND snoozed_until > ?",
+		mediaName, mediaType, db.StatusRejected, time.Now().UTC(),
+	).Count(&count)
+	return count > 0
+}
+
 // BulkUnsnooze clears all active snoozes and resets items to pending.
 // This is called when disk usage drops below threshold.
 func (s *ApprovalService) BulkUnsnooze() (int, error) {

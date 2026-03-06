@@ -1,26 +1,20 @@
 package routes
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"capacitarr/internal/config"
 	"capacitarr/internal/db"
+	"capacitarr/internal/services"
 )
 
-// bcryptCost is the cost factor for bcrypt password hashing across all auth
-// operations. The Go default is 10; we use 12 for stronger brute-force
-// resistance while keeping hashing under ~250ms on typical hardware.
-const bcryptCost = 12
+// bcryptCost references the shared bcrypt cost factor from the services package.
+const bcryptCost = services.BcryptCost
 
 // LoginRequest holds the JSON body of login requests.
 type LoginRequest struct {
@@ -30,7 +24,10 @@ type LoginRequest struct {
 
 // RegisterAuthRoutes sets up login, logout, password change, first-user
 // bootstrap, and API key management endpoints.
-func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gorm.DB, cfg *config.Config) {
+func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services.Registry) {
+	database := reg.DB
+	cfg := reg.Cfg
+
 	// Auth status — public endpoint for first-login UX detection
 	public.GET("/auth/status", func(c echo.Context) error {
 		var count int64
@@ -89,18 +86,10 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gor
 			}
 		}
 
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		// Delegate credential check + JWT generation + event publishing to AuthService
+		tokenString, loginErr := reg.Auth.Login(req.Username, req.Password)
+		if loginErr != nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"sub": user.Username,
-			"exp": time.Now().Add(24 * time.Hour).Unix(),
-		})
-
-		tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error generating token"})
 		}
 
 		// Set HttpOnly JWT cookie for secure transport
@@ -125,13 +114,10 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gor
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Log login activity event
-		db.LogActivity(database, db.EventLogin, fmt.Sprintf("User '%s' logged in", user.Username))
-
 		return c.JSON(http.StatusOK, map[string]string{"message": "success", "token": tokenString})
 	}, LoginRateLimit(loginRL))
 
-	// Password change
+	// Password change — delegates to AuthService
 	protected.PUT("/auth/password", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
@@ -153,30 +139,18 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gor
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "New password must be at least 8 characters"})
 		}
 
-		var user db.AuthConfig
-		if err := database.Where("username = ?", username).First(&user).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		if err := reg.Auth.ChangePassword(username, req.CurrentPassword, req.NewPassword); err != nil {
+			// Distinguish between "wrong password" and other errors
+			if err.Error() == "current password is incorrect" {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
-		}
-
-		hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcryptCost)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
-		}
-
-		if err := database.Model(&user).Update("password", string(hashed)).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update password"})
-		}
-
-		db.LogActivity(database, db.EventPasswordChanged, fmt.Sprintf("Password changed for user '%s'", username))
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
 	})
 
-	// Username change
+	// Username change — delegates to AuthService
 	protected.PUT("/auth/username", func(c echo.Context) error {
 		currentUser, ok := c.Get("user").(string)
 		if !ok || currentUser == "" {
@@ -198,54 +172,35 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, database *gor
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username must be at least 3 characters"})
 		}
 
-		var user db.AuthConfig
-		if err := database.Where("username = ?", currentUser).First(&user).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
-		}
-
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
-		}
-
 		// Check if new username is already taken
 		var existing db.AuthConfig
 		if err := database.Where("username = ?", req.NewUsername).First(&existing).Error; err == nil {
 			return c.JSON(http.StatusConflict, map[string]string{"error": "Username already taken"})
 		}
 
-		if err := database.Model(&user).Update("username", req.NewUsername).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update username"})
+		if err := reg.Auth.ChangeUsername(currentUser, req.NewUsername, req.CurrentPassword); err != nil {
+			if err.Error() == "password is incorrect" {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "Username changed successfully"})
 	})
 
-	// Generate API key
+	// Generate API key — delegates to AuthService
 	protected.POST("/auth/apikey", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
 			return echo.ErrUnauthorized
 		}
 
-		// Generate a cryptographically random API key (256 bits of entropy)
-		keyBytes := make([]byte, 32)
-		if _, err := rand.Read(keyBytes); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error generating API key"})
-		}
-		plaintextKey := hex.EncodeToString(keyBytes)
-
-		// Store only the SHA-256 hash — the plaintext is returned once and never stored.
-		// Also persist the last 4 characters as a hint for identification.
-		hashedKey := HashAPIKey(plaintextKey)
-		hint := plaintextKey[len(plaintextKey)-4:]
-		if err := database.Model(&db.AuthConfig{}).Where("username = ?", username).Updates(map[string]interface{}{
-			"api_key":      hashedKey,
-			"api_key_hint": hint,
-		}).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+		plaintext, err := reg.Auth.GenerateAPIKey(username)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 
-		return c.JSON(http.StatusOK, map[string]string{"api_key": plaintextKey})
+		return c.JSON(http.StatusOK, map[string]string{"api_key": plaintext})
 	})
 
 	// Check API key status

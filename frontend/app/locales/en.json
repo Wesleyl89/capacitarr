@@ -404,6 +404,7 @@
   "help.aboutCapacitarr": "About Capacitarr",
 
   "connection.lost": "Connection to server lost — retrying…",
+  "connection.reconnecting": "Reconnecting to server…",
   "connection.restored": "Connection restored",
 
   "update.title": "Update Available",

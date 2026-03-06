@@ -3,13 +3,14 @@ package routes
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/notifications"
+	"capacitarr/internal/services"
 )
 
 // Notification channel type constants.
@@ -21,7 +22,8 @@ const (
 
 // RegisterNotificationRoutes sets up CRUD endpoints for notification channels
 // and management endpoints for in-app notifications.
-func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
+func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
+	database := reg.DB
 	// --- Notification Channel CRUD ---
 
 	// GET /api/v1/notifications/channels — list all notification configs
@@ -63,11 +65,12 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 		req.CreatedAt = time.Now()
 		req.UpdatedAt = time.Now()
 
-		if err := database.Create(&req).Error; err != nil {
+		created, createErr := reg.NotificationChannel.Create(req)
+		if createErr != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create notification channel"})
 		}
 
-		return c.JSON(http.StatusCreated, req)
+		return c.JSON(http.StatusCreated, created)
 	})
 
 	// PUT /api/v1/notifications/channels/:id — update a channel
@@ -97,42 +100,40 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 			}
 		}
 
-		updates := map[string]interface{}{
-			"updated_at": time.Now(),
-		}
+		// Merge partial updates into the existing record
 		if req.Name != "" {
-			updates["name"] = req.Name
+			existing.Name = req.Name
 		}
 		if req.Type != "" {
-			updates["type"] = req.Type
+			existing.Type = req.Type
 		}
-		updates["webhook_url"] = req.WebhookURL
-		updates["enabled"] = req.Enabled
-		updates["on_threshold_breach"] = req.OnThresholdBreach
-		updates["on_deletion_executed"] = req.OnDeletionExecuted
-		updates["on_engine_error"] = req.OnEngineError
-		updates["on_engine_complete"] = req.OnEngineComplete
+		existing.WebhookURL = req.WebhookURL
+		existing.Enabled = req.Enabled
+		existing.OnThresholdBreach = req.OnThresholdBreach
+		existing.OnDeletionExecuted = req.OnDeletionExecuted
+		existing.OnEngineError = req.OnEngineError
+		existing.OnEngineComplete = req.OnEngineComplete
+		existing.UpdatedAt = time.Now()
 
-		if err := database.Model(&existing).Updates(updates).Error; err != nil {
+		updated, updateErr := reg.NotificationChannel.Update(existing.ID, existing)
+		if updateErr != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update notification channel"})
 		}
 
-		// Re-fetch to return full updated record
-		database.First(&existing, id)
-		return c.JSON(http.StatusOK, existing)
+		return c.JSON(http.StatusOK, updated)
 	})
 
 	// DELETE /api/v1/notifications/channels/:id — delete a channel
 	g.DELETE("/notifications/channels/:id", func(c echo.Context) error {
 		id := c.Param("id")
 
-		var existing db.NotificationConfig
-		if err := database.First(&existing, id).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
+		idNum, convErr := strconv.ParseUint(id, 10, 64)
+		if convErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
-		if err := database.Delete(&existing).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete notification channel"})
+		if deleteErr := reg.NotificationChannel.Delete(uint(idNum)); deleteErr != nil {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
@@ -164,7 +165,7 @@ func RegisterNotificationRoutes(g *echo.Group, database *gorm.DB) {
 		case notifTypeSlack:
 			err = notifications.SendSlack(cfg.WebhookURL, event)
 		case notifTypeInApp:
-			err = notifications.SendInApp(event)
+			err = notifications.SendInApp(database, event)
 		default:
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown channel type"})
 		}

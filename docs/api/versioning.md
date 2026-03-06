@@ -71,3 +71,40 @@ When an endpoint or field needs to be removed:
 - **Don't rely on field ordering** in JSON responses
 - **Use the OpenAPI spec** as the source of truth for request/response shapes
 - **Pin to a specific API version** (`/api/v1/`) — don't use unversioned endpoints
+
+## Breaking Changes in v2.0.0
+
+The 2.0.0 release includes the following breaking changes from the pre-release (1.0.0-rc.x) series:
+
+### Database
+
+- **Fresh database schema.** The 18 incremental migrations have been replaced with a single baseline migration. Existing databases from 1.0.0-rc.x are **not compatible** — users start fresh on upgrade.
+- The `audit_logs` table has been split into two purpose-specific tables:
+  - `approval_queue` — active items in the approval workflow (state machine: `pending` → `approved`/`rejected`)
+  - `audit_log` — permanent, append-only history of deletions and dry-runs
+
+### API Endpoints
+
+| Old Endpoint | New Endpoint | Notes |
+|---|---|---|
+| `GET /api/v1/audit` | `GET /api/v1/audit-log` | History only (deleted, dry-run, dry-delete) |
+| `GET /api/v1/audit/recent` | `GET /api/v1/audit-log/recent` | Dashboard mini-feed (history) |
+| `GET /api/v1/audit/grouped` | `GET /api/v1/audit-log/grouped` | Grouped history view |
+| `POST /api/v1/audit/:id/approve` | `POST /api/v1/approval-queue/:id/approve` | Approve a queued item |
+| `POST /api/v1/audit/:id/reject` | `POST /api/v1/approval-queue/:id/reject` | Reject (snooze) a queued item |
+| `POST /api/v1/audit/:id/unsnooze` | `POST /api/v1/approval-queue/:id/unsnooze` | Requeue a snoozed item |
+| *(none)* | `GET /api/v1/approval-queue` | List queued items |
+| *(none)* | `GET /api/v1/events` | SSE real-time event stream |
+
+### Response Schema Changes
+
+- `AuditLog` → `AuditLogEntry`: removed `snoozedUntil` field, `action` restricted to `deleted`/`dry_run`/`dry_delete`
+- New `ApprovalQueueItem` type with `status` field (`pending`/`approved`/`rejected`) instead of overloaded `action`
+- Activity events are now streamed via SSE in addition to the REST endpoint
+
+### Architecture
+
+- All business logic moved from route handlers to a service layer
+- Event bus replaces direct `LogActivity()` calls — 34 typed event types
+- SSE replaces polling for real-time UI updates
+- Notification dispatch is event-driven (subscriber) instead of inline calls

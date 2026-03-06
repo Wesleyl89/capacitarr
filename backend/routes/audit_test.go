@@ -20,9 +20,9 @@ import (
 func seedAuditLogs(t *testing.T, database *gorm.DB, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		action := "Deleted"
+		action := "deleted"
 		if i%2 == 0 {
-			action = "Dry-Run"
+			action = "dry_run"
 		}
 		log := db.AuditLogEntry{
 			MediaName: fmt.Sprintf("Test Media %d", i),
@@ -42,7 +42,7 @@ func TestGetAuditLogs_Empty(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -52,9 +52,9 @@ func TestGetAuditLogs_Empty(t *testing.T) {
 
 	var resp struct {
 		Data   []db.AuditLogEntry `json:"data"`
-		Total  int64         `json:"total"`
-		Limit  int           `json:"limit"`
-		Offset int           `json:"offset"`
+		Total  int64              `json:"total"`
+		Limit  int                `json:"limit"`
+		Offset int                `json:"offset"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
@@ -80,7 +80,7 @@ func TestGetAuditLogs_WithData(t *testing.T) {
 
 	seedAuditLogs(t, database, 5)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -90,9 +90,9 @@ func TestGetAuditLogs_WithData(t *testing.T) {
 
 	var resp struct {
 		Data   []db.AuditLogEntry `json:"data"`
-		Total  int64         `json:"total"`
-		Limit  int           `json:"limit"`
-		Offset int           `json:"offset"`
+		Total  int64              `json:"total"`
+		Limit  int                `json:"limit"`
+		Offset int                `json:"offset"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
@@ -148,7 +148,7 @@ func TestGetAuditLogs_Pagination(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit"+tc.query, nil)
+			req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log"+tc.query, nil)
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
 
@@ -158,9 +158,9 @@ func TestGetAuditLogs_Pagination(t *testing.T) {
 
 			var resp struct {
 				Data   []db.AuditLogEntry `json:"data"`
-				Total  int64         `json:"total"`
-				Limit  int           `json:"limit"`
-				Offset int           `json:"offset"`
+				Total  int64              `json:"total"`
+				Limit  int                `json:"limit"`
+				Offset int                `json:"offset"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("Failed to parse response: %v", err)
@@ -193,14 +193,14 @@ func TestGetAuditLogs_FilterByAction(t *testing.T) {
 		action        string
 		expectedCount int
 	}{
-		{"filter Deleted", "Deleted", 5},
-		{"filter Dry-Run", "Dry-Run", 5},
+		{"filter deleted", "deleted", 5},
+		{"filter dry_run", "dry_run", 5},
 		{"filter nonexistent", "Unknown", 0},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit?action="+tc.action, nil)
+			req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log?action="+tc.action, nil)
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
 
@@ -210,7 +210,7 @@ func TestGetAuditLogs_FilterByAction(t *testing.T) {
 
 			var resp struct {
 				Data  []db.AuditLogEntry `json:"data"`
-				Total int64         `json:"total"`
+				Total int64              `json:"total"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("Failed to parse response: %v", err)
@@ -229,9 +229,9 @@ func TestGetAuditLogs_SearchFilter(t *testing.T) {
 
 	// Seed specific named items
 	logs := []db.AuditLogEntry{
-		{MediaName: "Inception", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 1000},
-		{MediaName: "Interstellar", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 2000},
-		{MediaName: "The Dark Knight", MediaType: "movie", Reason: "test", Action: "Dry-Run", SizeBytes: 3000},
+		{MediaName: "Inception", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 1000},
+		{MediaName: "Interstellar", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 2000},
+		{MediaName: "The Dark Knight", MediaType: "movie", Reason: "test", Action: "dry_run", SizeBytes: 3000},
 	}
 	for _, log := range logs {
 		if err := database.Create(&log).Error; err != nil {
@@ -239,7 +239,7 @@ func TestGetAuditLogs_SearchFilter(t *testing.T) {
 		}
 	}
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit?search=Inter", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log?search=Inter", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -249,7 +249,7 @@ func TestGetAuditLogs_SearchFilter(t *testing.T) {
 
 	var resp struct {
 		Data  []db.AuditLogEntry `json:"data"`
-		Total int64         `json:"total"`
+		Total int64              `json:"total"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
@@ -269,9 +269,9 @@ func TestGetAuditLogs_Sorting(t *testing.T) {
 
 	// Seed items with distinct sizes
 	logs := []db.AuditLogEntry{
-		{MediaName: "Small", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 100},
-		{MediaName: "Large", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 9000},
-		{MediaName: "Medium", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 5000},
+		{MediaName: "Small", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 100},
+		{MediaName: "Large", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 9000},
+		{MediaName: "Medium", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 5000},
 	}
 	for _, log := range logs {
 		if err := database.Create(&log).Error; err != nil {
@@ -279,7 +279,7 @@ func TestGetAuditLogs_Sorting(t *testing.T) {
 		}
 	}
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit?sort_by=size_bytes&sort_dir=asc", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log?sort_by=size_bytes&sort_dir=asc", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -308,7 +308,7 @@ func TestGetAuditLogs_LimitCap(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	// Request a limit above the 1000 cap
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit?limit=5000", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log?limit=5000", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -332,7 +332,7 @@ func TestGetAuditLogs_Unauthenticated(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/audit", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/audit-log", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -341,9 +341,9 @@ func TestGetAuditLogs_Unauthenticated(t *testing.T) {
 	}
 }
 
-// seedApprovalEntry creates an integration and a "Queued for Approval" audit log entry.
-// Returns the audit log ID.
-func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint) {
+// seedApprovalEntry creates an integration and a pending approval queue item.
+// Returns the queue item ID.
+func seedApprovalEntry(t *testing.T, database *gorm.DB) (itemID uint) {
 	t.Helper()
 
 	// Create an integration config (needed for approve to look up the client)
@@ -358,24 +358,26 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (auditID uint) {
 		t.Fatalf("Failed to seed integration: %v", err)
 	}
 
-	entry := db.AuditLogEntry{
+	entry := db.ApprovalQueueItem{
 		MediaName:     "Approval Test Movie",
 		MediaType:     "movie",
 		Reason:        "Score: 0.75 (WatchHistory: 0.5, Size: 0.8)",
 		ScoreDetails:  `[{"name":"WatchHistory","rawScore":0.5,"weight":10},{"name":"Size","rawScore":0.8,"weight":6}]`,
-		Action:        "Queued for Approval",
+		Status:        "pending",
 		SizeBytes:     5000000,
-		IntegrationID: &integration.ID,
+		IntegrationID: integration.ID,
+		ExternalID:    "ext-test-1",
 		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 	if err := database.Create(&entry).Error; err != nil {
-		t.Fatalf("Failed to seed approval audit entry: %v", err)
+		t.Fatalf("Failed to seed approval queue item: %v", err)
 	}
 
 	return entry.ID
 }
 
-func TestApproveAuditEntry_HappyPath(t *testing.T) {
+func TestApproveEntry_HappyPath(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
@@ -385,10 +387,10 @@ func TestApproveAuditEntry_HappyPath(t *testing.T) {
 	// worker goroutine processes asynchronously and would panic on a nil DB.
 	db.DB = database
 
-	auditID := seedApprovalEntry(t, database)
+	itemID := seedApprovalEntry(t, database)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
-		fmt.Sprintf("/api/audit/%d/approve", auditID), nil)
+		fmt.Sprintf("/api/approval-queue/%d/approve", itemID), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -396,29 +398,29 @@ func TestApproveAuditEntry_HappyPath(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp map[string]string
+	var resp map[string]interface{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 	if resp["status"] != "approved" {
-		t.Errorf("Expected status 'approved', got %q", resp["status"])
+		t.Errorf("Expected status 'approved', got %v", resp["status"])
 	}
 
-	// Verify the audit entry was updated to "Approved"
-	var updated db.AuditLogEntry
-	if err := database.First(&updated, auditID).Error; err != nil {
-		t.Fatalf("Failed to find updated audit entry: %v", err)
+	// Verify the queue item was updated to "approved"
+	var updated db.ApprovalQueueItem
+	if err := database.First(&updated, itemID).Error; err != nil {
+		t.Fatalf("Failed to find updated queue item: %v", err)
 	}
-	if updated.Action != "Approved" {
-		t.Errorf("Expected action 'Approved', got %q", updated.Action)
+	if updated.Status != "approved" {
+		t.Errorf("Expected status 'approved', got %q", updated.Status)
 	}
 }
 
-func TestApproveAuditEntry_NotFound(t *testing.T) {
+func TestApproveEntry_NotFound(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/audit/99999/approve", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/approval-queue/99999/approve", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -427,38 +429,53 @@ func TestApproveAuditEntry_NotFound(t *testing.T) {
 	}
 }
 
-func TestApproveAuditEntry_NotQueued(t *testing.T) {
+func TestApproveEntry_NotPending(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	// Create an entry with action "Dry-Run" (not "Queued for Approval")
-	entry := db.AuditLogEntry{
-		MediaName: "Not Queued Movie",
-		MediaType: "movie",
-		Reason:    "Score: 0.50",
-		Action:    "Dry-Run",
-		SizeBytes: 1000000,
-		CreatedAt: time.Now(),
+	// Create an integration first
+	integration := db.IntegrationConfig{
+		Type:    "radarr",
+		Name:    "Test Radarr",
+		URL:     "http://localhost:7878",
+		APIKey:  "test-api-key",
+		Enabled: true,
+	}
+	if err := database.Create(&integration).Error; err != nil {
+		t.Fatalf("Failed to seed integration: %v", err)
+	}
+
+	// Create an entry with status "approved" (not "pending")
+	entry := db.ApprovalQueueItem{
+		MediaName:     "Not Pending Movie",
+		MediaType:     "movie",
+		Reason:        "Score: 0.50",
+		Status:        "approved",
+		SizeBytes:     1000000,
+		IntegrationID: integration.ID,
+		ExternalID:    "ext-test-2",
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 	if err := database.Create(&entry).Error; err != nil {
 		t.Fatalf("Failed to seed: %v", err)
 	}
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
-		fmt.Sprintf("/api/audit/%d/approve", entry.ID), nil)
+		fmt.Sprintf("/api/approval-queue/%d/approve", entry.ID), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("Expected 400 for non-queued entry, got %d: %s", rec.Code, rec.Body.String())
+		t.Errorf("Expected 400 for non-pending entry, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestApproveAuditEntry_DeletionsDisabled(t *testing.T) {
+func TestApproveEntry_DeletionsDisabled(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	auditID := seedApprovalEntry(t, database)
+	itemID := seedApprovalEntry(t, database)
 
 	// Disable deletions in preferences
 	if err := database.Model(&db.PreferenceSet{}).Where("id = 1").
@@ -467,7 +484,7 @@ func TestApproveAuditEntry_DeletionsDisabled(t *testing.T) {
 	}
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
-		fmt.Sprintf("/api/audit/%d/approve", auditID), nil)
+		fmt.Sprintf("/api/approval-queue/%d/approve", itemID), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -486,24 +503,24 @@ func TestApproveAuditEntry_DeletionsDisabled(t *testing.T) {
 		t.Errorf("Expected error message about deletions disabled, got %q", msg)
 	}
 
-	// Verify the audit entry was NOT changed (still "Queued for Approval")
-	var entry db.AuditLogEntry
-	if err := database.First(&entry, auditID).Error; err != nil {
-		t.Fatalf("Failed to find audit entry: %v", err)
+	// Verify the queue item was NOT changed (still "pending")
+	var entry db.ApprovalQueueItem
+	if err := database.First(&entry, itemID).Error; err != nil {
+		t.Fatalf("Failed to find queue item: %v", err)
 	}
-	if entry.Action != "Queued for Approval" {
-		t.Errorf("Expected action 'Queued for Approval' (unchanged), got %q", entry.Action)
+	if entry.Status != "pending" {
+		t.Errorf("Expected status 'pending' (unchanged), got %q", entry.Status)
 	}
 }
 
-func TestRejectAuditEntry_HappyPath(t *testing.T) {
+func TestRejectEntry_HappyPath(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	auditID := seedApprovalEntry(t, database)
+	itemID := seedApprovalEntry(t, database)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,
-		fmt.Sprintf("/api/audit/%d/reject", auditID), nil)
+		fmt.Sprintf("/api/approval-queue/%d/reject", itemID), nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -511,34 +528,34 @@ func TestRejectAuditEntry_HappyPath(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp map[string]string
+	var resp map[string]interface{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 	if resp["status"] != "rejected" {
-		t.Errorf("Expected status 'rejected', got %q", resp["status"])
+		t.Errorf("Expected status 'rejected', got %v", resp["status"])
 	}
 
-	// Verify the audit entry was updated to "Rejected"
-	var updated db.AuditLogEntry
-	if err := database.First(&updated, auditID).Error; err != nil {
-		t.Fatalf("Failed to find updated audit entry: %v", err)
+	// Verify the queue item was updated to "rejected"
+	var updated db.ApprovalQueueItem
+	if err := database.First(&updated, itemID).Error; err != nil {
+		t.Fatalf("Failed to find updated queue item: %v", err)
 	}
-	if updated.Action != "Rejected" {
-		t.Errorf("Expected action 'Rejected', got %q", updated.Action)
+	if updated.Status != "rejected" {
+		t.Errorf("Expected status 'rejected', got %q", updated.Status)
 	}
 }
 
-func TestRejectAuditEntry_NotFound(t *testing.T) {
+func TestRejectEntry_NotFound(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/audit/99999/reject", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/approval-queue/99999/reject", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("Expected 404, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -548,7 +565,7 @@ func TestGetRecentAuditLogs_Empty(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit/recent", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log/recent", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -571,7 +588,7 @@ func TestGetRecentAuditLogs_DefaultLimit(t *testing.T) {
 
 	seedAuditLogs(t, database, 10)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit/recent", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log/recent", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -594,7 +611,7 @@ func TestGetRecentAuditLogs_CustomLimit(t *testing.T) {
 
 	seedAuditLogs(t, database, 10)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit/recent?limit=3", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log/recent?limit=3", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -617,7 +634,7 @@ func TestGetRecentAuditLogs_LimitCapped(t *testing.T) {
 
 	seedAuditLogs(t, database, 10)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit/recent?limit=100", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log/recent?limit=100", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -641,7 +658,7 @@ func TestGetRecentAuditLogs_OrderedByNewest(t *testing.T) {
 
 	seedAuditLogs(t, database, 5)
 
-	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit/recent", nil)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/audit-log/recent", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 

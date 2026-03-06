@@ -103,7 +103,7 @@ func TestConcurrentAccess(t *testing.T) {
 				MediaName: fmt.Sprintf("concurrent-test-%d", idx),
 				MediaType: "movie",
 				Reason:    "test",
-				Action:    "flagged",
+				Action:    "deleted",
 				SizeBytes: int64(idx * 1000),
 			}
 			if err := database.Create(&log).Error; err != nil {
@@ -186,7 +186,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		MediaName: "type-test",
 		MediaType: "series",
 		Reason:    "round-trip-test",
-		Action:    "flagged",
+		Action:    "deleted",
 		SizeBytes: 9876543210, // large INTEGER
 		CreatedAt: now,
 	}
@@ -243,7 +243,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		MediaName: "null-test",
 		MediaType: "movie",
 		Reason:    "null-round-trip",
-		Action:    "kept",
+		Action:    "dry_run",
 	}
 	if err := database.Create(&logWithNull).Error; err != nil {
 		t.Fatalf("Failed to create audit log with null fields: %v", err)
@@ -265,7 +265,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 		MediaName: "zero-time-test",
 		MediaType: "movie",
 		Reason:    "zero-time",
-		Action:    "flagged",
+		Action:    "deleted",
 		CreatedAt: zeroTime,
 	}
 	if err := database.Create(&logZero).Error; err != nil {

@@ -17,7 +17,7 @@ import (
 // seedActivityEvents inserts n activity event records into the database for testing.
 func seedActivityEvents(t *testing.T, database *gorm.DB, n int) {
 	t.Helper()
-	types := []string{db.EventEngineStart, db.EventEngineComplete, db.EventLogin, db.EventSettingsChanged}
+	types := []string{"engine_start", "engine_complete", "login", "settings_changed"}
 	for i := 0; i < n; i++ {
 		event := db.ActivityEvent{
 			EventType: types[i%len(types)],

@@ -172,28 +172,9 @@ func TestCreateProtection_ValidWithEffect(t *testing.T) {
 	}
 }
 
-func TestCreateProtection_ValidWithLegacyTypeIntensity(t *testing.T) {
-	database := testutil.SetupTestDB(t)
-	e := testutil.SetupTestServer(t, database)
-
-	body := `{"field":"genre","operator":"==","value":"Horror","type":"target","intensity":"strong"}`
-	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/custom-rules", strings.NewReader(body))
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("Expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var rule db.CustomRule
-	if err := json.Unmarshal(rec.Body.Bytes(), &rule); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-	// Legacy type=target + intensity=strong should auto-populate effect=prefer_remove
-	if rule.Effect != "prefer_remove" {
-		t.Errorf("Expected auto-populated effect 'prefer_remove', got %q", rule.Effect)
-	}
-}
+// TestCreateProtection_ValidWithLegacyTypeIntensity was removed because the
+// deprecated type/intensity fields were removed in the Phase 0 schema rewrite.
+// The effect field is now always required.
 
 func TestCreateProtection_MissingRequiredFields(t *testing.T) {
 	database := testutil.SetupTestDB(t)

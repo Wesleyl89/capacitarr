@@ -78,7 +78,7 @@
           Event Subscriptions
         </p>
         <div class="space-y-2">
-          <label class="flex items-center gap-2 text-sm">
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channel.onThresholdBreach"
               size="sm"
@@ -87,8 +87,8 @@
               "
             />
             <span>Threshold Breach</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channel.onDeletionExecuted"
               size="sm"
@@ -97,8 +97,8 @@
               "
             />
             <span>Deletion Executed</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channel.onEngineError"
               size="sm"
@@ -107,8 +107,8 @@
               "
             />
             <span>Engine Error</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channel.onEngineComplete"
               size="sm"
@@ -117,7 +117,7 @@
               "
             />
             <span>Engine Complete</span>
-          </label>
+          </UiLabel>
         </div>
       </UiCardContent>
 
@@ -196,7 +196,7 @@
           <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Event Subscriptions
           </p>
-          <label class="flex items-center gap-2 text-sm">
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onThresholdBreach"
               @update:model-value="
@@ -206,8 +206,8 @@
               "
             />
             <span>Threshold Breach</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onDeletionExecuted"
               @update:model-value="
@@ -217,8 +217,8 @@
               "
             />
             <span>Deletion Executed</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onEngineError"
               @update:model-value="
@@ -228,8 +228,8 @@
               "
             />
             <span>Engine Error</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm">
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onEngineComplete"
               @update:model-value="
@@ -239,7 +239,7 @@
               "
             />
             <span>Engine Complete</span>
-          </label>
+          </UiLabel>
         </div>
 
         <!-- Error -->

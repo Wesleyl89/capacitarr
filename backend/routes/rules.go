@@ -1,21 +1,24 @@
 package routes
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/events"
+	"capacitarr/internal/services"
 )
 
 // RegisterRuleRoutes sets up the endpoints for managing custom rules, preferences,
 // and score preview.
-func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
+func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
+	database := reg.DB
+	bus := reg.Bus
+
 	// Delegate preference and preview routes to their own files
-	RegisterPreferenceRoutes(protected, database)
+	RegisterPreferenceRoutes(protected, reg)
 	RegisterPreviewRoutes(protected, database)
 
 	// Delegate rule-field and rule-value routes to rulefields.go
@@ -73,7 +76,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			slog.Error("Failed to update custom rule", "component", "api", "operation", "update_rule", "id", id, "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update rule"})
 		}
-		db.LogActivity(database, db.EventRuleUpdated, fmt.Sprintf("Rule updated: %s %s %s → %s", updated.Field, updated.Operator, updated.Value, updated.Effect))
+		bus.Publish(events.RuleUpdatedEvent{RuleID: updated.ID, Field: updated.Field, Effect: updated.Effect})
 		return c.JSON(http.StatusOK, updated)
 	})
 
@@ -109,7 +112,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			slog.Error("Failed to create custom rule", "component", "api", "operation", "create_rule", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create rule"})
 		}
-		db.LogActivity(database, db.EventRuleCreated, fmt.Sprintf("Rule created: %s %s %s → %s", newRule.Field, newRule.Operator, newRule.Value, newRule.Effect))
+		bus.Publish(events.RuleCreatedEvent{RuleID: newRule.ID, Field: newRule.Field, Effect: newRule.Effect})
 		return c.JSON(http.StatusCreated, newRule)
 	})
 
@@ -126,7 +129,7 @@ func RegisterRuleRoutes(protected *echo.Group, database *gorm.DB) {
 			slog.Error("Failed to delete custom rule", "component", "api", "operation", "delete_rule", "id", id, "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete rule"})
 		}
-		db.LogActivity(database, db.EventRuleDeleted, fmt.Sprintf("Rule deleted: %s %s %s", existing.Field, existing.Operator, existing.Value))
+		bus.Publish(events.RuleDeletedEvent{RuleID: existing.ID, Field: existing.Field})
 		return c.NoContent(http.StatusNoContent)
 	})
 }

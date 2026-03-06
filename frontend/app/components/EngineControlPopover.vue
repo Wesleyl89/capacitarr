@@ -101,7 +101,7 @@
         </div>
 
         <!-- Run Now -->
-        <UiButton class="w-full" :disabled="runNowLoading" @click="handleRunNow">
+        <UiButton class="w-full" :disabled="runNowLoading" @click="triggerRunNow">
           <LoaderCircleIcon v-if="runNowLoading" class="w-4 h-4 animate-spin" />
           <PlayIcon v-else class="w-4 h-4" />
           {{ executionMode === 'dry-run' ? $t('engine.dryRun') : $t('engine.runNow') }}
@@ -191,41 +191,9 @@ async function confirmAutoMode() {
   await setMode('auto');
 }
 
-// --- Run-status polling ---
-// After triggering "Run Now", poll stats every 3s so the popover shows the
-// engine-running animation and detects completion (fires the toast via the
-// shared composable's wasRunning → !nowRunning logic).
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-function startRunPolling() {
-  stopRunPolling();
-  pollTimer = setInterval(() => fetchStats(), 3000);
-}
-
-function stopRunPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-}
-
-// Wrap triggerRunNow to start polling afterwards
-async function handleRunNow() {
-  await triggerRunNow();
-  startRunPolling();
-}
-
-// Auto-stop polling when the engine finishes
-watch(isRunning, (running) => {
-  if (!running) stopRunPolling();
-});
-
-// Fetch stats on mount
+// Fetch stats on mount for initial hydration.
+// Ongoing updates arrive via SSE (engine_start / engine_complete / engine_error).
 onMounted(() => {
   fetchStats();
-});
-
-onUnmounted(() => {
-  stopRunPolling();
 });
 </script>

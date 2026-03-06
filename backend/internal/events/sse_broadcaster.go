@@ -40,8 +40,8 @@ type ringEntry struct {
 }
 
 const (
-	ringBufferSize  = 100
-	clientBufferSize = 64
+	ringBufferSize    = 100
+	clientBufferSize  = 64
 	keepaliveInterval = 30 * time.Second
 )
 
@@ -83,16 +83,29 @@ func (b *SSEBroadcaster) run() {
 func (b *SSEBroadcaster) broadcast(event Event) {
 	id := b.nextID.Add(1)
 
-	// Format the event as SSE
-	data, err := json.Marshal(event)
+	// Marshal the concrete event struct first, then inject "message" into the
+	// flat JSON object. We can't use Go struct embedding with an interface
+	// because json.Marshal wraps the interface value in a named "Event" key
+	// instead of flattening the fields, e.g. {"Event":{...},"message":"..."}.
+	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		slog.Error("Failed to marshal SSE event", "component", "sse", "error", err)
 		return
 	}
 
+	// Merge "message" into the existing JSON object: strip the closing '}',
+	// append the message field. This avoids a full unmarshal/re-marshal cycle.
+	humanMsg := event.EventMessage()
+	escapedMsg, _ := json.Marshal(humanMsg) //nolint:errcheck // string marshal can't fail
+	mergedJSON := make([]byte, 0, len(eventJSON)+len(escapedMsg)+14)
+	mergedJSON = append(mergedJSON, eventJSON[:len(eventJSON)-1]...) // strip trailing '}'
+	mergedJSON = append(mergedJSON, `,"message":`...)
+	mergedJSON = append(mergedJSON, escapedMsg...)
+	mergedJSON = append(mergedJSON, '}')
+
 	// Build SSE message with proper formatting
 	msg := fmt.Appendf(nil, "id: %d\nevent: %s\ndata: ", id, event.EventType())
-	msg = append(msg, data...)
+	msg = append(msg, mergedJSON...)
 	msg = append(msg, '\n', '\n')
 
 	// Store in ring buffer for replay
@@ -175,9 +188,7 @@ func (b *SSEBroadcaster) HandleSSE(c echo.Context) error {
 func (b *SSEBroadcaster) removeClient(client *sseClient) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, ok := b.clients[client]; ok {
-		delete(b.clients, client)
-	}
+	delete(b.clients, client)
 }
 
 func (b *SSEBroadcaster) replay(client *sseClient, lastEventID string) {
@@ -189,9 +200,12 @@ func (b *SSEBroadcaster) replay(client *sseClient, lastEventID string) {
 	b.ringMu.RLock()
 	defer b.ringMu.RUnlock()
 
-	// Find events after lastID in the ring buffer
+	// Iterate the ring buffer in chronological order, starting from the oldest
+	// entry. When the buffer has wrapped, the oldest entry is at ringIdx (the
+	// next slot to be overwritten), so we start there and wrap around.
 	for i := 0; i < ringBufferSize; i++ {
-		entry := b.ring[i]
+		idx := (b.ringIdx + i) % ringBufferSize
+		entry := b.ring[idx]
 		if entry.id > lastID && entry.payload != nil {
 			select {
 			case client.events <- entry.payload:

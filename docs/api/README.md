@@ -138,13 +138,46 @@ Common HTTP status codes:
 
 Authentication endpoints are rate-limited to prevent brute-force attacks:
 
-- **Login** (`POST /auth/login`): 10 attempts per 15 minutes per IP address
+- **Login** (`POST /auth/login`): 5 attempts per 15 minutes per IP address
 
 When rate-limited, the server returns a `429 Too Many Requests` response. Wait for the window to reset before retrying.
+
+## Real-Time Events (SSE)
+
+Capacitarr supports Server-Sent Events for real-time updates. Connect to `GET /events` (authenticated) to receive a stream of typed events as they occur — engine runs, deletions, config changes, and more.
+
+```bash
+curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/events"
+```
+
+The SSE endpoint supports reconnection replay via the `Last-Event-ID` header. See the [Architecture](../architecture.md) documentation for the complete list of 34 event types.
+
+## Endpoint Overview
+
+| Group | Endpoints |
+|-------|-----------|
+| **Health** | `GET /health`, `GET /version`, `GET /version/check` |
+| **Auth** | `POST /auth/login`, `PUT /auth/password`, `PUT /auth/username`, `POST /auth/apikey`, `GET /auth/apikey` |
+| **Disk Groups** | `GET /disk-groups`, `PUT /disk-groups/:id` |
+| **Engine** | `POST /engine/run`, `GET /engine/history` |
+| **Integrations** | `GET /integrations`, `GET /integrations/:id`, `POST /integrations`, `PUT /integrations/:id`, `DELETE /integrations/:id`, `POST /integrations/test`, `POST /integrations/sync` |
+| **Rules** | `GET /custom-rules`, `POST /custom-rules`, `PUT /custom-rules/:id`, `DELETE /custom-rules/:id`, `PUT /custom-rules/reorder`, `GET /rule-fields`, `GET /rule-values` |
+| **Approval Queue** | `GET /approval-queue`, `POST /approval-queue/:id/approve`, `POST /approval-queue/:id/reject`, `POST /approval-queue/:id/unsnooze` |
+| **Audit Log** | `GET /audit-log`, `GET /audit-log/recent`, `GET /audit-log/grouped` |
+| **Activity** | `GET /activity/recent` |
+| **SSE** | `GET /events` |
+| **Preferences** | `GET /preferences`, `PUT /preferences` |
+| **Preview** | `GET /preview` |
+| **Metrics** | `GET /metrics/worker`, `GET /worker/stats`, `GET /metrics/history` |
+| **Dashboard** | `GET /dashboard-stats`, `GET /lifetime-stats` |
+| **Notifications** | `GET /notifications/channels`, `POST /notifications/channels`, `PUT /notifications/channels/:id`, `DELETE /notifications/channels/:id`, `POST /notifications/channels/:id/test`, `GET /notifications`, `GET /notifications/unread-count`, `PUT /notifications/:id/read`, `PUT /notifications/read-all`, `DELETE /notifications` |
+| **Data** | `DELETE /data/reset` |
 
 ## Further Reading
 
 - [OpenAPI Specification](openapi.yaml) — full machine-readable API schema
 - [API Examples](examples.md) — curl examples for every endpoint
 - [Common Workflows](workflows.md) — multi-step guides for typical tasks
-- [API Versioning](versioning.md) — version history and compatibility notes
+- [API Versioning](versioning.md) — version history, breaking changes, and compatibility notes
+- [Architecture](../architecture.md) — service layer, event bus, and SSE documentation

@@ -372,6 +372,7 @@
   "help.faq.safeToTestA": "Sí. Las nuevas instalaciones usan el modo Simulación por defecto y la guardia de seguridad de eliminación es un interruptor separado. En modo Simulación, el motor evalúa y puntúa todo pero nunca elimina. Puedes revisar los resultados en el Registro de auditoría antes de cambiar a un modo activo.",
   "help.aboutCapacitarr": "Acerca de Capacitarr",
   "connection.lost": "Conexión con el servidor perdida — reintentando…",
+  "connection.reconnecting": "Reconnecting to server…",
   "connection.restored": "Conexión restablecida",
   "help.tipsAndBestPractices": "Consejos y Mejores Prácticas",
   "update.title": "Update Available",

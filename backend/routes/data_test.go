@@ -27,7 +27,7 @@ func seedDataForReset(t *testing.T, database *gorm.DB) {
 			MediaName: "Test Movie",
 			MediaType: "movie",
 			Reason:    "Score: 0.5",
-			Action:    "Deleted",
+			Action:    "deleted",
 			SizeBytes: 1000000,
 		}).Error; err != nil {
 			t.Fatalf("Failed to seed audit log: %v", err)
@@ -133,8 +133,8 @@ func TestDataReset_ClearsAllData(t *testing.T) {
 	}
 
 	// Verify counts in response
-	if resp.Cleared["auditLogs"] != 3 {
-		t.Errorf("Expected 3 audit logs cleared, got %d", resp.Cleared["auditLogs"])
+	if resp.Cleared["auditLog"] != 3 {
+		t.Errorf("Expected 3 audit logs cleared, got %d", resp.Cleared["auditLog"])
 	}
 	if resp.Cleared["libraryHistories"] != 2 {
 		t.Errorf("Expected 2 library histories cleared, got %d", resp.Cleared["libraryHistories"])
@@ -233,8 +233,8 @@ func TestDataReset_EmptyState(t *testing.T) {
 	if resp.Status != "success" {
 		t.Errorf("Expected status 'success', got %q", resp.Status)
 	}
-	if resp.Cleared["auditLogs"] != 0 {
-		t.Errorf("Expected 0 audit logs cleared on empty state, got %d", resp.Cleared["auditLogs"])
+	if resp.Cleared["auditLog"] != 0 {
+		t.Errorf("Expected 0 audit logs cleared on empty state, got %d", resp.Cleared["auditLog"])
 	}
 }
 
@@ -269,7 +269,7 @@ func TestDataReset_PreservesCustomRules(t *testing.T) {
 
 	// Seed some data that should be cleared
 	if err := database.Create(&db.AuditLogEntry{
-		MediaName: "Test", MediaType: "movie", Reason: "test", Action: "Deleted", SizeBytes: 100,
+		MediaName: "Test", MediaType: "movie", Reason: "test", Action: "deleted", SizeBytes: 100,
 	}).Error; err != nil {
 		t.Fatalf("Failed to seed audit log: %v", err)
 	}

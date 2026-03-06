@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+
 	"capacitarr/internal/db"
 )
 
@@ -24,7 +26,7 @@ func severityForEvent(eventType string) string {
 }
 
 // SendInApp creates an InAppNotification record in the database.
-func SendInApp(event NotificationEvent) error {
+func SendInApp(database *gorm.DB, event NotificationEvent) error {
 	record := db.InAppNotification{
 		Title:     event.Title,
 		Message:   event.Message,
@@ -33,7 +35,7 @@ func SendInApp(event NotificationEvent) error {
 		CreatedAt: time.Now(),
 	}
 
-	if err := db.DB.Create(&record).Error; err != nil {
+	if err := database.Create(&record).Error; err != nil {
 		return fmt.Errorf("create in-app notification: %w", err)
 	}
 

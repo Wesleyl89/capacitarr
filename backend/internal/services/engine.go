@@ -22,6 +22,12 @@ type EngineService struct {
 	pollRunning   atomic.Bool
 }
 
+// EngineStatusStarted is returned by TriggerRun when a new run is initiated.
+const EngineStatusStarted = "started"
+
+// EngineStatusAlreadyRunning is returned by TriggerRun when a run is already in progress.
+const EngineStatusAlreadyRunning = "already_running"
+
 // NewEngineService creates a new EngineService.
 func NewEngineService(database *gorm.DB, bus *events.EventBus) *EngineService {
 	return &EngineService{
@@ -32,18 +38,19 @@ func NewEngineService(database *gorm.DB, bus *events.EventBus) *EngineService {
 }
 
 // TriggerRun sends a signal to run the engine immediately.
-// Returns "started" if the signal was sent, "already_running" if a run is in progress.
+// Returns EngineStatusStarted if the signal was sent, EngineStatusAlreadyRunning
+// if a run is already in progress.
 func (s *EngineService) TriggerRun() string {
 	if s.pollRunning.Load() {
-		return "already_running"
+		return EngineStatusAlreadyRunning
 	}
 
 	select {
 	case s.RunNowCh <- struct{}{}:
 		s.bus.Publish(events.ManualRunTriggeredEvent{})
-		return "started"
+		return EngineStatusStarted
 	default:
-		return "already_running"
+		return EngineStatusAlreadyRunning
 	}
 }
 
@@ -65,25 +72,21 @@ func (s *EngineService) SetLastRunStats(evaluated, flagged, protected int) {
 }
 
 // GetStats returns the current engine statistics as a map.
+// Keys match the frontend TypeScript WorkerStats interface.
 func (s *EngineService) GetStats() map[string]interface{} {
 	stats := map[string]interface{}{
-		"running":       s.pollRunning.Load(),
-		"lastEvaluated": s.lastEvaluated.Load(),
-		"lastFlagged":   s.lastFlagged.Load(),
-		"lastProtected": s.lastProtected.Load(),
+		"isRunning":        s.pollRunning.Load(),
+		"lastRunEvaluated": s.lastEvaluated.Load(),
+		"lastRunFlagged":   s.lastFlagged.Load(),
+		"protectedCount":   s.lastProtected.Load(),
 	}
 
 	// Get the latest run from the database
 	var latest db.EngineRunStats
 	if err := s.db.Order("run_at desc").First(&latest).Error; err == nil {
-		stats["lastRunAt"] = latest.RunAt
-		stats["lastDurationMs"] = latest.DurationMs
-		stats["lastExecutionMode"] = latest.ExecutionMode
-		stats["lastDeleted"] = latest.Deleted
-		stats["lastFreedBytes"] = latest.FreedBytes
-		if latest.ErrorMessage != "" {
-			stats["lastError"] = latest.ErrorMessage
-		}
+		stats["executionMode"] = latest.ExecutionMode
+		stats["lastRunFreedBytes"] = latest.FreedBytes
+		stats["lastRunEpoch"] = latest.RunAt.Unix()
 	}
 
 	return stats

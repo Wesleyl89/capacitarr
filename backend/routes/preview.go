@@ -28,9 +28,9 @@ func RegisterPreviewRoutes(protected *echo.Group, database *gorm.DB) {
 				slog.Debug("Preview: skipping non-arr integration", "component", "api", "type", cfg.Type)
 				continue
 			}
-			client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+			client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
 			if client == nil {
-				slog.Warn("Preview: CreateClient returned nil", "component", "api", "type", cfg.Type)
+				slog.Warn("Preview: NewClient returned nil", "component", "api", "type", cfg.Type)
 				continue
 			}
 			items, err := client.GetMediaItems()

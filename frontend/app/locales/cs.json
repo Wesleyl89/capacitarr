@@ -372,6 +372,7 @@
   "help.faq.safeToTestA": "Yes. New installations default to Dry-Run mode and the deletion safety guard is a separate toggle. In Dry-Run mode, the engine evaluates and scores everything but never deletes. You can review results in the Audit Log before switching to a live mode.",
   "help.aboutCapacitarr": "About Capacitarr",
   "connection.lost": "Connection to server lost — retrying…",
+  "connection.reconnecting": "Reconnecting to server…",
   "connection.restored": "Connection restored",
   "help.tipsAndBestPractices": "Tipy a Osvědčené Postupy",
   "update.title": "Update Available",

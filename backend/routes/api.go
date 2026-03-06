@@ -9,11 +9,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
-	"capacitarr/internal/config"
 	"capacitarr/internal/db"
-	"capacitarr/internal/poller"
+	"capacitarr/internal/events"
+	"capacitarr/internal/services"
 )
 
 // apiKeyHashPrefix marks a stored API key as already hashed with SHA-256.
@@ -38,7 +37,10 @@ func IsHashedAPIKey(stored string) bool {
 
 // RegisterAPIRoutes sets up all API routes: public endpoints, auth, and
 // protected resource endpoints.
-func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, appVersion, appCommit, appBuildDate string) {
+func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCommit, appBuildDate string, sseBroadcaster *events.SSEBroadcaster) {
+	database := reg.DB
+	cfg := reg.Cfg
+
 	// Health check
 	g.GET("/health", func(c echo.Context) error {
 		return c.String(http.StatusOK, "OK")
@@ -58,7 +60,12 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 	protected.Use(RequireAuth(database, cfg))
 
 	// Auth routes (login is public, password/username/apikey are protected)
-	RegisterAuthRoutes(g, protected, database, cfg)
+	RegisterAuthRoutes(g, protected, reg)
+
+	// SSE event stream — authenticated, long-lived connection
+	if sseBroadcaster != nil {
+		protected.GET("/events", sseBroadcaster.HandleSSE)
+	}
 
 	// Metrics History
 	protected.GET("/metrics/history", func(c echo.Context) error {
@@ -103,10 +110,10 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 	})
 
 	// Integration management routes
-	RegisterIntegrationRoutes(protected, database)
+	RegisterIntegrationRoutes(protected, reg)
 
 	// Preference and Rules routes
-	RegisterRuleRoutes(protected, database)
+	RegisterRuleRoutes(protected, reg)
 
 	// Disk Groups routes
 	protected.GET("/disk-groups", func(c echo.Context) error {
@@ -140,37 +147,29 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Threshold must be greater than target"})
 		}
 
-		if err := database.Model(&group).Select("threshold_pct", "target_pct").Updates(db.DiskGroup{
-			ThresholdPct: req.ThresholdPct,
-			TargetPct:    req.TargetPct,
-		}).Error; err != nil {
+		if err := reg.Settings.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update disk group"})
 		}
-		group.ThresholdPct = req.ThresholdPct
-		group.TargetPct = req.TargetPct
+
+		// Reload the updated group
+		database.First(&group, id)
 		return c.JSON(http.StatusOK, group)
 	})
 
 	// Worker Metrics
 	protected.GET("/metrics/worker", func(c echo.Context) error {
-		metrics := poller.GetWorkerMetrics()
-		return c.JSON(http.StatusOK, metrics)
+		return c.JSON(http.StatusOK, buildWorkerMetrics(reg))
 	})
 
 	// Worker Stats (alias for dashboard consumption)
 	protected.GET("/worker/stats", func(c echo.Context) error {
-		metrics := poller.GetWorkerMetrics()
-		return c.JSON(http.StatusOK, metrics)
+		return c.JSON(http.StatusOK, buildWorkerMetrics(reg))
 	})
 
 	// Engine Run Now - trigger an immediate evaluation cycle
 	protected.POST("/engine/run", func(c echo.Context) error {
-		select {
-		case poller.RunNowCh <- struct{}{}:
-			return c.JSON(http.StatusOK, map[string]string{"status": "triggered"})
-		default:
-			return c.JSON(http.StatusOK, map[string]string{"status": "already_pending"})
-		}
+		status := reg.Engine.TriggerRun()
+		return c.JSON(http.StatusOK, map[string]string{"status": status})
 	})
 
 	// Lifetime stats (cumulative counters, not cleared by data reset)
@@ -183,10 +182,13 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 	})
 
 	// Dashboard stats (aggregates lifetime stats, protected count, library growth rate)
-	protected.GET("/dashboard-stats", handleDashboardStats(database))
+	protected.GET("/dashboard-stats", handleDashboardStats(reg))
 
-	// Audit routes
+	// Audit routes (history-only)
 	RegisterAuditRoutes(protected, database)
+
+	// Approval queue routes
+	RegisterApprovalRoutes(protected, reg)
 
 	// Activity event routes
 	RegisterActivityRoutes(protected, database)
@@ -195,24 +197,45 @@ func RegisterAPIRoutes(g *echo.Group, database *gorm.DB, cfg *config.Config, app
 	RegisterEngineHistoryRoutes(protected, database)
 
 	// Notification routes (channels CRUD + in-app notifications)
-	RegisterNotificationRoutes(protected, database)
+	RegisterNotificationRoutes(protected, reg)
 
 	// Data management routes (reset/clear)
-	RegisterDataRoutes(protected, database)
+	RegisterDataRoutes(protected, reg)
 
 	// Version check routes (update check with cache)
 	RegisterVersionRoutes(protected, database, appVersion)
 }
 
-func handleDashboardStats(database *gorm.DB) echo.HandlerFunc {
+// buildWorkerMetrics assembles worker metrics from the EngineService and DeletionService.
+// Keys match the frontend TypeScript WorkerStats interface.
+func buildWorkerMetrics(reg *services.Registry) map[string]interface{} {
+	stats := reg.Engine.GetStats()
+
+	// Add poll interval from preferences
+	prefs, err := reg.Settings.GetPreferences()
+	if err == nil {
+		stats["pollIntervalSeconds"] = prefs.PollIntervalSeconds
+	}
+
+	// Add deletion worker state
+	stats["queueDepth"] = 0 // Queue depth is internal to DeletionService
+	stats["currentlyDeleting"] = reg.Deletion.CurrentlyDeleting()
+	stats["processed"] = reg.Deletion.Processed()
+	stats["failed"] = reg.Deletion.Failed()
+
+	return stats
+}
+
+func handleDashboardStats(reg *services.Registry) echo.HandlerFunc {
+	database := reg.DB
 	return func(c echo.Context) error {
 		// 1. Lifetime stats
 		var lifetime db.LifetimeStats
 		database.FirstOrCreate(&lifetime, db.LifetimeStats{ID: 1})
 
-		// 2. Protected count from worker metrics
-		metrics := poller.GetWorkerMetrics()
-		protectedCount, _ := metrics["protectedCount"].(int64)
+		// 2. Protected count from engine service
+		engineStats := reg.Engine.GetStats()
+		protectedCount, _ := engineStats["protectedCount"].(int64)
 
 		// 3. Library growth rate: compare most recent entry to 7 days ago
 		var recent db.LibraryHistory

@@ -88,8 +88,9 @@
           </div>
           <!-- Normalization note -->
           <p class="text-[10px] text-muted-foreground/60 leading-relaxed">
-            Weights are relative — contributions are proportional to slider values, normalized
-            across a total weight of {{ totalWeight }}.
+            Each slider value determines how much that factor matters. Your slider values add up to
+            {{ totalWeight }}, so each factor's share of the score is its slider value divided by
+            {{ totalWeight }}.
           </p>
         </div>
 
@@ -277,8 +278,9 @@ const scoreColorClass = computed(() => {
 // Action badge variant
 const actionBadgeVariant = computed<'destructive' | 'outline' | 'secondary' | 'default'>(() => {
   if (props.action === 'Deleted') return 'destructive';
-  if (props.action === 'Queued for Approval') return 'outline';
-  if (props.action === 'Queued for Deletion') return 'outline';
+  if (props.action === 'Dry-Run' || props.action === 'Dry-Delete') return 'secondary';
+  if (props.action === 'Pending' || props.action === 'Snoozed') return 'outline';
+  if (props.action === 'Approved') return 'default';
   return 'default';
 });
 </script>

@@ -160,7 +160,7 @@ func TestClose(t *testing.T) {
 	}
 }
 
-func TestClose_PublishNoop(t *testing.T) {
+func TestClose_PublishNoop(_ *testing.T) {
 	bus := NewEventBus()
 	bus.Close()
 

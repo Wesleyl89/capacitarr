@@ -123,8 +123,6 @@ func applyRules(item integrations.MediaItem, rules []db.CustomRule) (bool, float
 	return false, modifier, strings.Join(reasons, ", "), ruleFactors
 }
 
-
-
 // matchesRuleWithValue checks if a media item matches a rule and returns the actual
 // item value that triggered (or confirmed) the match. For positive matches on array
 // fields (tags), returns the specific element that matched. For negation operators,

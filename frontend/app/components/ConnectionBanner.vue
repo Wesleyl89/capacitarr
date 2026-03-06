@@ -8,7 +8,16 @@
     leave-to-class="opacity-0 -translate-y-full"
   >
     <div
-      v-if="!isConnected"
+      v-if="!isConnected && isReconnecting"
+      data-slot="connection-banner"
+      class="fixed top-0 left-0 right-0 w-full z-[100] flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-warning text-warning-foreground shadow-lg"
+    >
+      <WifiOffIcon class="w-4 h-4 shrink-0" />
+      <span>{{ $t('connection.reconnecting') }}</span>
+      <LoaderCircleIcon class="w-3.5 h-3.5 animate-spin shrink-0 ml-1" />
+    </div>
+    <div
+      v-else-if="!isConnected"
       data-slot="connection-banner"
       class="fixed top-0 left-0 right-0 w-full z-[100] flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-destructive text-destructive-foreground shadow-lg"
     >
@@ -39,5 +48,5 @@
 <script setup lang="ts">
 import { WifiOffIcon, WifiIcon, LoaderCircleIcon } from 'lucide-vue-next';
 
-const { isConnected, isReconnected } = useConnectionHealth();
+const { isConnected, isReconnected, isReconnecting } = useConnectionHealth();
 </script>

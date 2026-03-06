@@ -89,7 +89,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-01-15',
 
   vite: {
-    plugins: [tailwindcss()],
+    // Spread the tailwindcss plugin array — @tailwindcss/vite returns Plugin[]
+    // from its bundled vite types which differ from Nuxt's internal vite types
+    // due to Rollup generic variance. The cast through unknown is the standard
+    // TypeScript pattern for cross-package type alignment.
+    plugins: tailwindcss() as unknown as NonNullable<
+      Exclude<import('nuxt/schema').NuxtConfig['vite'], undefined>['plugins']
+    >,
   },
 
   eslint: {

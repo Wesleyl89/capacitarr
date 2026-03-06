@@ -1,14 +1,14 @@
 /**
  * Approval queue composable — shared state for the approval workflow.
- * Uses /api/v1/preview as the single source of truth for deletion candidates,
- * then cross-references with audit log entries to determine approval state.
+ * The approval_queue table is the single source of truth. Items are grouped
+ * by show title for season-level entries (e.g., "Big Mouth - Season 1" through
+ * "Big Mouth - Season 8" become one group with 8 seasons).
  *
  * State is stored via useState so it persists across page navigations
  * and is shared between components on the same page.
  */
 import type { FetchError } from 'ofetch';
-import type { AuditResponse, AuditLog, PreviewResponse } from '~/types/api';
-import { groupEvaluatedItems } from '~/utils/groupPreview';
+import type { ApprovalQueueItem } from '~/types/api';
 
 export interface ApprovalGroup {
   key: string;
@@ -27,16 +27,39 @@ export interface ApprovalGroup {
   }>;
   /** Flattened approval state for the whole group */
   state: 'pending' | 'snoozed' | 'approved';
-  /** All audit IDs for this group, for approve/reject actions */
+  /** All approval queue IDs for this group, for approve/reject actions */
   auditIds: readonly number[];
   snoozedUntil?: string;
   scoreDetails: string;
+}
+
+// Module-level flag: SSE handlers registered once globally.
+let _approvalSseRegistered = false;
+
+/**
+ * Extract a numeric score from the reason string (e.g., "Score: 0.85 (WatchHistory: 1.0)")
+ */
+function parseScore(reason: string): number {
+  const match = reason.match(/Score:\s*([\d.]+)/);
+  return match && match[1] ? parseFloat(match[1]) : 0;
+}
+
+/**
+ * Extract the show title from a season media name.
+ * "Big Mouth - Season 1" → "Big Mouth"
+ * "The Strain - Season 3" → "The Strain"
+ * Returns null if this isn't a season-format name.
+ */
+function extractShowTitle(mediaName: string): string | null {
+  const match = mediaName.match(/^(.+?)\s+-\s+Season\s+\d+$/);
+  return match && match[1] ? match[1] : null;
 }
 
 export function useApprovalQueue() {
   const api = useApi();
   const { addToast } = useToast();
   const { executionMode } = useEngineControl();
+  const { on: sseOn } = useEventStream();
 
   // State — shared across pages via useState
   const pendingItems = useState<ApprovalGroup[]>('approvalPending', () => []);
@@ -46,7 +69,10 @@ export function useApprovalQueue() {
 
   const isApprovalMode = computed(() => executionMode.value === 'approval');
 
-  /** Fetch all approval queue data using preview as source of truth */
+  /**
+   * Fetch all approval queue items and group them for display.
+   * The approval_queue table IS the source of truth — no preview cross-referencing.
+   */
   async function fetchQueue() {
     if (!isApprovalMode.value) {
       pendingItems.value = [];
@@ -56,170 +82,116 @@ export function useApprovalQueue() {
     }
 
     try {
-      // Fetch preview + all three audit states in parallel
-      const [previewData, pendingAudit, rejectedAudit, approvedAudit] = await Promise.all([
-        api('/api/v1/preview') as Promise<PreviewResponse>,
-        api('/api/v1/approval-queue?status=pending&limit=1000') as Promise<AuditResponse>,
-        api('/api/v1/approval-queue?status=rejected&limit=1000') as Promise<AuditResponse>,
-        api('/api/v1/approval-queue?status=approved&limit=1000') as Promise<AuditResponse>,
-      ]);
+      // Fetch all approval queue items (all statuses)
+      const allItems = (await api('/api/v1/approval-queue?limit=1000')) as ApprovalQueueItem[];
 
-      // Group seasons under shows using shared utility
-      const groups = groupEvaluatedItems(previewData.items || []);
+      // Group items: seasons under their parent show, standalone items as-is
+      const groupMap = new Map<
+        string,
+        {
+          showTitle: string;
+          type: string;
+          items: ApprovalQueueItem[];
+          isShowGroup: boolean;
+        }
+      >();
 
-      // Compute deletion line from preview's diskContext
-      const bytesToFree = previewData.diskContext?.bytesToFree ?? 0;
-      const aboveTheLineGroups: typeof groups = [];
+      for (const item of allItems) {
+        const showTitle = extractShowTitle(item.mediaName);
 
-      if (bytesToFree > 0) {
-        let cumulative = 0;
-        for (const group of groups) {
-          if (group.entry.isProtected) continue;
-
-          // Accumulate group entry size plus any season sizes
-          let groupSize = group.entry.item?.sizeBytes ?? 0;
-          if (group.seasons.length > 0) {
-            for (const season of group.seasons) {
-              if (!season.isProtected) {
-                groupSize += season.item?.sizeBytes ?? 0;
-              }
-            }
+        if (showTitle && item.mediaType === 'season') {
+          // Season entry — group under the show title
+          const existing = groupMap.get(showTitle);
+          if (existing) {
+            existing.items.push(item);
+          } else {
+            groupMap.set(showTitle, {
+              showTitle,
+              type: 'show',
+              items: [item],
+              isShowGroup: true,
+            });
           }
-          cumulative += groupSize;
-          aboveTheLineGroups.push(group);
-          if (cumulative >= bytesToFree) break;
+        } else {
+          // Standalone item (movie, show without seasons, artist, book, etc.)
+          groupMap.set(item.mediaName, {
+            showTitle: item.mediaName,
+            type: item.mediaType,
+            items: [item],
+            isShowGroup: false,
+          });
         }
       }
 
-      // Build audit lookup maps: mediaName → audit entry (most recent by ID)
-      const pendingAuditMap = buildAuditMap(pendingAudit.data || []);
-      const snoozedAuditMap = buildSnoozedAuditMap(rejectedAudit.data || []);
-      const approvedAuditMap = buildAuditMap(approvedAudit.data || []);
-
-      // Convert above-the-line groups into ApprovalGroups with audit state
+      // Convert groups to ApprovalGroup format and categorize by state
       const pending: ApprovalGroup[] = [];
       const snoozed: ApprovalGroup[] = [];
       const approved: ApprovalGroup[] = [];
 
-      for (const group of aboveTheLineGroups) {
-        const showTitle = group.entry.item?.title ?? 'Unknown';
-        const entryType = group.entry.item?.type ?? 'movie';
-
-        // Match each season/item title to audit entries
-        const seasons: Array<ApprovalGroup['seasons'][number]> = [];
-        const auditIds: number[] = [];
+      for (const [key, group] of groupMap) {
+        const auditIds = group.items.map((i) => i.id);
         let totalSize = 0;
-        let hasAnyApproved = true; // assume all approved until we find one that isn't
+        let bestScore = 0;
+        let bestScoreDetails = '';
         let hasAnySnoozed = false;
+        let hasAllApproved = true;
         let groupSnoozedUntil: string | undefined;
-        let groupScoreDetails = '';
+        const now = new Date();
 
-        if (group.seasons.length > 0) {
-          // Show with seasons — check both show-level and season-level audit entries.
-          // The engine may create audit entries at the show level ("The Strain") when
-          // Sonarr provides show-level items, or at season level ("The Strain - Season 1")
-          // when only season entries exist.
-          const showAuditEntry =
-            pendingAuditMap.get(showTitle) ||
-            snoozedAuditMap.get(showTitle) ||
-            approvedAuditMap.get(showTitle);
-          if (showAuditEntry) {
-            auditIds.push(showAuditEntry.id);
-            // Check show-level approval state
-            if (!approvedAuditMap.has(showTitle)) hasAnyApproved = false;
-            if (snoozedAuditMap.has(showTitle)) {
-              hasAnySnoozed = true;
-              const snoozedEntry = snoozedAuditMap.get(showTitle);
-              if (snoozedEntry?.snoozedUntil) groupSnoozedUntil = snoozedEntry.snoozedUntil;
-            }
+        const seasons: Array<ApprovalGroup['seasons'][number]> = [];
+
+        for (const item of group.items) {
+          totalSize += item.sizeBytes;
+          const score = parseScore(item.reason);
+          if (score > bestScore) {
+            bestScore = score;
+            bestScoreDetails = item.scoreDetails;
           }
-
-          for (const season of group.seasons) {
-            const sTitle = season.item?.title ?? '';
-            const auditEntry =
-              pendingAuditMap.get(sTitle) ||
-              snoozedAuditMap.get(sTitle) ||
-              approvedAuditMap.get(sTitle);
-            const auditId = auditEntry?.id ?? null;
-            if (auditId !== null) auditIds.push(auditId);
-
-            seasons.push({
-              title: sTitle,
-              sizeBytes: season.item?.sizeBytes ?? 0,
-              score: season.score ?? 0,
-              auditId,
-              scoreDetails: season.factors ? JSON.stringify(season.factors) : '',
-              type: season.item?.type ?? 'season',
-            });
-            totalSize += season.item?.sizeBytes ?? 0;
-
-            // Check season-level approval state
-            if (!approvedAuditMap.has(sTitle) && !approvedAuditMap.has(showTitle))
-              hasAnyApproved = false;
-            if (snoozedAuditMap.has(sTitle)) {
-              hasAnySnoozed = true;
-              const snoozedEntry = snoozedAuditMap.get(sTitle);
-              if (snoozedEntry?.snoozedUntil) groupSnoozedUntil = snoozedEntry.snoozedUntil;
-            }
-            if (!groupScoreDetails && season.factors) {
-              groupScoreDetails = JSON.stringify(season.factors);
-            }
-          }
-
-          // Also use show-level score details if no season-level details found
-          if (!groupScoreDetails && group.entry.factors) {
-            groupScoreDetails = JSON.stringify(group.entry.factors);
-          }
-        } else {
-          // Single item (movie, artist, book, etc.)
-          const auditEntry =
-            pendingAuditMap.get(showTitle) ||
-            snoozedAuditMap.get(showTitle) ||
-            approvedAuditMap.get(showTitle);
-          const auditId = auditEntry?.id ?? null;
-          if (auditId !== null) auditIds.push(auditId);
 
           seasons.push({
-            title: showTitle,
-            sizeBytes: group.entry.item?.sizeBytes ?? 0,
-            score: group.entry.score ?? 0,
-            auditId,
-            scoreDetails: group.entry.factors ? JSON.stringify(group.entry.factors) : '',
-            type: group.entry.item?.type ?? 'movie',
+            title: item.mediaName,
+            sizeBytes: item.sizeBytes,
+            score,
+            auditId: item.id,
+            scoreDetails: item.scoreDetails,
+            type: item.mediaType,
           });
-          totalSize = group.entry.item?.sizeBytes ?? 0;
 
-          if (!approvedAuditMap.has(showTitle)) hasAnyApproved = false;
-          if (snoozedAuditMap.has(showTitle)) {
+          // Track group-level state
+          if (item.status !== 'approved') hasAllApproved = false;
+          if (
+            item.status === 'rejected' &&
+            item.snoozedUntil &&
+            new Date(item.snoozedUntil) > now
+          ) {
             hasAnySnoozed = true;
-            const snoozedEntry = snoozedAuditMap.get(showTitle);
-            if (snoozedEntry?.snoozedUntil) groupSnoozedUntil = snoozedEntry.snoozedUntil;
-          }
-          if (group.entry.factors) {
-            groupScoreDetails = JSON.stringify(group.entry.factors);
+            groupSnoozedUntil = item.snoozedUntil;
           }
         }
 
-        // Determine group state (edge case 3: worst state wins)
+        // Sort seasons by name for consistent display
+        seasons.sort((a, b) => a.title.localeCompare(b.title));
+
+        // Determine group state: snoozed wins over pending, approved only if ALL are approved
         let state: ApprovalGroup['state'] = 'pending';
-        if (auditIds.length > 0 && hasAnyApproved && !hasAnySnoozed) {
-          state = 'approved';
-        } else if (hasAnySnoozed) {
+        if (hasAnySnoozed) {
           state = 'snoozed';
+        } else if (hasAllApproved && auditIds.length > 0) {
+          state = 'approved';
         }
 
         const approvalGroup: ApprovalGroup = {
-          key: group.key,
-          showTitle,
-          type: entryType,
+          key,
+          showTitle: group.showTitle,
+          type: group.type,
           totalSizeBytes: totalSize,
-          score: group.entry.score ?? 0,
-          seasonCount: group.seasons.length,
+          score: bestScore,
+          seasonCount: group.isShowGroup ? group.items.length : 0,
           seasons,
           state,
           auditIds,
           snoozedUntil: groupSnoozedUntil,
-          scoreDetails: groupScoreDetails,
+          scoreDetails: bestScoreDetails,
         };
 
         if (state === 'approved') {
@@ -231,43 +203,18 @@ export function useApprovalQueue() {
         }
       }
 
-      pendingItems.value = pending;
-      snoozedItems.value = snoozed;
-      approvedItems.value = approved;
+      // Sort each list by score descending (highest-priority items first)
+      const byScore = (a: ApprovalGroup, b: ApprovalGroup) => b.score - a.score;
+      pendingItems.value = pending.sort(byScore);
+      snoozedItems.value = snoozed.sort(byScore);
+      approvedItems.value = approved.sort(byScore);
     } catch (e) {
       // Non-critical — queue just won't display
       console.warn('[useApprovalQueue] fetchQueue failed:', e);
     }
   }
 
-  /** Build a map from mediaName → most recent audit entry */
-  function buildAuditMap(entries: AuditLog[]): Map<string, AuditLog> {
-    const map = new Map<string, AuditLog>();
-    for (const entry of entries) {
-      const existing = map.get(entry.mediaName);
-      if (!existing || entry.id > existing.id) {
-        map.set(entry.mediaName, entry);
-      }
-    }
-    return map;
-  }
-
-  /** Build a map from mediaName → most recent snoozed audit entry (with active snooze) */
-  function buildSnoozedAuditMap(entries: AuditLog[]): Map<string, AuditLog> {
-    const map = new Map<string, AuditLog>();
-    const now = new Date();
-    for (const entry of entries) {
-      if (entry.snoozedUntil && new Date(entry.snoozedUntil) > now) {
-        const existing = map.get(entry.mediaName);
-        if (!existing || entry.id > existing.id) {
-          map.set(entry.mediaName, entry);
-        }
-      }
-    }
-    return map;
-  }
-
-  /** Approve all items in a group — calls POST /audit/:id/approve for each audit ID */
+  /** Approve all items in a group — calls POST /approval-queue/:id/approve for each ID */
   async function approveGroup(group: ApprovalGroup) {
     if (group.auditIds.length === 0) return;
 
@@ -295,7 +242,7 @@ export function useApprovalQueue() {
     }
   }
 
-  /** Reject (snooze) all items in a group — calls POST /audit/:id/reject for each audit ID */
+  /** Reject (snooze) all items in a group — calls POST /approval-queue/:id/reject for each ID */
   async function rejectGroup(group: ApprovalGroup) {
     if (group.auditIds.length === 0) return;
 
@@ -322,7 +269,7 @@ export function useApprovalQueue() {
     }
   }
 
-  /** Undo snooze for all items in a group — calls POST /audit/:id/unsnooze for each audit ID */
+  /** Undo snooze for all items in a group — calls POST /approval-queue/:id/unsnooze for each ID */
   async function unsnoozeGroup(group: ApprovalGroup) {
     if (group.auditIds.length === 0) return;
 
@@ -332,7 +279,9 @@ export function useApprovalQueue() {
 
     try {
       await Promise.all(
-        group.auditIds.map((id) => api(`/api/v1/approval-queue/${id}/unsnooze`, { method: 'POST' })),
+        group.auditIds.map((id) =>
+          api(`/api/v1/approval-queue/${id}/unsnooze`, { method: 'POST' }),
+        ),
       );
       addToast('Snooze removed — group re-queued for approval', 'success');
       // Background refresh to sync with server state
@@ -345,7 +294,7 @@ export function useApprovalQueue() {
     }
   }
 
-  /** Approve a single season by its audit ID, then refresh the queue */
+  /** Approve a single season by its approval queue ID, then refresh the queue */
   async function approveSeason(auditId: number) {
     try {
       await api(`/api/v1/approval-queue/${auditId}/approve`, { method: 'POST' });
@@ -361,7 +310,7 @@ export function useApprovalQueue() {
     }
   }
 
-  /** Snooze a single season by its audit ID, then refresh the queue */
+  /** Snooze a single season by its approval queue ID, then refresh the queue */
   async function snoozeSeason(auditId: number) {
     try {
       await api(`/api/v1/approval-queue/${auditId}/reject`, { method: 'POST' });
@@ -370,6 +319,25 @@ export function useApprovalQueue() {
     } catch {
       addToast('Failed to snooze season', 'error');
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SSE subscriptions — registered once globally to refresh queue on changes
+  // ---------------------------------------------------------------------------
+  if (import.meta.client && !_approvalSseRegistered) {
+    _approvalSseRegistered = true;
+
+    const refreshOnEvent = () => {
+      // Only refresh if we're in approval mode
+      if (isApprovalMode.value) fetchQueue();
+    };
+
+    // Queue state changes that warrant a refresh
+    sseOn('engine_complete', refreshOnEvent);
+    sseOn('deletion_success', refreshOnEvent);
+    sseOn('deletion_failed', refreshOnEvent);
+    sseOn('approval_orphans_recovered', refreshOnEvent);
+    sseOn('approval_bulk_unsnoozed', refreshOnEvent);
   }
 
   return {

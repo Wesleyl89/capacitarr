@@ -233,7 +233,7 @@ onUnmounted(() => {
     v-motion
     :initial="{ opacity: 0, y: 12 }"
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
-    class="mb-8"
+    class="mb-6"
   >
     <UiCardHeader>
       <div class="flex items-center justify-between">
@@ -265,71 +265,300 @@ onUnmounted(() => {
         {{ t('approval.noPending') }}
       </div>
 
-      <div v-else class="space-y-4">
-        <!-- Section 1: Pending Approval -->
-        <div v-if="pendingItems.length > 0">
-          <div class="flex items-center justify-between mb-2">
-            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              {{ t('approval.pending') }}
-            </h4>
-            <div class="flex items-center gap-2">
-              <!-- Select All toggle -->
-              <UiButton
-                v-if="pendingItems.some((g) => g.auditIds.length > 0)"
-                variant="ghost"
-                size="sm"
-                class="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                @click="toggleSelectAll"
-              >
-                {{ isAllSelected ? 'Deselect All' : 'Select All' }}
-              </UiButton>
-              <!-- Batch approve button (only visible when items are selected) -->
-              <UiButton
-                v-if="selectedCount > 0"
-                :variant="batchConfirming ? 'destructive' : 'default'"
-                size="sm"
-                class="h-6 px-2 text-xs gap-1"
-                @click="startBatchApprove"
-              >
-                <Trash2Icon class="h-3 w-3" />
-                <template v-if="batchConfirming">
-                  {{ batchCountdown }}s — click to cancel
-                </template>
-                <template v-else> Approve {{ selectedCount }} Selected </template>
-              </UiButton>
+      <UiScrollArea v-else class="h-[480px] pr-4">
+        <div class="space-y-4">
+          <!-- Section 1: Pending Approval -->
+          <div v-if="pendingItems.length > 0">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {{ t('approval.pending') }}
+              </h4>
+              <div class="flex items-center gap-2">
+                <!-- Select All toggle -->
+                <UiButton
+                  v-if="pendingItems.some((g) => g.auditIds.length > 0)"
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  @click="toggleSelectAll"
+                >
+                  {{ isAllSelected ? 'Deselect All' : 'Select All' }}
+                </UiButton>
+                <!-- Batch approve button (only visible when items are selected) -->
+                <UiButton
+                  v-if="selectedCount > 0"
+                  :variant="batchConfirming ? 'destructive' : 'default'"
+                  size="sm"
+                  class="h-6 px-2 text-xs gap-1"
+                  @click="startBatchApprove"
+                >
+                  <Trash2Icon class="h-3 w-3" />
+                  <template v-if="batchConfirming">
+                    {{ batchCountdown }}s — click to cancel
+                  </template>
+                  <template v-else> Approve {{ selectedCount }} Selected </template>
+                </UiButton>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <div v-for="group in pendingItems" :key="group.key">
+                <div
+                  class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+                  :class="
+                    isGroupFullySelected(group) || isGroupPartiallySelected(group)
+                      ? 'ring-1 ring-primary/30 bg-primary/5'
+                      : ''
+                  "
+                >
+                  <!-- Score (clickable for detail) -->
+                  <span
+                    class="text-xs font-mono tabular-nums font-semibold text-primary shrink-0 w-12 text-right cursor-pointer hover:text-primary/80"
+                    @click="showDetail(group)"
+                  >
+                    {{ group.score.toFixed(2) }}
+                  </span>
+
+                  <!-- Title + type badge + expand toggle + subtitle -->
+                  <div class="flex-1 min-w-0 cursor-pointer" @click="showDetail(group)">
+                    <span class="inline-flex items-center gap-1.5">
+                      <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
+                      <button
+                        v-if="group.seasonCount > 0"
+                        class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
+                        :aria-label="
+                          expandedKeys.has(group.key) ? 'Collapse seasons' : 'Expand seasons'
+                        "
+                        :aria-expanded="expandedKeys.has(group.key)"
+                        @click.stop="toggleExpand(group.key)"
+                      >
+                        <ChevronRightIcon
+                          class="w-3.5 h-3.5 transition-transform duration-200"
+                          :class="{ 'rotate-90': expandedKeys.has(group.key) }"
+                        />
+                        <span class="text-xs text-muted-foreground font-normal whitespace-nowrap"
+                          >({{ group.seasonCount }} season{{
+                            group.seasonCount !== 1 ? 's' : ''
+                          }})</span
+                        >
+                      </button>
+                      <UiBadge
+                        variant="secondary"
+                        class="capitalize text-[10px] px-1.5 py-0 shrink-0"
+                      >
+                        {{ group.type }}
+                      </UiBadge>
+                    </span>
+                    <span class="text-xs text-muted-foreground block">{{
+                      groupSubtitle(group)
+                    }}</span>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="flex items-center gap-1 shrink-0">
+                    <!-- Approve button with 3-second confirmation countdown -->
+                    <UiButton
+                      v-if="group.auditIds.length > 0"
+                      variant="ghost"
+                      size="sm"
+                      :class="[
+                        'h-7 p-0 transition-all',
+                        confirmingKey === group.key
+                          ? 'w-auto px-2 bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30'
+                          : 'w-7 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30',
+                      ]"
+                      :disabled="!!loading[group.key]"
+                      :aria-label="
+                        confirmingKey === group.key ? 'Cancel approval' : t('approval.approve')
+                      "
+                      @click="startApproveConfirm(group)"
+                    >
+                      <template v-if="confirmingKey === group.key">
+                        <span class="text-[11px] font-medium tabular-nums"
+                          >{{ confirmCountdown }}s</span
+                        >
+                      </template>
+                      <template v-else>
+                        <CheckIcon class="h-4 w-4" />
+                      </template>
+                    </UiButton>
+                    <UiButton
+                      v-if="group.auditIds.length > 0"
+                      variant="ghost"
+                      size="sm"
+                      class="h-7 w-7 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                      :disabled="!!loading[group.key]"
+                      :aria-label="t('approval.snooze')"
+                      :title="t('approval.snooze')"
+                      @click="rejectGroup(group)"
+                    >
+                      <AlarmClockIcon class="h-4 w-4" />
+                    </UiButton>
+                    <!-- Checkbox for batch selection (after snooze icon) -->
+                    <UiCheckbox
+                      v-if="group.auditIds.length > 0"
+                      :checked="
+                        isGroupPartiallySelected(group)
+                          ? 'indeterminate'
+                          : isGroupFullySelected(group)
+                      "
+                      class="h-3.5 w-3.5 shrink-0 cursor-pointer"
+                      @click.stop="toggleGroupSelect(group)"
+                    />
+                    <span
+                      v-if="group.auditIds.length === 0"
+                      class="text-[10px] text-muted-foreground italic"
+                      >{{ t('approval.awaitingEngine') }}</span
+                    >
+                  </div>
+                </div>
+
+                <!-- Expanded seasons -->
+                <div
+                  v-if="group.seasonCount > 0 && expandedKeys.has(group.key)"
+                  class="ml-6 mt-0.5 space-y-0.5"
+                >
+                  <div
+                    v-for="season in group.seasons"
+                    :key="season.title"
+                    class="flex items-center gap-3 rounded border border-border/50 bg-muted/20 px-3 py-1.5 text-xs hover:bg-muted/40 transition-colors"
+                    :class="
+                      selectedKeys.has(seasonKey(group.key, season.title))
+                        ? 'ring-1 ring-primary/30 bg-primary/5'
+                        : ''
+                    "
+                  >
+                    <span
+                      class="font-mono tabular-nums font-medium text-primary/80 shrink-0 w-12 text-right cursor-pointer"
+                      @click="showSeasonDetail(season)"
+                    >
+                      {{ season.score.toFixed(2) }}
+                    </span>
+                    <span
+                      class="flex-1 min-w-0 truncate text-muted-foreground cursor-pointer"
+                      @click="showSeasonDetail(season)"
+                      >{{ season.title }}</span
+                    >
+                    <!-- Size (right-aligned before action icons) -->
+                    <span class="text-muted-foreground shrink-0 tabular-nums w-16 text-right">{{
+                      formatBytes(season.sizeBytes)
+                    }}</span>
+                    <!-- Season-level actions (uses season auditId if available, otherwise group actions) -->
+                    <div class="flex items-center gap-1 shrink-0">
+                      <UiButton
+                        v-if="group.auditIds.length > 0"
+                        variant="ghost"
+                        size="sm"
+                        class="h-6 w-6 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
+                        :aria-label="t('approval.approve')"
+                        @click.stop="
+                          season.auditId !== null
+                            ? approveSeason(season.auditId)
+                            : approveGroup(group)
+                        "
+                      >
+                        <CheckIcon class="h-3.5 w-3.5" />
+                      </UiButton>
+                      <UiButton
+                        v-if="group.auditIds.length > 0"
+                        variant="ghost"
+                        size="sm"
+                        class="h-6 w-6 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                        :aria-label="t('approval.snooze')"
+                        :title="t('approval.snooze')"
+                        @click.stop="
+                          season.auditId !== null
+                            ? snoozeSeason(season.auditId)
+                            : rejectGroup(group)
+                        "
+                      >
+                        <AlarmClockIcon class="h-3.5 w-3.5" />
+                      </UiButton>
+                      <!-- Season-level checkbox -->
+                      <UiCheckbox
+                        :checked="selectedKeys.has(seasonKey(group.key, season.title))"
+                        class="h-3.5 w-3.5 shrink-0 cursor-pointer"
+                        @click.stop="toggleSelect(seasonKey(group.key, season.title))"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="space-y-1.5">
-            <div v-for="group in pendingItems" :key="group.key">
+
+          <!-- Section 2: Snoozed -->
+          <div v-if="snoozedItems.length > 0">
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              {{ t('approval.snoozed') }}
+            </h4>
+            <div class="space-y-1.5">
               <div
-                class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
-                :class="
-                  isGroupFullySelected(group) || isGroupPartiallySelected(group)
-                    ? 'ring-1 ring-primary/30 bg-primary/5'
-                    : ''
-                "
+                v-for="group in snoozedItems"
+                :key="group.key"
+                class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 opacity-75 cursor-pointer hover:bg-muted/50 transition-colors"
+                @click="showDetail(group)"
               >
-                <!-- Expand toggle for show groups -->
-                <button
-                  v-if="group.seasonCount > 0"
-                  class="shrink-0 text-muted-foreground hover:text-foreground transition-transform"
-                  :class="expandedKeys.has(group.key) ? 'rotate-90' : ''"
-                  :aria-label="expandedKeys.has(group.key) ? 'Collapse' : 'Expand'"
-                  @click="toggleExpand(group.key)"
-                >
-                  <ChevronRightIcon class="h-3.5 w-3.5" />
-                </button>
+                <!-- Snooze icon -->
+                <span class="text-sm shrink-0 w-12 text-right" title="Snoozed">💤</span>
 
-                <!-- Score (clickable for detail) -->
-                <span
-                  class="text-xs font-mono tabular-nums font-semibold text-primary shrink-0 w-12 text-right cursor-pointer hover:text-primary/80"
-                  @click="showDetail(group)"
-                >
-                  {{ group.score.toFixed(2) }}
-                </span>
+                <!-- Title + type badge + snooze time -->
+                <div class="flex-1 min-w-0">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
+                    <UiBadge
+                      variant="secondary"
+                      class="capitalize text-[10px] px-1.5 py-0 shrink-0"
+                    >
+                      {{ group.type }}
+                    </UiBadge>
+                  </span>
+                  <span
+                    v-if="group.snoozedUntil"
+                    class="text-xs text-muted-foreground inline-flex items-center gap-1 block"
+                  >
+                    {{ t('approval.snoozedUntilLabel') }}
+                    <DateDisplay :date="group.snoozedUntil" />
+                  </span>
+                  <span v-else class="text-xs text-muted-foreground block">{{
+                    groupSubtitle(group)
+                  }}</span>
+                </div>
 
-                <!-- Title + type badge + subtitle -->
-                <div class="flex-1 min-w-0 cursor-pointer" @click="showDetail(group)">
+                <!-- Undo action -->
+                <div @click.stop>
+                  <UiButton
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground shrink-0"
+                    :disabled="!!loading[group.key]"
+                    :aria-label="t('approval.undoSnooze')"
+                    @click="unsnoozeGroup(group)"
+                  >
+                    <Undo2Icon class="h-3.5 w-3.5 mr-1" />
+                    <span class="text-xs">{{ t('approval.undoSnooze') }}</span>
+                  </UiButton>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: In Progress (Approved/Deleting) -->
+          <div v-if="approvedItems.length > 0">
+            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              {{ t('approval.inProgress') }}
+            </h4>
+            <div class="space-y-1.5">
+              <div
+                v-for="group in approvedItems"
+                :key="group.key"
+                class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 opacity-60 cursor-pointer hover:bg-muted/50 transition-colors"
+                @click="showDetail(group)"
+              >
+                <!-- Spinner -->
+                <LoaderCircleIcon class="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+
+                <!-- Title + type badge + size -->
+                <div class="flex-1 min-w-0">
                   <span class="inline-flex items-center gap-1.5">
                     <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
                     <UiBadge
@@ -344,223 +573,15 @@ onUnmounted(() => {
                   }}</span>
                 </div>
 
-                <!-- Actions -->
-                <div class="flex items-center gap-1 shrink-0">
-                  <!-- Approve button with 3-second confirmation countdown -->
-                  <UiButton
-                    v-if="group.auditIds.length > 0"
-                    variant="ghost"
-                    size="sm"
-                    :class="[
-                      'h-7 p-0 transition-all',
-                      confirmingKey === group.key
-                        ? 'w-auto px-2 bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30'
-                        : 'w-7 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30',
-                    ]"
-                    :disabled="!!loading[group.key]"
-                    :aria-label="
-                      confirmingKey === group.key ? 'Cancel approval' : t('approval.approve')
-                    "
-                    @click="startApproveConfirm(group)"
-                  >
-                    <template v-if="confirmingKey === group.key">
-                      <span class="text-[11px] font-medium tabular-nums"
-                        >{{ confirmCountdown }}s</span
-                      >
-                    </template>
-                    <template v-else>
-                      <CheckIcon class="h-4 w-4" />
-                    </template>
-                  </UiButton>
-                  <UiButton
-                    v-if="group.auditIds.length > 0"
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 w-7 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                    :disabled="!!loading[group.key]"
-                    :aria-label="t('approval.snooze')"
-                    :title="t('approval.snooze')"
-                    @click="rejectGroup(group)"
-                  >
-                    <AlarmClockIcon class="h-4 w-4" />
-                  </UiButton>
-                  <!-- Checkbox for batch selection (after snooze icon) -->
-                  <input
-                    v-if="group.auditIds.length > 0"
-                    type="checkbox"
-                    :checked="isGroupFullySelected(group)"
-                    :indeterminate="isGroupPartiallySelected(group)"
-                    class="h-3.5 w-3.5 rounded border-border text-primary accent-primary shrink-0 cursor-pointer"
-                    @click.stop="toggleGroupSelect(group)"
-                  />
-                  <span
-                    v-if="group.auditIds.length === 0"
-                    class="text-[10px] text-muted-foreground italic"
-                    >{{ t('approval.awaitingEngine') }}</span
-                  >
-                </div>
-              </div>
-
-              <!-- Expanded seasons -->
-              <div
-                v-if="group.seasonCount > 0 && expandedKeys.has(group.key)"
-                class="ml-6 mt-0.5 space-y-0.5"
-              >
-                <div
-                  v-for="season in group.seasons"
-                  :key="season.title"
-                  class="flex items-center gap-3 rounded border border-border/50 bg-muted/20 px-3 py-1.5 text-xs hover:bg-muted/40 transition-colors"
-                  :class="
-                    selectedKeys.has(seasonKey(group.key, season.title))
-                      ? 'ring-1 ring-primary/30 bg-primary/5'
-                      : ''
-                  "
-                >
-                  <span
-                    class="font-mono tabular-nums font-medium text-primary/80 shrink-0 w-12 text-right cursor-pointer"
-                    @click="showSeasonDetail(season)"
-                  >
-                    {{ season.score.toFixed(2) }}
-                  </span>
-                  <span
-                    class="flex-1 min-w-0 truncate text-muted-foreground cursor-pointer"
-                    @click="showSeasonDetail(season)"
-                    >{{ season.title }}</span
-                  >
-                  <!-- Size (right-aligned before action icons) -->
-                  <span class="text-muted-foreground shrink-0 tabular-nums w-16 text-right">{{
-                    formatBytes(season.sizeBytes)
-                  }}</span>
-                  <!-- Season-level actions (uses season auditId if available, otherwise group actions) -->
-                  <div class="flex items-center gap-1 shrink-0">
-                    <UiButton
-                      v-if="group.auditIds.length > 0"
-                      variant="ghost"
-                      size="sm"
-                      class="h-6 w-6 p-0 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
-                      :aria-label="t('approval.approve')"
-                      @click.stop="
-                        season.auditId !== null
-                          ? approveSeason(season.auditId)
-                          : approveGroup(group)
-                      "
-                    >
-                      <CheckIcon class="h-3.5 w-3.5" />
-                    </UiButton>
-                    <UiButton
-                      v-if="group.auditIds.length > 0"
-                      variant="ghost"
-                      size="sm"
-                      class="h-6 w-6 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                      :aria-label="t('approval.snooze')"
-                      :title="t('approval.snooze')"
-                      @click.stop="
-                        season.auditId !== null ? snoozeSeason(season.auditId) : rejectGroup(group)
-                      "
-                    >
-                      <AlarmClockIcon class="h-3.5 w-3.5" />
-                    </UiButton>
-                    <!-- Season-level checkbox -->
-                    <input
-                      type="checkbox"
-                      :checked="selectedKeys.has(seasonKey(group.key, season.title))"
-                      class="h-3.5 w-3.5 rounded border-border text-primary accent-primary shrink-0 cursor-pointer"
-                      @click.stop="toggleSelect(seasonKey(group.key, season.title))"
-                    />
-                  </div>
-                </div>
+                <!-- Status -->
+                <span class="text-xs text-muted-foreground shrink-0">
+                  {{ t('approval.deleting') }}
+                </span>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Section 2: Snoozed -->
-        <div v-if="snoozedItems.length > 0">
-          <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            {{ t('approval.snoozed') }}
-          </h4>
-          <div class="space-y-1.5">
-            <div
-              v-for="group in snoozedItems"
-              :key="group.key"
-              class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 opacity-75 cursor-pointer hover:bg-muted/50 transition-colors"
-              @click="showDetail(group)"
-            >
-              <!-- Snooze icon -->
-              <span class="text-sm shrink-0 w-12 text-right" title="Snoozed">💤</span>
-
-              <!-- Title + type badge + snooze time -->
-              <div class="flex-1 min-w-0">
-                <span class="inline-flex items-center gap-1.5">
-                  <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
-                  <UiBadge variant="secondary" class="capitalize text-[10px] px-1.5 py-0 shrink-0">
-                    {{ group.type }}
-                  </UiBadge>
-                </span>
-                <span
-                  v-if="group.snoozedUntil"
-                  class="text-xs text-muted-foreground inline-flex items-center gap-1 block"
-                >
-                  {{ t('approval.snoozedUntilLabel') }}
-                  <DateDisplay :date="group.snoozedUntil" />
-                </span>
-                <span v-else class="text-xs text-muted-foreground block">{{
-                  groupSubtitle(group)
-                }}</span>
-              </div>
-
-              <!-- Undo action -->
-              <div @click.stop>
-                <UiButton
-                  variant="ghost"
-                  size="sm"
-                  class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground shrink-0"
-                  :disabled="!!loading[group.key]"
-                  :aria-label="t('approval.undoSnooze')"
-                  @click="unsnoozeGroup(group)"
-                >
-                  <Undo2Icon class="h-3.5 w-3.5 mr-1" />
-                  <span class="text-xs">{{ t('approval.undoSnooze') }}</span>
-                </UiButton>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Section 3: In Progress (Approved/Deleting) -->
-        <div v-if="approvedItems.length > 0">
-          <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            {{ t('approval.inProgress') }}
-          </h4>
-          <div class="space-y-1.5">
-            <div
-              v-for="group in approvedItems"
-              :key="group.key"
-              class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 opacity-60 cursor-pointer hover:bg-muted/50 transition-colors"
-              @click="showDetail(group)"
-            >
-              <!-- Spinner -->
-              <LoaderCircleIcon class="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
-
-              <!-- Title + type badge + size -->
-              <div class="flex-1 min-w-0">
-                <span class="inline-flex items-center gap-1.5">
-                  <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
-                  <UiBadge variant="secondary" class="capitalize text-[10px] px-1.5 py-0 shrink-0">
-                    {{ group.type }}
-                  </UiBadge>
-                </span>
-                <span class="text-xs text-muted-foreground block">{{ groupSubtitle(group) }}</span>
-              </div>
-
-              <!-- Status -->
-              <span class="text-xs text-muted-foreground shrink-0">
-                {{ t('approval.deleting') }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      </UiScrollArea>
     </UiCardContent>
   </UiCard>
 
@@ -578,7 +599,7 @@ onUnmounted(() => {
         ? 'Approved'
         : selectedGroup.state === 'snoozed'
           ? 'Snoozed'
-          : 'Queued for Approval'
+          : 'Pending'
     "
     @close="selectedGroup = null"
   />
@@ -592,7 +613,7 @@ onUnmounted(() => {
     :score="selectedSeason.score"
     :score-details="selectedSeason.scoreDetails"
     :size-bytes="selectedSeason.sizeBytes"
-    action="Queued for Approval"
+    action="Pending"
     @close="selectedSeason = null"
   />
 </template>

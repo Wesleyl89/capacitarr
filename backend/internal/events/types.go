@@ -11,20 +11,31 @@ type EngineStartEvent struct {
 	ExecutionMode string `json:"executionMode"`
 }
 
-func (e EngineStartEvent) EventType() string    { return "engine_start" }
-func (e EngineStartEvent) EventMessage() string { return "Engine run started in " + e.ExecutionMode + " mode" }
+// EventType implements Event.
+func (e EngineStartEvent) EventType() string { return "engine_start" }
+
+// EventMessage implements Event.
+func (e EngineStartEvent) EventMessage() string {
+	return "Engine run started in " + e.ExecutionMode + " mode"
+}
 
 // EngineCompleteEvent is published when an engine evaluation cycle finishes.
+// Note: Deleted count and FreedBytes are NOT included here because deletions
+// happen asynchronously in the DeletionService worker and may not be complete
+// when the engine cycle publishes this event. The frontend reads those stats
+// from the REST endpoint (GET /worker/stats), which queries the DB where the
+// deletion worker atomically increments the counters.
 type EngineCompleteEvent struct {
 	Evaluated     int    `json:"evaluated"`
 	Flagged       int    `json:"flagged"`
-	Deleted       int    `json:"deleted"`
-	FreedBytes    int64  `json:"freedBytes"`
 	DurationMs    int64  `json:"durationMs"`
 	ExecutionMode string `json:"executionMode"`
 }
 
+// EventType implements Event.
 func (e EngineCompleteEvent) EventType() string { return "engine_complete" }
+
+// EventMessage implements Event.
 func (e EngineCompleteEvent) EventMessage() string {
 	return fmt.Sprintf("Engine run completed: evaluated %d, flagged %d", e.Evaluated, e.Flagged)
 }
@@ -34,7 +45,10 @@ type EngineErrorEvent struct {
 	Error string `json:"error"`
 }
 
-func (e EngineErrorEvent) EventType() string    { return "engine_error" }
+// EventType implements Event.
+func (e EngineErrorEvent) EventType() string { return "engine_error" }
+
+// EventMessage implements Event.
 func (e EngineErrorEvent) EventMessage() string { return "Engine error: " + e.Error }
 
 // EngineModeChangedEvent is published when the execution mode is changed.
@@ -43,7 +57,10 @@ type EngineModeChangedEvent struct {
 	NewMode string `json:"newMode"`
 }
 
+// EventType implements Event.
 func (e EngineModeChangedEvent) EventType() string { return "engine_mode_changed" }
+
+// EventMessage implements Event.
 func (e EngineModeChangedEvent) EventMessage() string {
 	return fmt.Sprintf("Execution mode changed from %s to %s", e.OldMode, e.NewMode)
 }
@@ -51,7 +68,10 @@ func (e EngineModeChangedEvent) EventMessage() string {
 // ManualRunTriggeredEvent is published when a user manually triggers an engine run.
 type ManualRunTriggeredEvent struct{}
 
-func (e ManualRunTriggeredEvent) EventType() string    { return "manual_run_triggered" }
+// EventType implements Event.
+func (e ManualRunTriggeredEvent) EventType() string { return "manual_run_triggered" }
+
+// EventMessage implements Event.
 func (e ManualRunTriggeredEvent) EventMessage() string { return "Manual engine run triggered" }
 
 // =============================================================================
@@ -63,7 +83,10 @@ type SettingsChangedEvent struct {
 	Changes map[string]interface{} `json:"changes,omitempty"` // Fields that changed
 }
 
-func (e SettingsChangedEvent) EventType() string    { return "settings_changed" }
+// EventType implements Event.
+func (e SettingsChangedEvent) EventType() string { return "settings_changed" }
+
+// EventMessage implements Event.
 func (e SettingsChangedEvent) EventMessage() string { return "Settings updated" }
 
 // ThresholdChangedEvent is published when disk group thresholds are updated.
@@ -73,7 +96,10 @@ type ThresholdChangedEvent struct {
 	TargetPct    float64 `json:"targetPct"`
 }
 
+// EventType implements Event.
 func (e ThresholdChangedEvent) EventType() string { return "threshold_changed" }
+
+// EventMessage implements Event.
 func (e ThresholdChangedEvent) EventMessage() string {
 	return fmt.Sprintf("Thresholds updated for %s: trigger at %.0f%%, target %.0f%%",
 		e.MountPath, e.ThresholdPct, e.TargetPct)
@@ -88,7 +114,10 @@ type LoginEvent struct {
 	Username string `json:"username"`
 }
 
-func (e LoginEvent) EventType() string    { return "login" }
+// EventType implements Event.
+func (e LoginEvent) EventType() string { return "login" }
+
+// EventMessage implements Event.
 func (e LoginEvent) EventMessage() string { return "User logged in: " + e.Username }
 
 // PasswordChangedEvent is published when a user changes their password.
@@ -96,7 +125,10 @@ type PasswordChangedEvent struct {
 	Username string `json:"username"`
 }
 
-func (e PasswordChangedEvent) EventType() string    { return "password_changed" }
+// EventType implements Event.
+func (e PasswordChangedEvent) EventType() string { return "password_changed" }
+
+// EventMessage implements Event.
 func (e PasswordChangedEvent) EventMessage() string { return "Password changed for " + e.Username }
 
 // UsernameChangedEvent is published when a user changes their username.
@@ -105,7 +137,10 @@ type UsernameChangedEvent struct {
 	NewUsername string `json:"newUsername"`
 }
 
+// EventType implements Event.
 func (e UsernameChangedEvent) EventType() string { return "username_changed" }
+
+// EventMessage implements Event.
 func (e UsernameChangedEvent) EventMessage() string {
 	return fmt.Sprintf("Username changed from %s to %s", e.OldUsername, e.NewUsername)
 }
@@ -116,7 +151,10 @@ type APIKeyGeneratedEvent struct {
 	Hint     string `json:"hint"` // Last 4 chars
 }
 
+// EventType implements Event.
 func (e APIKeyGeneratedEvent) EventType() string { return "api_key_generated" }
+
+// EventMessage implements Event.
 func (e APIKeyGeneratedEvent) EventMessage() string {
 	return fmt.Sprintf("API key generated for %s (ending in %s)", e.Username, e.Hint)
 }
@@ -132,7 +170,10 @@ type IntegrationAddedEvent struct {
 	Name            string `json:"name"`
 }
 
+// EventType implements Event.
 func (e IntegrationAddedEvent) EventType() string { return "integration_added" }
+
+// EventMessage implements Event.
 func (e IntegrationAddedEvent) EventMessage() string {
 	return fmt.Sprintf("Integration added: %s (%s)", e.Name, e.IntegrationType)
 }
@@ -144,7 +185,10 @@ type IntegrationUpdatedEvent struct {
 	Name            string `json:"name"`
 }
 
+// EventType implements Event.
 func (e IntegrationUpdatedEvent) EventType() string { return "integration_updated" }
+
+// EventMessage implements Event.
 func (e IntegrationUpdatedEvent) EventMessage() string {
 	return fmt.Sprintf("Integration updated: %s (%s)", e.Name, e.IntegrationType)
 }
@@ -156,7 +200,10 @@ type IntegrationRemovedEvent struct {
 	Name            string `json:"name"`
 }
 
+// EventType implements Event.
 func (e IntegrationRemovedEvent) EventType() string { return "integration_removed" }
+
+// EventMessage implements Event.
 func (e IntegrationRemovedEvent) EventMessage() string {
 	return fmt.Sprintf("Integration removed: %s (%s)", e.Name, e.IntegrationType)
 }
@@ -168,7 +215,10 @@ type IntegrationTestEvent struct {
 	URL             string `json:"url"`
 }
 
+// EventType implements Event.
 func (e IntegrationTestEvent) EventType() string { return "integration_test" }
+
+// EventMessage implements Event.
 func (e IntegrationTestEvent) EventMessage() string {
 	return fmt.Sprintf("Connection test succeeded: %s (%s)", e.Name, e.IntegrationType)
 }
@@ -181,7 +231,10 @@ type IntegrationTestFailedEvent struct {
 	Error           string `json:"error"`
 }
 
+// EventType implements Event.
 func (e IntegrationTestFailedEvent) EventType() string { return "integration_test_failed" }
+
+// EventMessage implements Event.
 func (e IntegrationTestFailedEvent) EventMessage() string {
 	return fmt.Sprintf("Connection test failed: %s (%s) — %s", e.Name, e.IntegrationType, e.Error)
 }
@@ -198,7 +251,10 @@ type ApprovalApprovedEvent struct {
 	SizeBytes int64  `json:"sizeBytes"`
 }
 
+// EventType implements Event.
 func (e ApprovalApprovedEvent) EventType() string { return "approval_approved" }
+
+// EventMessage implements Event.
 func (e ApprovalApprovedEvent) EventMessage() string {
 	return fmt.Sprintf("Approved for deletion: %s", e.MediaName)
 }
@@ -211,7 +267,10 @@ type ApprovalRejectedEvent struct {
 	SnoozeDuration string `json:"snoozeDuration"` // e.g. "24h"
 }
 
+// EventType implements Event.
 func (e ApprovalRejectedEvent) EventType() string { return "approval_rejected" }
+
+// EventMessage implements Event.
 func (e ApprovalRejectedEvent) EventMessage() string {
 	return fmt.Sprintf("Rejected (snoozed): %s", e.MediaName)
 }
@@ -223,7 +282,10 @@ type ApprovalUnsnoozedEvent struct {
 	MediaType string `json:"mediaType"`
 }
 
+// EventType implements Event.
 func (e ApprovalUnsnoozedEvent) EventType() string { return "approval_unsnoozed" }
+
+// EventMessage implements Event.
 func (e ApprovalUnsnoozedEvent) EventMessage() string {
 	return fmt.Sprintf("Unsnoozed: %s", e.MediaName)
 }
@@ -234,7 +296,10 @@ type ApprovalBulkUnsnoozedEvent struct {
 	Count int `json:"count"`
 }
 
+// EventType implements Event.
 func (e ApprovalBulkUnsnoozedEvent) EventType() string { return "approval_bulk_unsnoozed" }
+
+// EventMessage implements Event.
 func (e ApprovalBulkUnsnoozedEvent) EventMessage() string {
 	return fmt.Sprintf("Bulk unsnoozed %d items (disk below threshold)", e.Count)
 }
@@ -245,7 +310,10 @@ type ApprovalOrphansRecoveredEvent struct {
 	Count int `json:"count"`
 }
 
+// EventType implements Event.
 func (e ApprovalOrphansRecoveredEvent) EventType() string { return "approval_orphans_recovered" }
+
+// EventMessage implements Event.
 func (e ApprovalOrphansRecoveredEvent) EventMessage() string {
 	return fmt.Sprintf("Recovered %d orphaned approval items", e.Count)
 }
@@ -262,7 +330,10 @@ type DeletionSuccessEvent struct {
 	IntegrationID uint   `json:"integrationId"`
 }
 
+// EventType implements Event.
 func (e DeletionSuccessEvent) EventType() string { return "deletion_success" }
+
+// EventMessage implements Event.
 func (e DeletionSuccessEvent) EventMessage() string {
 	sizeMB := float64(e.SizeBytes) / (1024 * 1024 * 1024)
 	return fmt.Sprintf("Deleted: %s (%.2f GB freed)", e.MediaName, sizeMB)
@@ -276,7 +347,10 @@ type DeletionFailedEvent struct {
 	Error         string `json:"error"`
 }
 
+// EventType implements Event.
 func (e DeletionFailedEvent) EventType() string { return "deletion_failed" }
+
+// EventMessage implements Event.
 func (e DeletionFailedEvent) EventMessage() string {
 	return fmt.Sprintf("Deletion failed: %s — %s", e.MediaName, e.Error)
 }
@@ -288,7 +362,10 @@ type DeletionDryRunEvent struct {
 	SizeBytes int64  `json:"sizeBytes"`
 }
 
+// EventType implements Event.
 func (e DeletionDryRunEvent) EventType() string { return "deletion_dry_run" }
+
+// EventMessage implements Event.
 func (e DeletionDryRunEvent) EventMessage() string {
 	return fmt.Sprintf("Dry-run flagged: %s", e.MediaName)
 }
@@ -304,7 +381,10 @@ type RuleCreatedEvent struct {
 	Effect string `json:"effect"`
 }
 
+// EventType implements Event.
 func (e RuleCreatedEvent) EventType() string { return "rule_created" }
+
+// EventMessage implements Event.
 func (e RuleCreatedEvent) EventMessage() string {
 	return fmt.Sprintf("Custom rule created: %s → %s", e.Field, e.Effect)
 }
@@ -316,7 +396,10 @@ type RuleUpdatedEvent struct {
 	Effect string `json:"effect"`
 }
 
+// EventType implements Event.
 func (e RuleUpdatedEvent) EventType() string { return "rule_updated" }
+
+// EventMessage implements Event.
 func (e RuleUpdatedEvent) EventMessage() string {
 	return fmt.Sprintf("Custom rule updated: %s → %s", e.Field, e.Effect)
 }
@@ -327,7 +410,10 @@ type RuleDeletedEvent struct {
 	Field  string `json:"field"`
 }
 
+// EventType implements Event.
 func (e RuleDeletedEvent) EventType() string { return "rule_deleted" }
+
+// EventMessage implements Event.
 func (e RuleDeletedEvent) EventMessage() string {
 	return fmt.Sprintf("Custom rule deleted: %s (ID %d)", e.Field, e.RuleID)
 }
@@ -343,7 +429,10 @@ type NotificationChannelAddedEvent struct {
 	Name        string `json:"name"`
 }
 
+// EventType implements Event.
 func (e NotificationChannelAddedEvent) EventType() string { return "notification_channel_added" }
+
+// EventMessage implements Event.
 func (e NotificationChannelAddedEvent) EventMessage() string {
 	return fmt.Sprintf("Notification channel added: %s (%s)", e.Name, e.ChannelType)
 }
@@ -355,7 +444,10 @@ type NotificationChannelUpdatedEvent struct {
 	Name        string `json:"name"`
 }
 
+// EventType implements Event.
 func (e NotificationChannelUpdatedEvent) EventType() string { return "notification_channel_updated" }
+
+// EventMessage implements Event.
 func (e NotificationChannelUpdatedEvent) EventMessage() string {
 	return fmt.Sprintf("Notification channel updated: %s (%s)", e.Name, e.ChannelType)
 }
@@ -367,7 +459,10 @@ type NotificationChannelRemovedEvent struct {
 	Name        string `json:"name"`
 }
 
+// EventType implements Event.
 func (e NotificationChannelRemovedEvent) EventType() string { return "notification_channel_removed" }
+
+// EventMessage implements Event.
 func (e NotificationChannelRemovedEvent) EventMessage() string {
 	return fmt.Sprintf("Notification channel removed: %s (%s)", e.Name, e.ChannelType)
 }
@@ -380,7 +475,10 @@ type NotificationSentEvent struct {
 	TriggerType string `json:"triggerType"` // The event type that triggered the notification
 }
 
+// EventType implements Event.
 func (e NotificationSentEvent) EventType() string { return "notification_sent" }
+
+// EventMessage implements Event.
 func (e NotificationSentEvent) EventMessage() string {
 	return fmt.Sprintf("Notification sent via %s (%s)", e.Name, e.ChannelType)
 }
@@ -393,7 +491,10 @@ type NotificationDeliveryFailedEvent struct {
 	Error       string `json:"error"`
 }
 
+// EventType implements Event.
 func (e NotificationDeliveryFailedEvent) EventType() string { return "notification_delivery_failed" }
+
+// EventMessage implements Event.
 func (e NotificationDeliveryFailedEvent) EventMessage() string {
 	return fmt.Sprintf("Notification delivery failed: %s (%s) — %s", e.Name, e.ChannelType, e.Error)
 }
@@ -407,7 +508,10 @@ type DataResetEvent struct {
 	Summary map[string]int64 `json:"summary"` // e.g. {"audit_log": 42, "approval_queue": 5}
 }
 
-func (e DataResetEvent) EventType() string    { return "data_reset" }
+// EventType implements Event.
+func (e DataResetEvent) EventType() string { return "data_reset" }
+
+// EventMessage implements Event.
 func (e DataResetEvent) EventMessage() string { return "All scraped data has been reset" }
 
 // =============================================================================
@@ -419,7 +523,10 @@ type ServerStartedEvent struct {
 	Version string `json:"version"`
 }
 
+// EventType implements Event.
 func (e ServerStartedEvent) EventType() string { return "server_started" }
+
+// EventMessage implements Event.
 func (e ServerStartedEvent) EventMessage() string {
 	if e.Version != "" {
 		return fmt.Sprintf("Server started (version %s)", e.Version)

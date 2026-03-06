@@ -1,3 +1,4 @@
+// Package poller orchestrates periodic media library polling and capacity evaluation.
 package poller
 
 import (
@@ -7,19 +8,20 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
 	"capacitarr/internal/integrations"
-	"capacitarr/internal/notifications"
+	"capacitarr/internal/services"
 )
 
 // evaluateAndCleanDisk scores all media items on a disk group and, when the
 // threshold is breached, queues the highest-scoring candidates for deletion.
-func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem, serviceClients map[uint]integrations.Integration, runStatsID uint) {
+func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem, serviceClients map[uint]integrations.Integration, runStatsID uint) {
+	database := p.reg.DB
+
 	var prefs db.PreferenceSet
-	if err := db.DB.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+	if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
 		slog.Error("Failed to load preferences", "component", "poller", "operation", "load_preferences", "error", err)
 		return
 	}
@@ -35,15 +37,8 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 
 		// Auto-clear all active snoozes when below threshold — gives a clean slate
 		// for the next cleanup cycle. Resets rejected items back to pending.
-		result := db.DB.Model(&db.ApprovalQueueItem{}).
-			Where("status = ? AND snoozed_until IS NOT NULL", db.StatusRejected).
-			Updates(map[string]interface{}{
-				"status":        db.StatusPending,
-				"snoozed_until": nil,
-				"updated_at":    time.Now().UTC(),
-			})
-		if result.Error != nil {
-			slog.Error("Failed to clear active snoozes", "component", "poller", "error", result.Error)
+		if _, err := p.reg.Approval.BulkUnsnooze(); err != nil {
+			slog.Error("Failed to clear active snoozes", "component", "poller", "error", err)
 		}
 
 		return
@@ -51,18 +46,6 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 
 	slog.Info("Disk threshold breached, evaluating media for deletion", "component", "poller",
 		"mount", group.MountPath, "currentPct", fmt.Sprintf("%.1f", currentPct), "threshold", group.ThresholdPct)
-
-	// Notify: threshold breached
-	notifications.Dispatch(notifications.NotificationEvent{
-		Type:    notifications.EventThresholdBreach,
-		Title:   "Threshold Breached",
-		Message: fmt.Sprintf("Disk %s is at %.1f%% capacity (threshold: %.0f%%)", group.MountPath, currentPct, group.ThresholdPct),
-		Fields: map[string]string{
-			"Disk Group": group.MountPath,
-			"Usage":      fmt.Sprintf("%.1f%%", currentPct),
-			"Threshold":  fmt.Sprintf("%.0f%%", group.ThresholdPct),
-		},
-	})
 
 	// Filter items on this mount
 	var diskItems []integrations.MediaItem
@@ -76,20 +59,20 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		"mount", group.MountPath, "itemCount", len(diskItems))
 
 	var rules []db.CustomRule
-	if err := db.DB.Order("sort_order ASC, id ASC").Find(&rules).Error; err != nil {
+	if err := database.Order("sort_order ASC, id ASC").Find(&rules).Error; err != nil {
 		slog.Error("Failed to load custom rules", "component", "poller", "operation", "load_rules", "error", err)
 		return
 	}
 
 	// Evaluate
 	evaluated := engine.EvaluateMedia(diskItems, prefs, rules)
-	atomic.AddInt64(&lastRunEvaluated, int64(len(evaluated)))
+	atomic.AddInt64(&p.lastRunEvaluated, int64(len(evaluated)))
 
 	// Count protected items for dashboard stats
 	protectedCount := 0
 	for _, ev := range evaluated {
 		if ev.IsProtected {
-			atomic.AddInt64(&lastRunProtected, 1)
+			atomic.AddInt64(&p.lastRunProtected, 1)
 			protectedCount++
 		}
 	}
@@ -145,80 +128,54 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 		if prefs.ExecutionMode == "auto" {
 			client, ok := serviceClients[ev.Item.IntegrationID]
 			if ok && client != nil {
-				// Queue for background deletion so we don't block the poller
-				select {
-				case deleteQueue <- deleteJob{
-					client:     client,
-					item:       ev.Item,
-					reason:     ev.Reason,
-					score:      ev.Score,
-					factors:    ev.Factors,
-					runStatsID: runStatsID,
-				}:
-					bytesFreed += ev.Item.SizeBytes
-					continue // Skip the synchronous DB insert below, worker handles it
-				default:
+				// Queue for background deletion via DeletionService
+				if err := p.reg.Deletion.QueueDeletion(services.DeleteJob{
+					Client:     client,
+					Item:       ev.Item,
+					Reason:     ev.Reason,
+					Score:      ev.Score,
+					Factors:    ev.Factors,
+					RunStatsID: runStatsID,
+				}); err != nil {
 					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", ev.Item.Title)
 					continue
 				}
-			} else {
-				slog.Error("Integration client not found for deletion", "component", "poller",
-					"operation", "resolve_client", "integrationId", ev.Item.IntegrationID)
-				continue
+				bytesFreed += ev.Item.SizeBytes
+				continue // Skip the synchronous DB insert below, worker handles it
 			}
+			slog.Error("Integration client not found for deletion", "component", "poller",
+				"operation", "resolve_client", "integrationId", ev.Item.IntegrationID)
+			continue
 		} else if prefs.ExecutionMode == "approval" {
 			// Skip items that are currently snoozed (rejected with an active snooze window)
-			var snoozedCount int64
-			db.DB.Model(&db.ApprovalQueueItem{}).Where(
-				"media_name = ? AND media_type = ? AND status = ? AND snoozed_until IS NOT NULL AND snoozed_until > ?",
-				ev.Item.Title, string(ev.Item.Type), db.StatusRejected, time.Now().UTC(),
-			).Count(&snoozedCount)
-			if snoozedCount > 0 {
+			if p.reg.Approval.IsSnoozed(ev.Item.Title, string(ev.Item.Type)) {
 				slog.Debug("Skipping snoozed item", "component", "poller", "media", ev.Item.Title)
 				continue
 			}
 
-			// Upsert into approval_queue: create or update pending items
+			// Upsert into approval_queue via ApprovalService
 			factorsJSON, _ := json.Marshal(ev.Factors) //nolint:errcheck
-			var existing db.ApprovalQueueItem
-			result := db.DB.Where(
-				"media_name = ? AND media_type = ? AND status = ?",
-				ev.Item.Title, string(ev.Item.Type), db.StatusPending,
-			).First(&existing)
-			if result.Error == nil {
-				// Update existing pending entry
-				db.DB.Model(&existing).Updates(map[string]interface{}{
-					"reason":         fmt.Sprintf("Score: %.2f (%s)", ev.Score, ev.Reason),
-					"score_details":  string(factorsJSON),
-					"size_bytes":     ev.Item.SizeBytes,
-					"integration_id": ev.Item.IntegrationID,
-					"external_id":    ev.Item.ExternalID,
-					"updated_at":     time.Now().UTC(),
-				})
-			} else {
-				// Create new pending entry
-				db.DB.Create(&db.ApprovalQueueItem{
-					MediaName:     ev.Item.Title,
-					MediaType:     string(ev.Item.Type),
-					Reason:        fmt.Sprintf("Score: %.2f (%s)", ev.Score, ev.Reason),
-					ScoreDetails:  string(factorsJSON),
-					SizeBytes:     ev.Item.SizeBytes,
-					IntegrationID: ev.Item.IntegrationID,
-					ExternalID:    ev.Item.ExternalID,
-					Status:        db.StatusPending,
-					CreatedAt:     time.Now().UTC(),
-					UpdatedAt:     time.Now().UTC(),
-				})
+			if _, err := p.reg.Approval.UpsertPending(db.ApprovalQueueItem{
+				MediaName:     ev.Item.Title,
+				MediaType:     string(ev.Item.Type),
+				Reason:        fmt.Sprintf("Score: %.2f (%s)", ev.Score, ev.Reason),
+				ScoreDetails:  string(factorsJSON),
+				SizeBytes:     ev.Item.SizeBytes,
+				IntegrationID: ev.Item.IntegrationID,
+				ExternalID:    ev.Item.ExternalID,
+			}); err != nil {
+				slog.Error("Failed to upsert approval queue item", "component", "poller", "media", ev.Item.Title, "error", err)
+				continue
 			}
 
 			bytesFreed += ev.Item.SizeBytes
-			atomic.AddInt64(&lastRunFlagged, 1)
+			atomic.AddInt64(&p.lastRunFlagged, 1)
 			slog.Info("Engine action taken", "component", "poller",
 				"media", ev.Item.Title, "action", "queued_for_approval", "score", ev.Score, "freed", ev.Item.SizeBytes)
 			continue
 		}
 
-		// Dry-run mode: write to audit_log table
+		// Dry-run mode: write to audit_log via AuditLogService
 		factorsJSON, _ := json.Marshal(ev.Factors) //nolint:errcheck
 		integrationID := ev.Item.IntegrationID
 		logEntry := db.AuditLogEntry{
@@ -229,29 +186,14 @@ func evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem,
 			Action:        db.ActionDryRun,
 			SizeBytes:     ev.Item.SizeBytes,
 			IntegrationID: &integrationID,
-			CreatedAt:     time.Now().UTC(),
 		}
 
-		// Dry-run dedup: upsert instead of creating duplicates
-		var existing db.AuditLogEntry
-		result := db.DB.Where(
-			"media_name = ? AND media_type = ? AND action = ?",
-			ev.Item.Title, string(ev.Item.Type), db.ActionDryRun,
-		).First(&existing)
-		if result.Error == nil {
-			db.DB.Model(&existing).Updates(map[string]interface{}{
-				"reason":         logEntry.Reason,
-				"score_details":  logEntry.ScoreDetails,
-				"size_bytes":     logEntry.SizeBytes,
-				"integration_id": logEntry.IntegrationID,
-				"created_at":     logEntry.CreatedAt,
-			})
-		} else {
-			db.DB.Create(&logEntry)
+		if err := p.reg.AuditLog.UpsertDryRun(logEntry); err != nil {
+			slog.Error("Failed to upsert dry-run audit entry", "component", "poller", "media", ev.Item.Title, "error", err)
 		}
 
 		bytesFreed += ev.Item.SizeBytes
-		atomic.AddInt64(&lastRunFlagged, 1)
+		atomic.AddInt64(&p.lastRunFlagged, 1)
 		slog.Info("Engine action taken", "component", "poller",
 			"media", ev.Item.Title, "action", db.ActionDryRun, "score", ev.Score, "freed", ev.Item.SizeBytes)
 	}

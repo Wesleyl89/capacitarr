@@ -55,6 +55,7 @@ export interface PreferenceSet {
   executionMode: string;
   tiebreakerMethod: string;
   deletionsEnabled: boolean;
+  snoozeDurationHours: number;
   checkForUpdates: boolean;
   updatedAt: string;
 }
@@ -72,10 +73,6 @@ export interface CustomRule {
   effect: string;
   enabled: boolean;
   sortOrder: number;
-  /** @deprecated Legacy field — kept for migration compatibility */
-  type?: string;
-  /** @deprecated Legacy field — kept for migration compatibility */
-  intensity?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,20 +81,20 @@ export interface CustomRule {
 // Audit Log
 // ---------------------------------------------------------------------------
 
+/** Action values match backend db.Action* constants (deleted, dry_run, dry_delete). */
+export type AuditAction = 'deleted' | 'dry_run' | 'dry_delete';
+
 export interface AuditLogEntry {
   id: number;
   mediaName: string;
   mediaType: string;
   reason: string;
   scoreDetails: string;
-  action: 'deleted' | 'dry_run' | 'dry_delete';
+  action: AuditAction;
   sizeBytes: number;
   integrationId?: number;
   createdAt: string;
 }
-
-/** @deprecated Use AuditLogEntry instead */
-export type AuditLog = AuditLogEntry;
 
 export interface AuditResponse {
   data: AuditLogEntry[];
@@ -148,9 +145,6 @@ export interface WorkerStats {
   lastRunEpoch: number;
   currentlyDeleting: string;
   protectedCount: number;
-  evaluated: number;
-  actioned: number;
-  freedBytes: number;
   processed: number;
   failed: number;
 }

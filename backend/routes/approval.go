@@ -7,16 +7,17 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
 	"capacitarr/internal/integrations"
-	"capacitarr/internal/poller"
+	"capacitarr/internal/services"
 )
 
 // RegisterApprovalRoutes sets up the API endpoints for the approval queue.
-func RegisterApprovalRoutes(g *echo.Group, database *gorm.DB) {
+func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
+	database := reg.DB
+
 	// List approval queue items
 	g.GET("/approval-queue", func(c echo.Context) error {
 		limit := 200
@@ -46,16 +47,9 @@ func RegisterApprovalRoutes(g *echo.Group, database *gorm.DB) {
 	// Approve a queued item: queue it for deletion
 	g.POST("/approval-queue/:id/approve", func(c echo.Context) error {
 		id := c.Param("id")
-
-		var entry db.ApprovalQueueItem
-		if err := database.First(&entry, id).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
-		}
-
-		if entry.Status != db.StatusPending {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": "Entry is not pending",
-			})
+		entryID, err := strconv.ParseUint(id, 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
 		// Safety check: block approvals when deletions are disabled
@@ -72,15 +66,28 @@ func RegisterApprovalRoutes(g *echo.Group, database *gorm.DB) {
 			})
 		}
 
-		// Look up the integration to construct a client
+		// Mark as approved via service (single fetch + status validation)
+		approved, err := reg.Approval.Approve(uint(entryID))
+		if err != nil {
+			if err.Error() == "entry is not pending (current status: approved)" ||
+				err.Error() == "entry is not pending (current status: rejected)" {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			}
+			if err.Error() == "approval queue entry not found: record not found" {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to approve entry"})
+		}
+
+		// Look up the integration to construct a client for deletion
 		var integration db.IntegrationConfig
-		if err := database.First(&integration, entry.IntegrationID).Error; err != nil {
+		if err := database.First(&integration, approved.IntegrationID).Error; err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": "Integration not found",
 			})
 		}
 
-		client := poller.CreateClient(integration.Type, integration.URL, integration.APIKey)
+		client := integrations.NewClient(integration.Type, integration.URL, integration.APIKey)
 		if client == nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": "Unsupported integration type",
@@ -89,52 +96,43 @@ func RegisterApprovalRoutes(g *echo.Group, database *gorm.DB) {
 
 		// Reconstruct the MediaItem from stored approval data
 		item := integrations.MediaItem{
-			ExternalID:    entry.ExternalID,
-			IntegrationID: entry.IntegrationID,
-			Type:          integrations.MediaType(entry.MediaType),
-			Title:         entry.MediaName,
-			SizeBytes:     entry.SizeBytes,
+			ExternalID:    approved.ExternalID,
+			IntegrationID: approved.IntegrationID,
+			Type:          integrations.MediaType(approved.MediaType),
+			Title:         approved.MediaName,
+			SizeBytes:     approved.SizeBytes,
 		}
 
 		// Parse stored score details back into factors
 		var factors []engine.ScoreFactor
-		if entry.ScoreDetails != "" {
-			if err := json.Unmarshal([]byte(entry.ScoreDetails), &factors); err != nil {
-				slog.Warn("Failed to parse score details for approval", "id", entry.ID, "error", err)
+		if approved.ScoreDetails != "" {
+			if err := json.Unmarshal([]byte(approved.ScoreDetails), &factors); err != nil {
+				slog.Warn("Failed to parse score details for approval", "id", approved.ID, "error", err)
 			}
 		}
 
-		// Queue for background deletion
-		if err := poller.QueueDeletion(client, item, entry.Reason, 0, factors, 0); err != nil {
+		// Queue for background deletion via DeletionService
+		if err := reg.Deletion.QueueDeletion(services.DeleteJob{
+			Client:  client,
+			Item:    item,
+			Reason:  approved.Reason,
+			Score:   0,
+			Factors: factors,
+		}); err != nil {
 			return c.JSON(http.StatusServiceUnavailable, map[string]string{
 				"error": "Deletion queue is full, try again later",
 			})
 		}
 
-		// Update queue entry to "approved"
-		if err := database.Model(&entry).Update("status", db.StatusApproved).Error; err != nil {
-			slog.Error("Failed to update queue entry to approved", "id", entry.ID, "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "Failed to update queue entry",
-			})
-		}
-
-		return c.JSON(http.StatusOK, map[string]string{"status": "approved"})
+		return c.JSON(http.StatusOK, approved)
 	})
 
 	// Reject a queued item: snooze it
 	g.POST("/approval-queue/:id/reject", func(c echo.Context) error {
 		id := c.Param("id")
-
-		var entry db.ApprovalQueueItem
-		if err := database.First(&entry, id).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
-		}
-
-		if entry.Status != db.StatusPending {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": "Entry is not pending",
-			})
+		entryID, err := strconv.ParseUint(id, 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
 		// Load preferences to get configured snooze duration
@@ -146,55 +144,27 @@ func RegisterApprovalRoutes(g *echo.Group, database *gorm.DB) {
 			})
 		}
 
-		snoozedUntil := prefs.SnoozeDurationHours
-
-		var svc db.ApprovalQueueItem
-		database.First(&svc, id) // Refresh
-
-		// Use direct DB update since we're still wiring services
-		if err := database.Model(&entry).Updates(map[string]interface{}{
-			"status":        db.StatusRejected,
-			"snoozed_until": snoozedUntil,
-		}).Error; err != nil {
-			slog.Error("Failed to reject queue entry", "id", entry.ID, "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "Failed to reject queue entry",
-			})
+		rejected, err := reg.Approval.Reject(uint(entryID), prefs.SnoozeDurationHours)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 
-		return c.JSON(http.StatusOK, map[string]string{"status": "rejected"})
+		return c.JSON(http.StatusOK, rejected)
 	})
 
 	// Unsnooze a rejected item: clear snooze and reset to pending
 	g.POST("/approval-queue/:id/unsnooze", func(c echo.Context) error {
 		id := c.Param("id")
-
-		var entry db.ApprovalQueueItem
-		if err := database.First(&entry, id).Error; err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
+		entryID, err := strconv.ParseUint(id, 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
-		if entry.Status != db.StatusRejected {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": "Entry is not rejected/snoozed",
-			})
+		unsnoozed, err := reg.Approval.Unsnooze(uint(entryID))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 
-		if err := database.Model(&entry).Updates(map[string]interface{}{
-			"snoozed_until": nil,
-			"status":        db.StatusPending,
-		}).Error; err != nil {
-			slog.Error("Failed to unsnooze queue entry", "id", entry.ID, "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "Failed to unsnooze queue entry",
-			})
-		}
-
-		// Reload the updated entry
-		if err := database.First(&entry, id).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reload queue entry"})
-		}
-
-		return c.JSON(http.StatusOK, entry)
+		return c.JSON(http.StatusOK, unsnoozed)
 	})
 }

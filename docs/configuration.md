@@ -116,11 +116,13 @@ The `/config` directory (mapped via Docker volumes) is the **only directory that
 
 ## Approval Queue
 
-When the engine mode is set to **Approval**, items that meet deletion criteria are placed in an approval queue instead of being deleted automatically. A user must explicitly approve each item before deletion proceeds.
+When the engine mode is set to **Approval**, items that meet deletion criteria are placed in the `approval_queue` table instead of being deleted automatically. A user must explicitly approve each item before deletion proceeds.
+
+The approval queue is a separate table from the audit log. Items flow through a state machine: `pending` → `approved` → deleted (moved to `audit_log`), or `pending` → `rejected` (snoozed).
 
 ### Deletions-Disabled Safety Guard
 
-When **Deletions Enabled** is turned off in **Settings → Advanced**, approving items from the approval queue is blocked. The approve action will return an error:
+When **Deletions Enabled** is turned off in **Settings → Advanced**, approving items from the approval queue is blocked. The approve action returns a `409 Conflict` error:
 
 > Deletions are currently disabled in settings. Enable deletions before approving items.
 
@@ -128,6 +130,22 @@ Re-enable **Deletions Enabled** in Advanced settings before approving queued ite
 
 ### Orphan Recovery
 
-If the container restarts while items are in the **Approved** (processing) state — meaning they were approved but not yet deleted — those items are automatically reverted to **Queued for Approval** on startup. They will reappear in the approval queue so no items are silently lost.
+If the container restarts while items are in the **approved** (processing) state — meaning they were approved but not yet deleted — those items are automatically reverted to **pending** on startup. They reappear in the approval queue so no items are silently lost.
 
-This recovery also runs at the start of each engine poll cycle as an additional safety measure.
+This recovery also runs at the start of each engine poll cycle as an additional safety measure. The `approval_orphans_recovered` activity event is published when orphans are detected and recovered.
+
+## Real-Time Updates (SSE)
+
+Capacitarr uses Server-Sent Events (SSE) to push real-time updates to all connected browser tabs. The SSE endpoint is `GET /api/v1/events` (authenticated).
+
+When running behind a reverse proxy, ensure the proxy does not buffer responses for the SSE endpoint. See the [Deployment Guide](deployment.md#sse-server-sent-events-proxy-configuration) for proxy-specific configuration.
+
+### Data Retention
+
+| Data | Retention | Configuration |
+|------|-----------|---------------|
+| Activity events | 7 days | Fixed (not configurable) |
+| Audit log entries | Configurable | `auditLogRetentionDays` preference |
+| Engine run stats | Last 1000 rows | Fixed |
+| In-app notifications | Same as audit log | Follows `auditLogRetentionDays` |
+| Metrics time-series | Rolling rollups | Hourly/daily/weekly resolution |

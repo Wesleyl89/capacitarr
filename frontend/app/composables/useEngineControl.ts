@@ -1,12 +1,29 @@
 /**
  * Engine control composable — shared state for execution mode and run status.
  * Used by the navbar engine popover and dashboard engine activity section.
+ *
+ * Engine state updates arrive via SSE events (engine_start, engine_complete,
+ * engine_error) instead of polling. fetchStats() is kept for initial hydration
+ * on mount and after explicit user actions (mode change).
  */
 import type { WorkerStats, PreferenceSet } from '~/types/api';
+
+// Module-level flag: SSE handlers are registered once globally.
+let _sseRegistered = false;
+
+/**
+ * Reset the SSE registration flag. Used only in tests to allow fresh
+ * handler registration after state is cleared between test cases.
+ * @internal
+ */
+export function _resetSSERegistration() {
+  _sseRegistered = false;
+}
 
 export function useEngineControl() {
   const api = useApi();
   const { addToast } = useToast();
+  const { on } = useEventStream();
 
   const workerStats = useState<WorkerStats | null>('engineWorkerStats', () => null);
   const runNowLoading = ref(false);
@@ -39,31 +56,93 @@ export function useEngineControl() {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // SSE subscriptions — registered once globally
+  // -------------------------------------------------------------------------
+  if (import.meta.client && !_sseRegistered) {
+    _sseRegistered = true;
+
+    on('engine_start', (data: unknown) => {
+      const event = data as { executionMode?: string };
+      if (workerStats.value) {
+        workerStats.value = {
+          ...workerStats.value,
+          isRunning: true,
+          executionMode: event.executionMode || workerStats.value.executionMode,
+        };
+      }
+      prevIsRunning.value = true;
+    });
+
+    on('engine_complete', (data: unknown) => {
+      const event = data as {
+        evaluated?: number;
+        flagged?: number;
+        durationMs?: number;
+        executionMode?: string;
+      };
+      const wasRunning = prevIsRunning.value;
+
+      if (workerStats.value) {
+        // Note: freedBytes is NOT in the SSE event because deletions happen
+        // asynchronously in the backend DeletionService worker. The REST
+        // endpoint (/worker/stats) reads the real value from the DB after
+        // deletions complete. We keep the current value and let the next
+        // auto-refresh or explicit fetchStats() pick up the updated figure.
+        workerStats.value = {
+          ...workerStats.value,
+          isRunning: false,
+          lastRunEvaluated: event.evaluated ?? workerStats.value.lastRunEvaluated,
+          lastRunFlagged: event.flagged ?? workerStats.value.lastRunFlagged,
+          lastRunEpoch: Math.floor(Date.now() / 1000),
+          executionMode: event.executionMode || workerStats.value.executionMode,
+        };
+      }
+      prevIsRunning.value = false;
+      runNowLoading.value = false;
+
+      // Completion detection — toast + counter
+      if (wasRunning) {
+        const evaluated = event.evaluated ?? 0;
+        const flagged = event.flagged ?? 0;
+        addToast(
+          `Engine run complete — evaluated ${evaluated.toLocaleString()} items, flagged ${flagged.toLocaleString()}`,
+          'success',
+        );
+      }
+      // Always increment counter so dashboard refreshes data
+      runCompletionCounter.value++;
+    });
+
+    on('engine_error', (data: unknown) => {
+      const event = data as { error?: string };
+      if (workerStats.value) {
+        workerStats.value = {
+          ...workerStats.value,
+          isRunning: false,
+        };
+      }
+      prevIsRunning.value = false;
+      runNowLoading.value = false;
+      addToast(`Engine error: ${event.error || 'Unknown error'}`, 'error');
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // API methods
+  // -------------------------------------------------------------------------
+
+  /** Fetch current stats from the REST API (initial hydration / after mode change). */
   async function fetchStats() {
     try {
       const stats = (await api('/api/v1/worker/stats')) as WorkerStats;
       if (stats) {
-        const wasRunning = prevIsRunning.value;
         workerStats.value = stats;
-        const nowRunning = stats.isRunning === true;
-
-        // Detect run completion: was running → now idle
-        if (wasRunning && !nowRunning) {
-          const evaluated = stats.lastRunEvaluated ?? 0;
-          const flagged = stats.lastRunFlagged ?? 0;
-          addToast(
-            `Engine run complete — evaluated ${evaluated.toLocaleString()} items, flagged ${flagged.toLocaleString()}`,
-            'success',
-          );
-          // Signal completion so dashboard/other pages can refresh their data
-          runCompletionCounter.value++;
-        }
-
-        prevIsRunning.value = nowRunning;
+        prevIsRunning.value = stats.isRunning === true;
       }
     } catch (e) {
       // Silent — stats are a nice-to-have
-      console.warn('[useEngineControl] pollStats failed:', e);
+      console.warn('[useEngineControl] fetchStats failed:', e);
     }
   }
 
@@ -75,7 +154,7 @@ export function useEngineControl() {
         method: 'PUT',
         body: { ...currentPrefs, executionMode: mode },
       });
-      // Refresh stats to pick up the new mode
+      // Refresh stats to pick up the new mode immediately
       await fetchStats();
       addToast(`Execution mode set to ${modeLabel(mode)}`, 'success');
     } catch {
@@ -90,12 +169,10 @@ export function useEngineControl() {
     try {
       await api('/api/v1/engine/run', { method: 'POST' });
       addToast('Engine run triggered', 'info');
-      // Give the engine a moment, then refresh stats
-      await new Promise((r) => setTimeout(r, 2000));
-      await fetchStats();
+      // No delay or fetchStats needed — SSE engine_start/engine_complete events
+      // will update the UI reactively.
     } catch {
       addToast('Failed to trigger engine run', 'error');
-    } finally {
       runNowLoading.value = false;
     }
   }

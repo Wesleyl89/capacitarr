@@ -1,6 +1,6 @@
 # Service Layer, Event Bus, and Real-Time Activity
 
-**Status:** 🚧 In Progress (Phases 0–9, 11, 14 complete; Phases 10, 12–13, 15–16 remaining)
+**Status:** ✅ Complete (all 17 phases done)
 **Created:** 2026-03-05T18:55Z
 **Scope:** Full-stack architectural refactor (Go backend + Vue frontend)
 **Branch:** `feature/service-layer-event-bus` (created from `main`)
@@ -410,6 +410,15 @@ Remove dead: `EventEnginePaused`, `EventEngineResumed`
 **Tests:**
 - `backend/internal/events/activity_persister_test.go` — verify events become DB rows
 
+**Completion note (2026-03-06T0126Z):** The activity persister subscriber was created in the initial phase, but the actual replacement of 16 `db.LogActivity()` call sites was deferred until the bus + SSE infrastructure was proven end-to-end. Completed in a follow-up pass:
+- Replaced all `db.LogActivity()` calls with typed `bus.Publish()` in `poller.go` (3), `auth.go` (2), `preferences.go` (2), `rules.go` (3), `integrations.go` (6)
+- Threaded `*events.EventBus` through `RegisterAPIRoutes` → `RegisterAuthRoutes`, `RegisterIntegrationRoutes`, `RegisterRuleRoutes` → `RegisterPreferenceRoutes`
+- Threaded `*events.EventBus` through `poller.Start()` (stored as package-level var for use in `poll()`)
+- Removed `db.LogActivity()`, `db.LogActivityWithMetadata()`, and all `db.Event*` string constants from `internal/db/activity.go`
+- Updated `testutil.SetupTestServer()` to create and pass a test event bus
+- Updated `activity_test.go` to use string literals instead of deleted `db.Event*` constants
+- All 71 Go tests pass, `make ci` green
+
 ### Phase 3: Service Layer — Core Services ✅
 
 **Goal:** Extract business logic from route handlers into injectable services.
@@ -758,7 +767,7 @@ export function useEventStream() {
 - `Last-Event-ID` header on reconnection for event replay
 - Typed event handlers with TypeScript generics
 
-### Phase 10: Frontend — Replace Polling with SSE
+### Phase 10: Frontend — Replace Polling with SSE ✅
 
 **Changes to `useEngineControl.ts`:**
 - Remove `fetchStats()` polling loop
@@ -790,6 +799,16 @@ export function useEventStream() {
 - Query new `GET /api/v1/approval-queue` endpoint (not filtered audit endpoint)
 - Subscribe to SSE events for real-time queue updates (new items, removals after deletion)
 
+**Implementation notes:**
+- `useEventStream.ts` refactored to singleton pattern — module-level EventSource connection shared across all components. `useState` used for reactive `connected` state; handler map is module-level.
+- `app.vue` initializes SSE via `connectSSE()` on mount when authenticated, with a watcher to connect/disconnect on auth state changes.
+- `useEngineControl.ts` SSE handlers registered once via module-level `_sseRegistered` flag. `engine_start` sets `isRunning`, `engine_complete` updates all stats reactively + fires completion toast + increments counter, `engine_error` resets running state + shows error toast. `triggerRunNow()` no longer has a 2-second delay.
+- `EngineControlPopover.vue` simplified: polling loop (`startRunPolling`/`stopRunPolling`/`pollTimer`) removed entirely. Button calls `triggerRunNow` directly. Only `onMounted` → `fetchStats()` remains for initial hydration.
+- `index.vue` subscribes to all 34 event types via `sseOn` in `onMounted`, unsubscribes in `onUnmounted`. Each SSE event prepends a synthetic `ActivityEvent` to the feed (message from SSE payload). Activity fetch limit increased from 25 to 100. Approval queue SSE refresh on `engine_complete`, `deletion_success/failed`, and approval-related events. Auto-refresh timer kept for non-event data (disk groups, integrations, dashboard stats).
+- `useApprovalQueue.ts` SSE handlers registered once via module-level flag. `engine_complete`, `deletion_success`, `deletion_failed`, `approval_orphans_recovered`, `approval_bulk_unsnoozed` trigger queue refresh.
+- **Backend change:** SSE broadcaster now injects `message` field (from `EventMessage()`) into every SSE JSON payload, so the frontend receives human-readable messages without duplicating message formatting logic.
+- Also fixed pre-existing lint issues: gofmt on 5 files, revive export comments on `types.go` (68 methods), unused parameter in `bus_test.go`, staticcheck S1033 in `sse_broadcaster.go`, unused `PauseIcon` import in `index.vue`.
+
 ### Phase 11: Frontend — Audit Page Refactor ✅
 
 **Goal:** The `/audit` page becomes a clean history-only view. Approval queue items are no longer shown here — they live exclusively on the dashboard via `ApprovalQueueCard`.
@@ -816,7 +835,7 @@ export function useEventStream() {
 - New `ApprovalQueueItem` interface with `status: 'pending' | 'approved' | 'rejected'`
 - `AuditLog` → `AuditLogEntry` with `action: 'deleted' | 'dry_run' | 'dry_delete'`
 
-### Phase 12: Frontend — Icon/Color Mapping for All Events
+### Phase 12: Frontend — Icon/Color Mapping for All Events ✅
 
 Update `eventIcon()` and `eventIconClass()` in `index.vue`:
 
@@ -844,7 +863,7 @@ Remove icon/color entries for dead events: `engine_paused`, `engine_resumed`
 
 New imports from `lucide-vue-next`: `SlidersHorizontalIcon`, `AlarmClockOffIcon`, `DatabaseIcon`, `BellIcon`, `BellRingIcon`, `BellOffIcon`
 
-### Phase 13: Frontend — Connection State
+### Phase 13: Frontend — Connection State ✅
 
 **Changes to `ConnectionBanner.vue`:**
 - Use SSE `connected` state as primary connection indicator
@@ -870,7 +889,7 @@ Activity events are transient by design — they exist for real-time dashboard c
 | In-app notifications | `cron.go` | Daily | Delete older than `auditLogRetentionDays` (user pref) |
 | Time-series data (hourly/daily/weekly rollups) | `cron.go` | Hourly/Daily/Weekly/Monthly | Rollup + prune per resolution |
 
-### Phase 15: Test Audit
+### Phase 15: Test Audit ✅
 
 All existing tests are assumed stale. Every test file must be reviewed, rewritten, or deleted:
 
@@ -897,9 +916,44 @@ All existing tests are assumed stale. Every test file must be reviewed, rewritte
 - Frontend composable tests for `useEventStream`
 - Run `make ci` — full lint + test + security check pass
 
-### Phase 16: Documentation Overhaul
+**Completion note (2026-03-06T0514Z):** Full test audit completed. Created 10 new test files covering all new code:
+
+- **Service layer tests (8 files):**
+  - `services/approval_test.go` — 14 tests: approve, approve-not-pending, approve-not-found, reject, reject-not-pending, unsnooze, unsnooze-not-rejected, upsert-create, upsert-update, is-snoozed, bulk-unsnooze, bulk-unsnooze-empty, clean-expired-snoozes, recover-orphans. All verify both DB state changes and event bus publishing.
+  - `services/auditlog_test.go` — 5 tests: create, upsert-dry-run-create, upsert-dry-run-update, prune-older-than, prune-zero-keeps-forever.
+  - `services/settings_test.go` — 5 tests: get-preferences, update-preferences, update-preferences-mode-change (dual event verification), update-thresholds, update-thresholds-not-found.
+  - `services/engine_test.go` — 6 tests: trigger-run, trigger-run-already-running, trigger-run-channel-full, set-running, set-last-run-stats, get-stats-with-db-record.
+  - `services/integration_test.go` — 8 tests: create, update, update-not-found, delete, delete-not-found, publish-test-success, publish-test-failure.
+  - `services/auth_test.go` — 9 tests: login-success, login-wrong-password, login-user-not-found, change-password, change-password-wrong-current, change-username, change-username-wrong-password, generate-api-key, generate-api-key-user-not-found.
+  - `services/notification_channel_test.go` — 5 tests: create, update, update-not-found, delete, delete-not-found.
+  - `services/data_test.go` — 2 tests: reset (verifies all 6 table clears + disk group threshold preservation), reset-empty-db.
+- **Events tests (1 file):**
+  - `events/sse_broadcaster_test.go` — 9 tests: start-stop, broadcast-formats-sse, fan-out, client-buffer-full, ring-buffer-stores, replay-missed-events, replay-invalid-last-event-id, client-count, incrementing-event-ids.
+- **Route tests (1 file):**
+  - `routes/approval_test.go` — 10 tests: list-queue, list-filter-by-status, approve-item, approve-deletions-disabled (409), approve-not-found, approve-invalid-id, reject-item, unsnooze-item, unsnooze-not-rejected, requires-auth.
+- **Lint fix:** Extracted `EngineStatusStarted`/`EngineStatusAlreadyRunning` constants in `engine.go` (goconst).
+- `make ci` green: 0 lint issues, all Go tests pass (128 total), all frontend tests pass (71 total), 0 security vulnerabilities.
+
+### Phase 16: Documentation Overhaul ✅
 
 All documentation must be rewritten from scratch to match the new architecture. No references to old patterns (global `db.DB`, `LogActivity()`, combined audit table, polling).
+
+**Completion note (2026-03-06T1350Z):** Full documentation overhaul completed. All files updated to reflect the new service layer, event bus, SSE, and split database schema:
+
+- **New file:** `docs/architecture.md` — comprehensive architecture document with Mermaid diagrams covering service layer, event bus, SSE, database schema, frontend SSE integration, and project structure
+- **Rewritten:** `docs/api/examples.md` — all curl examples updated to new endpoints (`/audit-log`, `/approval-queue`, `/events`), added SSE, notifications, approval queue, engine history, and version check examples
+- **Rewritten:** `docs/api/workflows.md` — added Workflow 4 (SSE monitoring), Workflow 6 (approval queue management), updated all audit references to `audit-log`, improved engine run workflow
+- **Updated:** `docs/api/versioning.md` — added "Breaking Changes in v2.0.0" section documenting database, endpoint, schema, and architecture changes
+- **Updated:** `docs/api/README.md` — added SSE section, complete endpoint overview table, links to architecture docs
+- **Updated:** `docs/api/openapi.yaml` — replaced `/audit`, `/audit/grouped`, `/audit/{id}/approve` with `/audit-log`, `/audit-log/recent`, `/audit-log/grouped`, `/approval-queue`, `/approval-queue/{id}/approve|reject|unsnooze`, `/events`; replaced `AuditLog`/`AuditResponse` schemas with `AuditLogEntry`/`AuditLogResponse`/`ApprovalQueueItem`; updated `GroupedAuditResult` references
+- **Updated:** `docs/deployment.md` — added SSE proxy configuration section with nginx, Caddy, Traefik, and Cloudflare notes
+- **Updated:** `docs/configuration.md` — rewrote approval queue section for new `approval_queue` table, added data retention section, added SSE section
+- **Updated:** `docs/index.md` — added architecture and API documentation links
+- **Updated:** `CONTRIBUTING.md` — added architecture overview section with service layer/event bus/SSE summary, added code standards for services/events
+- **Updated:** `README.md` — expanded features list (SSE, approval queue, 34 event types, notifications, 22 languages), updated architecture diagram with event bus/SSE, updated project structure, added architecture link
+- **Updated:** `frontend/app/pages/help.vue` — updated tech stack badges (added SSE, Service Layer, Event Bus, SSE Broadcaster)
+- **Updated:** `site/app/pages/index.vue` — replaced "Notifications" feature card with "Real-Time Updates" (SSE), updated safety card description
+- `make ci` green: 0 lint issues, all Go tests pass (128 total), all frontend tests pass (71 total), 0 security vulnerabilities
 
 **OpenAPI spec (`docs/api/openapi.yaml`):**
 - Rewrite completely to match new endpoint structure:

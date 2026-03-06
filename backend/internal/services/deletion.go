@@ -32,6 +32,7 @@ type DeleteJob struct {
 type DeletionService struct {
 	db          *gorm.DB
 	bus         *events.EventBus
+	auditLog    *AuditLogService
 	queue       chan DeleteJob
 	rateLimiter *rate.Limiter
 	done        chan struct{}
@@ -43,10 +44,11 @@ type DeletionService struct {
 }
 
 // NewDeletionService creates a new DeletionService.
-func NewDeletionService(database *gorm.DB, bus *events.EventBus) *DeletionService {
+func NewDeletionService(database *gorm.DB, bus *events.EventBus, auditLog *AuditLogService) *DeletionService {
 	return &DeletionService{
 		db:          database,
 		bus:         bus,
+		auditLog:    auditLog,
 		queue:       make(chan DeleteJob, 500),
 		rateLimiter: rate.NewLimiter(rate.Every(3*time.Second), 1),
 		done:        make(chan struct{}),
@@ -132,9 +134,8 @@ func (s *DeletionService) processJob(job DeleteJob) {
 			ScoreDetails: string(factorsJSON),
 			Action:       db.ActionDryDelete,
 			SizeBytes:    job.Item.SizeBytes,
-			CreatedAt:    time.Now().UTC(),
 		}
-		if err := s.db.Create(&logEntry).Error; err != nil {
+		if err := s.auditLog.Create(logEntry); err != nil {
 			slog.Error("Failed to create audit log entry", "component", "services", "error", err)
 		}
 
@@ -188,9 +189,8 @@ func (s *DeletionService) processJob(job DeleteJob) {
 		ScoreDetails: string(factorsJSON),
 		Action:       db.ActionDeleted,
 		SizeBytes:    job.Item.SizeBytes,
-		CreatedAt:    time.Now().UTC(),
 	}
-	if err := s.db.Create(&logEntry).Error; err != nil {
+	if err := s.auditLog.Create(logEntry); err != nil {
 		slog.Error("Failed to create audit log entry", "component", "services", "error", err)
 	}
 

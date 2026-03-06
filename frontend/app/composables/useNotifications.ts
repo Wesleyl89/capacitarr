@@ -1,16 +1,20 @@
 import type { InAppNotification } from '~/types/api';
 
+// Module-level flag: SSE handlers registered once globally.
+let _notifSseRegistered = false;
+
 /**
  * Composable for in-app notification management.
- * Provides unread count polling, notification list, and read/mark-all/clear helpers.
+ * Uses SSE events as the primary trigger for refreshing the unread count
+ * (notification_sent, notification_delivery_failed, engine_complete, engine_error,
+ * deletion_success). Falls back to a single fetch on start for initial hydration.
  */
 export function useNotifications() {
   const api = useApi();
+  const { on: sseOn } = useEventStream();
   const unreadCount = useState<number>('notif-unread', () => 0);
   const notifications = useState<InAppNotification[]>('notif-list', () => []);
   const loading = useState<boolean>('notif-loading', () => false);
-
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Fetch unread count from the API */
   async function fetchUnreadCount() {
@@ -76,19 +80,31 @@ export function useNotifications() {
     }
   }
 
-  /** Start polling unread count every 30 seconds */
-  function startPolling() {
-    stopPolling();
-    fetchUnreadCount();
-    pollTimer = setInterval(fetchUnreadCount, 30_000);
+  // ---------------------------------------------------------------------------
+  // SSE subscriptions — registered once globally to refresh unread count
+  // when the backend creates in-app notifications via the event bus.
+  // ---------------------------------------------------------------------------
+  if (import.meta.client && !_notifSseRegistered) {
+    _notifSseRegistered = true;
+
+    const refreshCount = () => fetchUnreadCount();
+
+    // Events that trigger in-app notification creation on the backend
+    // (see notifications/subscriber.go — engine_complete, engine_error, deletion)
+    sseOn('engine_complete', refreshCount);
+    sseOn('engine_error', refreshCount);
+    sseOn('deletion_success', refreshCount);
+    sseOn('deletion_failed', refreshCount);
+    sseOn('notification_sent', refreshCount);
+    sseOn('notification_delivery_failed', refreshCount);
   }
 
-  /** Stop polling */
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+  /**
+   * Fetch initial unread count. Called once on mount by the Navbar.
+   * Ongoing updates arrive via SSE event subscriptions above.
+   */
+  function start() {
+    fetchUnreadCount();
   }
 
   return {
@@ -100,7 +116,6 @@ export function useNotifications() {
     markAsRead,
     markAllAsRead,
     clearAll,
-    startPolling,
-    stopPolling,
+    start,
   };
 }

@@ -3,7 +3,7 @@
     <!-- Header -->
     <div
       data-slot="page-header"
-      class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4"
+      class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
       <div>
         <h1 class="text-3xl font-bold tracking-tight">

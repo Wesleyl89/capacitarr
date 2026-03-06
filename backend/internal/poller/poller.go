@@ -8,53 +8,64 @@ import (
 	"time"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/events"
 	"capacitarr/internal/integrations"
-	"capacitarr/internal/notifications"
+	"capacitarr/internal/services"
 
 	"gorm.io/gorm"
 )
 
-// RunNowCh allows triggering an immediate engine evaluation cycle from the API.
-var RunNowCh = make(chan struct{}, 1)
+// Poller orchestrates periodic media library polling and capacity evaluation.
+// All state is on the struct — no package-level globals.
+type Poller struct {
+	reg  *services.Registry
+	done chan struct{}
 
-// pollRunning prevents concurrent poll() executions when a manual "Run Now"
-// overlaps with a ticker-triggered poll.
-var pollRunning atomic.Bool
+	// Per-run metrics (reset each engine cycle, synced to EngineService at the end)
+	lastRunEvaluated int64
+	lastRunFlagged   int64
+	lastRunProtected int64
+}
 
-// Start begins the continuous polling loop and returns a stop function.
-// It queries all enabled integrations, fetches disk space for media root folders only,
-// updates DiskGroups, and records a LibraryHistory snapshot per disk group.
-// The poll interval is read from the database on each cycle, allowing dynamic
-// reconfiguration without restart.
-func Start() func() {
-	done := make(chan struct{})
+// New creates a new Poller bound to the given service registry.
+func New(reg *services.Registry) *Poller {
+	return &Poller{
+		reg:  reg,
+		done: make(chan struct{}),
+	}
+}
+
+// Start begins the continuous polling loop. Call Stop() to terminate.
+func (p *Poller) Start() {
 	go func() {
-		timer := time.NewTimer(getPollInterval())
+		timer := time.NewTimer(p.getPollInterval())
 		defer timer.Stop()
 		for {
 			select {
 			case <-timer.C:
-				safePoll()
-				timer.Reset(getPollInterval())
-			case <-RunNowCh:
+				p.safePoll()
+				timer.Reset(p.getPollInterval())
+			case <-p.reg.Engine.RunNowCh:
 				slog.Info("Manual run triggered via API", "component", "poller")
-				safePoll()
+				p.safePoll()
 				// Don't reset the timer — let the next scheduled tick proceed normally
-			case <-done:
+			case <-p.done:
 				return
 			}
 		}
 	}()
-	return func() {
-		close(done)
-	}
+}
+
+// Stop signals the poller goroutine to exit.
+func (p *Poller) Stop() {
+	close(p.done)
 }
 
 // getPollInterval reads PollIntervalSeconds from the database preference set.
 // Falls back to 300s (5 min) if not set, and enforces a 30s minimum.
-func getPollInterval() time.Duration {
+func (p *Poller) getPollInterval() time.Duration {
 	var prefs db.PreferenceSet
-	if err := db.DB.First(&prefs, 1).Error; err != nil {
+	if err := p.reg.DB.First(&prefs, 1).Error; err != nil {
 		return 5 * time.Minute
 	}
 	secs := prefs.PollIntervalSeconds
@@ -64,58 +75,57 @@ func getPollInterval() time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
-// StopWorker closes the delete queue channel so the deletion worker can drain and exit.
-func StopWorker() {
-	close(deleteQueue)
-}
-
 // safePoll wraps poll() with panic recovery so a single failing cycle
 // doesn't crash the entire poller goroutine.
-func safePoll() {
+func (p *Poller) safePoll() {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("Panic recovered in poll cycle", "component", "poller", "panic", r)
-			pollRunning.Store(false) // ensure the lock is released
+			p.reg.Engine.SetRunning(false) // ensure the lock is released
 		}
 	}()
-	poll()
+	p.poll()
 }
 
-func poll() {
-	if !pollRunning.CompareAndSwap(false, true) {
+func (p *Poller) poll() {
+	if p.reg.Engine.IsRunning() {
 		slog.Info("Skipping poll — previous run still in progress", "component", "poller")
 		return
 	}
-	defer pollRunning.Store(false)
+	p.reg.Engine.SetRunning(true)
+	defer p.reg.Engine.SetRunning(false)
 
-	// Recover any approvals orphaned by a previous shutdown before evaluating
-	RecoverOrphanedApprovals()
+	database := p.reg.DB
+	bus := p.reg.Bus
 
 	pollStart := time.Now()
 
+	// Clean expired snoozes at the start of each cycle — resets rejected items
+	// with expired snoozed_until back to pending so they're re-evaluated.
+	if count, err := p.reg.Approval.CleanExpiredSnoozes(); err != nil {
+		slog.Error("Failed to clean expired snoozes", "component", "poller", "error", err)
+	} else if count > 0 {
+		slog.Info("Cleaned expired snoozes at cycle start", "component", "poller", "count", count)
+	}
+
 	// Increment lifetime engine runs counter (atomic DB update)
-	db.DB.Model(&db.LifetimeStats{}).Where("id = 1").
+	database.Model(&db.LifetimeStats{}).Where("id = 1").
 		UpdateColumn("total_engine_runs", gorm.Expr("total_engine_runs + ?", 1))
 
 	// Reset per-run counters at the start of each poll cycle
-	atomic.StoreInt64(&lastRunEvaluated, 0)
-	atomic.StoreInt64(&lastRunFlagged, 0)
-	atomic.StoreInt64(&lastRunProtected, 0)
+	atomic.StoreInt64(&p.lastRunEvaluated, 0)
+	atomic.StoreInt64(&p.lastRunFlagged, 0)
+	atomic.StoreInt64(&p.lastRunProtected, 0)
 
 	var configs []db.IntegrationConfig
-	if err := db.DB.Where("enabled = ?", true).Find(&configs).Error; err != nil {
+	if err := database.Where("enabled = ?", true).Find(&configs).Error; err != nil {
 		slog.Error("Failed to load integrations", "component", "poller", "operation", "load_integrations", "error", err)
-		notifications.Dispatch(notifications.NotificationEvent{
-			Type:    notifications.EventEngineError,
-			Title:   "Engine Error",
-			Message: fmt.Sprintf("Failed to load integrations: %v", err),
-		})
-		db.LogActivity(db.DB, db.EventEngineError, fmt.Sprintf("Engine error: failed to load integrations: %v", err))
+		bus.Publish(events.EngineErrorEvent{Error: fmt.Sprintf("failed to load integrations: %v", err)})
 		return
 	}
 
 	var prefs db.PreferenceSet
-	if err := db.DB.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+	if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
 		slog.Error("Failed to load preferences", "component", "poller", "operation", "load_preferences", "error", err)
 		return
 	}
@@ -125,25 +135,17 @@ func poll() {
 		RunAt:         pollStart,
 		ExecutionMode: prefs.ExecutionMode,
 	}
-	if err := db.DB.Create(&runStats).Error; err != nil {
+	if err := database.Create(&runStats).Error; err != nil {
 		slog.Error("Failed to create engine run stats", "component", "poller", "operation", "create_stats", "error", err)
 	}
 
-	// Log engine start activity event
-	db.LogActivity(db.DB, db.EventEngineStart, fmt.Sprintf("Engine run started in %s mode", prefs.ExecutionMode))
+	// Publish engine start event
+	bus.Publish(events.EngineStartEvent{ExecutionMode: prefs.ExecutionMode})
 
 	slog.Debug("Poll cycle starting", "component", "poller",
 		"enabledIntegrations", len(configs),
 		"pollInterval", prefs.PollIntervalSeconds,
 		"executionMode", prefs.ExecutionMode)
-
-	// Prune old audit logs
-	if prefs.AuditLogRetentionDays > 0 {
-		cutoff := time.Now().AddDate(0, 0, -prefs.AuditLogRetentionDays)
-		if err := db.DB.Where("created_at < ?", cutoff).Delete(&db.AuditLogEntry{}).Error; err != nil {
-			slog.Error("Failed to prune old audit logs", "component", "poller", "operation", "prune_audit_logs", "error", err)
-		}
-	}
 
 	if len(configs) == 0 {
 		slog.Debug("No enabled integrations, skipping poll", "component", "poller")
@@ -151,7 +153,7 @@ func poll() {
 	}
 
 	// Fetch media items, disk space, and enrichment clients from all integrations
-	fetched := fetchAllIntegrations(configs)
+	fetched := fetchAllIntegrations(configs, database)
 
 	// Enrich items with watch history and request data
 	enrichItems(fetched.allItems, fetched.enrichment)
@@ -166,16 +168,16 @@ func poll() {
 
 		// Upsert DiskGroup
 		var group db.DiskGroup
-		result := db.DB.Where("mount_path = ?", mountPath).First(&group)
+		result := database.Where("mount_path = ?", mountPath).First(&group)
 		if result.Error != nil {
 			group = db.DiskGroup{
 				MountPath:  mountPath,
 				TotalBytes: disk.TotalBytes,
 				UsedBytes:  usedBytes,
 			}
-			db.DB.Create(&group)
+			database.Create(&group)
 		} else {
-			db.DB.Model(&group).Updates(map[string]interface{}{
+			database.Model(&group).Updates(map[string]interface{}{
 				"total_bytes": disk.TotalBytes,
 				"used_bytes":  usedBytes,
 			})
@@ -192,27 +194,27 @@ func poll() {
 			Resolution:    "raw",
 			DiskGroupID:   &group.ID,
 		}
-		if err := db.DB.Create(&record).Error; err != nil {
+		if err := database.Create(&record).Error; err != nil {
 			slog.Error("Failed to save capacity record", "component", "poller", "operation", "save_capacity",
 				"mount", mountPath, "error", err)
 		}
 
 		// Evaluate and trigger cleanup if threshold breached
-		evaluateAndCleanDisk(group, fetched.allItems, fetched.serviceClients, runStats.ID)
+		p.evaluateAndCleanDisk(group, fetched.allItems, fetched.serviceClients, runStats.ID)
 	}
 
 	// Clean up orphaned disk groups that are no longer media mounts
 	if len(mediaMounts) > 0 {
 		var allGroups []db.DiskGroup
-		if err := db.DB.Find(&allGroups).Error; err != nil {
+		if err := database.Find(&allGroups).Error; err != nil {
 			slog.Error("Failed to fetch disk groups for orphan cleanup", "component", "poller", "error", err)
 		}
 		for _, g := range allGroups {
 			if !mediaMounts[g.MountPath] {
 				slog.Info("Removing orphaned disk group", "component", "poller",
 					"mount", g.MountPath, "id", g.ID)
-				db.DB.Where("disk_group_id = ?", g.ID).Delete(&db.LibraryHistory{})
-				db.DB.Delete(&g)
+				database.Where("disk_group_id = ?", g.ID).Delete(&db.LibraryHistory{})
+				database.Delete(&g)
 			}
 		}
 	}
@@ -221,37 +223,33 @@ func poll() {
 	// Note: freed_bytes is NOT set here — it is incremented by the deletion worker
 	// after each successful DeleteMediaItem() call, ensuring it only reflects actual
 	// bytes freed (not flagged/queued bytes that were never deleted).
-	db.DB.Model(&db.EngineRunStats{}).Where("id = ?", runStats.ID).Updates(map[string]interface{}{
-		"evaluated":   int(atomic.LoadInt64(&lastRunEvaluated)),
-		"flagged":     int(atomic.LoadInt64(&lastRunFlagged)),
+	evaluated := atomic.LoadInt64(&p.lastRunEvaluated)
+	flagged := atomic.LoadInt64(&p.lastRunFlagged)
+	protected := atomic.LoadInt64(&p.lastRunProtected)
+
+	database.Model(&db.EngineRunStats{}).Where("id = ?", runStats.ID).Updates(map[string]interface{}{
+		"evaluated":   int(evaluated),
+		"flagged":     int(flagged),
 		"duration_ms": time.Since(pollStart).Milliseconds(),
 	})
 
-	// Notify: engine cycle complete
-	evaluated := atomic.LoadInt64(&lastRunEvaluated)
-	flagged := atomic.LoadInt64(&lastRunFlagged)
-	notifications.Dispatch(notifications.NotificationEvent{
-		Type:    notifications.EventEngineComplete,
-		Title:   "Engine Cycle Complete",
-		Message: fmt.Sprintf("Evaluated %d items, flagged %d for removal in %s", evaluated, flagged, time.Since(pollStart).String()),
-		Fields: map[string]string{
-			"Evaluated": fmt.Sprintf("%d", evaluated),
-			"Flagged":   fmt.Sprintf("%d", flagged),
-			"Duration":  time.Since(pollStart).String(),
-			"Mode":      prefs.ExecutionMode,
-		},
-	})
+	// Sync per-run stats to EngineService for API consumers
+	p.reg.Engine.SetLastRunStats(int(evaluated), int(flagged), int(protected))
 
-	// Log engine complete activity event
-	db.LogActivity(db.DB, db.EventEngineComplete,
-		fmt.Sprintf("Engine run completed: evaluated %d, flagged %d", evaluated, flagged))
+	// Publish engine complete event
+	bus.Publish(events.EngineCompleteEvent{
+		Evaluated:     int(evaluated),
+		Flagged:       int(flagged),
+		DurationMs:    time.Since(pollStart).Milliseconds(),
+		ExecutionMode: prefs.ExecutionMode,
+	})
 
 	slog.Debug("Poll cycle complete", "component", "poller",
 		"duration", time.Since(pollStart).String(),
 		"totalItems", len(fetched.allItems),
 		"evaluated", evaluated,
 		"flagged", flagged,
-		"protected", atomic.LoadInt64(&lastRunProtected))
+		"protected", protected)
 }
 
 // findMediaMounts returns only the mount paths that are the most specific match
@@ -303,24 +301,4 @@ func findMediaMounts(diskMap map[string]integrations.DiskSpace, rootFolders map[
 	}
 
 	return mediaMounts
-}
-
-// CreateClient constructs an integration client based on the integration type.
-// Exported for use by the approval route handler to reconstruct clients from
-// stored IntegrationConfig records.
-func CreateClient(intType, url, apiKey string) integrations.Integration {
-	switch intType {
-	case "sonarr":
-		return integrations.NewSonarrClient(url, apiKey)
-	case "radarr":
-		return integrations.NewRadarrClient(url, apiKey)
-	case "lidarr":
-		return integrations.NewLidarrClient(url, apiKey)
-	case "readarr":
-		return integrations.NewReadarrClient(url, apiKey)
-	case "plex":
-		return integrations.NewPlexClient(url, apiKey)
-	default:
-		return nil
-	}
 }

@@ -663,47 +663,7 @@ func TestMatchesRule_TimeInLibrary_DateOperators(t *testing.T) {
 	}
 }
 
-func TestApplyRules_LegacyFallback(t *testing.T) {
-	now := time.Now()
-	item := integrations.MediaItem{
-		Title:         "The Matrix",
-		Rating:        8.5,
-		AddedAt:       &now,
-		IntegrationID: 1,
-	}
-
-	tests := []struct {
-		name     string
-		rule     db.CustomRule
-		isAbs    bool
-		modifier float64
-	}{
-		{
-			name:     "Legacy absolute protect",
-			isAbs:    true,
-			modifier: 0.0,
-		},
-		{
-			name:     "Legacy strong target",
-			isAbs:    false,
-			modifier: 3.0,
-		},
-		{
-			name:     "Legacy default protect",
-			isAbs:    false,
-			modifier: 0.5,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			isAbs, modifier, _, _ := applyRules(item, []db.CustomRule{tc.rule})
-			if isAbs != tc.isAbs {
-				t.Errorf("Expected absolute protect %v, got %v", tc.isAbs, isAbs)
-			}
-			if modifier < tc.modifier-0.01 || modifier > tc.modifier+0.01 {
-				t.Errorf("Expected modifier %v, got %v", tc.modifier, modifier)
-			}
-		})
-	}
-}
+// TestApplyRules_LegacyFallback was removed because the deprecated type/intensity
+// fields were removed in the Phase 0 schema rewrite. Rules now require the
+// effect field (always_keep, prefer_keep, lean_keep, lean_remove, prefer_remove,
+// always_remove). Legacy type/intensity fallback logic no longer exists.

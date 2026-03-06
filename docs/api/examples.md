@@ -35,9 +35,9 @@ curl -s "$CAPACITARR_URL/version" | jq
 
 ```json
 {
-  "version": "1.2.0",
+  "version": "2.0.0",
   "commit": "a1b2c3d",
-  "buildDate": "2026-03-01T12:00:00Z"
+  "buildDate": "2026-03-06T12:00:00Z"
 }
 ```
 
@@ -248,6 +248,31 @@ If an engine run is already in progress or queued:
 }
 ```
 
+### Get engine run history
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/engine/history?limit=20" | jq
+```
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 42,
+      "runAt": "2026-03-06T12:00:00Z",
+      "evaluated": 97,
+      "flagged": 12,
+      "deleted": 3,
+      "freedBytes": 15032385536,
+      "executionMode": "approval",
+      "durationMs": 1234
+    }
+  ]
+}
+```
+
 ---
 
 ## Integrations
@@ -268,7 +293,7 @@ curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "url": "http://sonarr:8989",
     "apiKey": "abc123...",
     "enabled": true,
-    "lastSync": "2026-03-01T12:00:00Z"
+    "lastSync": "2026-03-06T12:00:00Z"
   }
 ]
 ```
@@ -334,11 +359,11 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 ### Trigger integration sync
 
-Pull the latest media data from an integration.
+Pull the latest media data from all integrations.
 
 ```bash
 curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/integrations/1/sync" | jq
+  "$CAPACITARR_URL/integrations/sync" | jq
 ```
 
 ---
@@ -383,7 +408,7 @@ curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "field": "title",
     "operator": "contains",
     "value": "Star Wars",
-    "effect": "protect",
+    "effect": "always_keep",
     "integrationId": null
   }
 ]
@@ -399,16 +424,9 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "field": "title",
     "operator": "contains",
     "value": "Star Wars",
-    "effect": "protect",
+    "effect": "always_keep",
     "integrationId": null
   }' | jq
-```
-
-### Get a protection rule
-
-```bash
-curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/custom-rules/1" | jq
 ```
 
 ### Update a protection rule
@@ -421,9 +439,18 @@ curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "field": "title",
     "operator": "contains",
     "value": "Star Trek",
-    "effect": "protect",
+    "effect": "always_keep",
     "integrationId": null
   }' | jq
+```
+
+### Reorder rules
+
+```bash
+curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  -H "Content-Type: application/json" \
+  "$CAPACITARR_URL/custom-rules/reorder" \
+  -d '{"ids":[3,1,2]}' | jq
 ```
 
 ### Delete a protection rule
@@ -512,24 +539,91 @@ curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 ---
 
-## Audit
+## Approval Queue
 
-### List audit entries (paginated)
+### List approval queue items
 
 ```bash
 curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/audit?limit=20&offset=0" | jq
+  "$CAPACITARR_URL/approval-queue" | jq
 ```
 
 ```json
 [
   {
-    "id": 42,
-    "action": "engine_run",
-    "detail": "Removed 3 items, reclaimed 128 GB",
-    "timestamp": "2026-03-01T03:00:00Z"
+    "id": 1,
+    "mediaName": "Example Show S01",
+    "mediaType": "season",
+    "reason": "Score: 0.85",
+    "scoreDetails": "[{\"factor\":\"watchHistory\",\"rawScore\":1.0,\"weight\":10}]",
+    "sizeBytes": 42949672960,
+    "integrationId": 1,
+    "externalId": "12345",
+    "status": "pending",
+    "createdAt": "2026-03-06T12:00:00Z",
+    "updatedAt": "2026-03-06T12:00:00Z"
   }
 ]
+```
+
+**Query parameters:**
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `status` | `pending`, `approved`, `rejected` | — | Filter by status |
+
+### Approve an item
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/approval-queue/1/approve" | jq
+```
+
+> **Note:** Returns `409 Conflict` if deletions are disabled in settings. Enable deletions before approving items.
+
+### Reject (snooze) an item
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/approval-queue/1/reject" | jq
+```
+
+### Unsnooze a rejected item
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/approval-queue/1/unsnooze" | jq
+```
+
+---
+
+## Audit Log
+
+The audit log stores a permanent, append-only history of deletions and dry-runs. It does not contain approval queue items — those live in the approval queue.
+
+### List audit log entries (paginated)
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/audit-log?limit=20&offset=0" | jq
+```
+
+```json
+{
+  "data": [
+    {
+      "id": 42,
+      "mediaName": "Example Show S01",
+      "mediaType": "season",
+      "reason": "Score: 0.85",
+      "action": "deleted",
+      "sizeBytes": 42949672960,
+      "integrationId": 1,
+      "createdAt": "2026-03-06T12:00:00Z"
+    }
+  ],
+  "total": 150
+}
 ```
 
 **Pagination parameters:**
@@ -538,21 +632,171 @@ curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
 |-----------|---------|-------------|
 | `limit` | `20` | Number of entries to return |
 | `offset` | `0` | Number of entries to skip |
+| `action` | — | Filter by action: `deleted`, `dry_run`, `dry_delete` |
 
-### Get activity timeline
-
-Returns data points for graphing activity over time.
+### Get recent audit log entries
 
 ```bash
 curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/audit/activity?days=30" | jq
+  "$CAPACITARR_URL/audit-log/recent?limit=10" | jq
 ```
 
-### Get grouped audit entries
+### Get grouped audit log entries
 
 ```bash
 curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/audit/grouped" | jq
+  "$CAPACITARR_URL/audit-log/grouped" | jq
+```
+
+---
+
+## Activity Events
+
+### Get recent activity events
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/activity/recent?limit=100" | jq
+```
+
+```json
+[
+  {
+    "id": 1,
+    "eventType": "engine_complete",
+    "message": "Engine run completed: evaluated 97, flagged 12",
+    "metadata": "{\"evaluated\":97,\"flagged\":12}",
+    "createdAt": "2026-03-06T12:01:00Z"
+  }
+]
+```
+
+---
+
+## SSE (Server-Sent Events)
+
+### Subscribe to real-time events
+
+Connect to the SSE endpoint for real-time event streaming. This is a long-lived HTTP connection.
+
+```bash
+curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/events"
+```
+
+```
+id: 1741199820-001
+event: engine_start
+data: {"message":"Engine run started in approval mode","executionMode":"approval"}
+
+id: 1741199825-002
+event: engine_complete
+data: {"message":"Engine run completed: evaluated 97, flagged 12","evaluated":97,"flagged":12}
+
+id: 1741199826-003
+event: deletion_success
+data: {"message":"Deleted: Beacon 23 (4.72 GB freed)","title":"Beacon 23","sizeBytes":5069636198}
+```
+
+To resume from a specific event after disconnection, pass the `Last-Event-ID` header:
+
+```bash
+curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  -H "Last-Event-ID: 1741199825-002" \
+  "$CAPACITARR_URL/events"
+```
+
+See the [Architecture](../architecture.md) documentation for the complete list of 34 event types.
+
+---
+
+## Notifications
+
+### List notification channels
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/channels" | jq
+```
+
+### Create a notification channel
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  -H "Content-Type: application/json" \
+  "$CAPACITARR_URL/notifications/channels" \
+  -d '{
+    "type": "discord",
+    "name": "My Discord",
+    "webhookUrl": "https://discord.com/api/webhooks/...",
+    "enabled": true,
+    "onThresholdBreach": true,
+    "onDeletionExecuted": true,
+    "onEngineError": true,
+    "onEngineComplete": false
+  }' | jq
+```
+
+### Update a notification channel
+
+```bash
+curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  -H "Content-Type: application/json" \
+  "$CAPACITARR_URL/notifications/channels/1" \
+  -d '{
+    "name": "My Discord (updated)",
+    "enabled": true,
+    "onEngineComplete": true
+  }' | jq
+```
+
+### Delete a notification channel
+
+```bash
+curl -s -X DELETE -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/channels/1" | jq
+```
+
+### Test a notification channel
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/channels/1/test" | jq
+```
+
+### List in-app notifications
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications" | jq
+```
+
+### Get unread notification count
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/unread-count" | jq
+```
+
+### Mark a notification as read
+
+```bash
+curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/1/read" | jq
+```
+
+### Mark all notifications as read
+
+```bash
+curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications/read-all" | jq
+```
+
+### Clear all notifications
+
+```bash
+curl -s -X DELETE -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/notifications" | jq
 ```
 
 ---
@@ -561,9 +805,22 @@ curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 ### Reset application data
 
-**Danger:** This deletes all application data including integrations, rules, metrics, and audit history. This action is irreversible.
+**Danger:** This deletes all application data including integrations, rules, metrics, approval queue, and audit history. Lifetime stats and disk group thresholds are preserved. This action is irreversible.
 
 ```bash
 curl -s -X DELETE -H "X-Api-Key: $CAPACITARR_API_KEY" \
   "$CAPACITARR_URL/data/reset" | jq
 ```
+
+---
+
+## Version Check
+
+### Check for updates
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/version/check" | jq
+```
+
+Results are cached for 6 hours.

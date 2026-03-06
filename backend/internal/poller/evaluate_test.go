@@ -9,12 +9,15 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
+	"capacitarr/internal/config"
 	"capacitarr/internal/db"
+	"capacitarr/internal/events"
+	"capacitarr/internal/services"
 )
 
 // setupEvaluateTestDB creates an in-memory SQLite database with migrations applied,
-// seeds default preferences, and sets the global db.DB pointer.
-func setupEvaluateTestDB(t *testing.T) *gorm.DB {
+// seeds default preferences, and returns the database and a service registry.
+func setupEvaluateTestDB(t *testing.T) (*gorm.DB, *services.Registry) {
 	t.Helper()
 
 	database, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{
@@ -28,6 +31,9 @@ func setupEvaluateTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("Failed to get underlying sql.DB: %v", err)
 	}
+
+	// Single connection for in-memory DB consistency
+	sqlDB.SetMaxOpenConns(1)
 
 	if err := db.RunMigrations(sqlDB); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
@@ -43,100 +49,117 @@ func setupEvaluateTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to seed preferences: %v", err)
 	}
 
-	db.DB = database
-	return database
+	// Seed a default integration (required for approval_queue FK constraint)
+	integration := db.IntegrationConfig{
+		Type:    "radarr",
+		Name:    "Test Radarr",
+		URL:     "http://localhost:7878",
+		APIKey:  "test-api-key",
+		Enabled: true,
+	}
+	if err := database.Create(&integration).Error; err != nil {
+		t.Fatalf("Failed to seed integration: %v", err)
+	}
+
+	bus := events.NewEventBus()
+	t.Cleanup(func() { bus.Close() })
+	cfg := &config.Config{JWTSecret: "test"}
+	reg := services.NewRegistry(database, bus, cfg)
+
+	return database, reg
 }
 
 // TestApprovalDedup_SingleEntry verifies that running the approval dedup logic
-// twice for the same media item produces only one "Queued for Approval" audit
+// twice for the same media item produces only one "pending" approval queue
 // entry, with the second run updating the existing entry rather than creating
 // a duplicate.
 func TestApprovalDedup_SingleEntry(t *testing.T) {
-	database := setupEvaluateTestDB(t)
+	database, reg := setupEvaluateTestDB(t)
 
 	mediaName := "Adventure Time - Season 1"
 	mediaType := "season"
-	actionName := "Queued for Approval"
 	integrationID := uint(1)
 
 	// Simulate first engine run: create initial entry
-	firstEntry := db.AuditLogEntry{
+	firstEntry := db.ApprovalQueueItem{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 5.50 (high score)",
 		ScoreDetails:  `[{"name":"size","contribution":3.0},{"name":"age","contribution":2.5}]`,
-		Action:        actionName,
+		Status:        "pending",
 		SizeBytes:     1000000000,
-		IntegrationID: &integrationID,
+		IntegrationID: integrationID,
+		ExternalID:    "ext-1",
 		CreatedAt:     time.Now().Add(-1 * time.Hour),
+		UpdatedAt:     time.Now().Add(-1 * time.Hour),
 	}
 
 	// Run the dedup logic (mirrors evaluate.go approval dedup path)
-	var existing db.AuditLogEntry
-	result := db.DB.Where(
-		"media_name = ? AND media_type = ? AND action = ?",
-		mediaName, mediaType, actionName,
+	var existing db.ApprovalQueueItem
+	result := reg.DB.Where(
+		"media_name = ? AND media_type = ? AND status = ?",
+		mediaName, mediaType, "pending",
 	).First(&existing)
 	if result.Error == nil {
-		db.DB.Model(&existing).Updates(map[string]interface{}{
+		reg.DB.Model(&existing).Updates(map[string]interface{}{
 			"reason":         firstEntry.Reason,
 			"score_details":  firstEntry.ScoreDetails,
 			"size_bytes":     firstEntry.SizeBytes,
-			"created_at":     firstEntry.CreatedAt,
-			"external_id":    firstEntry.IntegrationID,
 			"integration_id": firstEntry.IntegrationID,
+			"external_id":    firstEntry.ExternalID,
 		})
 	} else {
-		db.DB.Create(&firstEntry)
+		reg.DB.Create(&firstEntry)
 	}
 
 	// Verify: one entry exists
 	var count int64
-	database.Model(&db.AuditLogEntry{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
+	database.Model(&db.ApprovalQueueItem{}).Where("media_name = ? AND status = ?", mediaName, "pending").Count(&count)
 	if count != 1 {
-		t.Fatalf("Expected 1 audit entry after first run, got %d", count)
+		t.Fatalf("Expected 1 approval queue entry after first run, got %d", count)
 	}
 
 	// Simulate second engine run: updated score and size
-	secondEntry := db.AuditLogEntry{
+	secondEntry := db.ApprovalQueueItem{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 6.20 (higher score)",
 		ScoreDetails:  `[{"name":"size","contribution":3.5},{"name":"age","contribution":2.7}]`,
-		Action:        actionName,
+		Status:        "pending",
 		SizeBytes:     1100000000,
-		IntegrationID: &integrationID,
+		IntegrationID: integrationID,
+		ExternalID:    "ext-1",
 		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	// Run the dedup logic again (should update, not create)
-	var existing2 db.AuditLogEntry
-	result2 := db.DB.Where(
-		"media_name = ? AND media_type = ? AND action = ?",
-		mediaName, mediaType, actionName,
+	var existing2 db.ApprovalQueueItem
+	result2 := reg.DB.Where(
+		"media_name = ? AND media_type = ? AND status = ?",
+		mediaName, mediaType, "pending",
 	).First(&existing2)
 	if result2.Error == nil {
-		db.DB.Model(&existing2).Updates(map[string]interface{}{
+		reg.DB.Model(&existing2).Updates(map[string]interface{}{
 			"reason":         secondEntry.Reason,
 			"score_details":  secondEntry.ScoreDetails,
 			"size_bytes":     secondEntry.SizeBytes,
-			"created_at":     secondEntry.CreatedAt,
-			"external_id":    secondEntry.IntegrationID,
 			"integration_id": secondEntry.IntegrationID,
+			"external_id":    secondEntry.ExternalID,
 		})
 	} else {
-		db.DB.Create(&secondEntry)
+		reg.DB.Create(&secondEntry)
 	}
 
 	// Verify: still only one entry
-	database.Model(&db.AuditLogEntry{}).Where("media_name = ? AND action = ?", mediaName, actionName).Count(&count)
+	database.Model(&db.ApprovalQueueItem{}).Where("media_name = ? AND status = ?", mediaName, "pending").Count(&count)
 	if count != 1 {
-		t.Errorf("Expected 1 audit entry after second run (dedup), got %d", count)
+		t.Errorf("Expected 1 approval queue entry after second run (dedup), got %d", count)
 	}
 
 	// Verify: the entry was updated with the new values
-	var updated db.AuditLogEntry
-	database.Where("media_name = ? AND action = ?", mediaName, actionName).First(&updated)
+	var updated db.ApprovalQueueItem
+	database.Where("media_name = ? AND status = ?", mediaName, "pending").First(&updated)
 	if updated.Reason != "Score: 6.20 (higher score)" {
 		t.Errorf("Expected updated reason, got %q", updated.Reason)
 	}
@@ -146,62 +169,65 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 }
 
 // TestApprovalDedup_DoesNotTouchApproved verifies that the dedup logic does
-// NOT overwrite entries whose action has been changed to "Approved" by the user.
+// NOT overwrite entries whose status has been changed to "approved" by the user.
 func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
-	database := setupEvaluateTestDB(t)
+	database, reg := setupEvaluateTestDB(t)
 
 	mediaName := "Breaking Bad - Season 1"
 	mediaType := "season"
 	integrationID := uint(1)
 
 	// Create an entry that was approved by the user
-	approvedEntry := db.AuditLogEntry{
+	approvedEntry := db.ApprovalQueueItem{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 4.00 (approved)",
 		ScoreDetails:  `[]`,
-		Action:        "Approved",
+		Status:        "approved",
 		SizeBytes:     500000000,
-		IntegrationID: &integrationID,
+		IntegrationID: integrationID,
+		ExternalID:    "ext-2",
 		CreatedAt:     time.Now().Add(-30 * time.Minute),
+		UpdatedAt:     time.Now().Add(-30 * time.Minute),
 	}
 	database.Create(&approvedEntry)
 
 	// Now simulate the engine trying to re-queue this item for approval
-	newEntry := db.AuditLogEntry{
+	newEntry := db.ApprovalQueueItem{
 		MediaName:     mediaName,
 		MediaType:     mediaType,
 		Reason:        "Score: 4.50 (re-evaluated)",
 		ScoreDetails:  `[{"name":"size","contribution":4.5}]`,
-		Action:        "Queued for Approval",
+		Status:        "pending",
 		SizeBytes:     550000000,
-		IntegrationID: &integrationID,
+		IntegrationID: integrationID,
+		ExternalID:    "ext-2",
 		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
-	// Run the approval dedup logic (WHERE action = "Queued for Approval")
-	var existing db.AuditLogEntry
-	result := db.DB.Where(
-		"media_name = ? AND media_type = ? AND action = ?",
-		mediaName, mediaType, "Queued for Approval",
+	// Run the approval dedup logic (WHERE status = "pending")
+	var existing db.ApprovalQueueItem
+	result := reg.DB.Where(
+		"media_name = ? AND media_type = ? AND status = ?",
+		mediaName, mediaType, "pending",
 	).First(&existing)
 	if result.Error == nil {
-		db.DB.Model(&existing).Updates(map[string]interface{}{
+		reg.DB.Model(&existing).Updates(map[string]interface{}{
 			"reason":         newEntry.Reason,
 			"score_details":  newEntry.ScoreDetails,
 			"size_bytes":     newEntry.SizeBytes,
-			"created_at":     newEntry.CreatedAt,
-			"external_id":    newEntry.IntegrationID,
 			"integration_id": newEntry.IntegrationID,
+			"external_id":    newEntry.ExternalID,
 		})
 	} else {
-		// No existing "Queued for Approval" entry found — create a new one
-		db.DB.Create(&newEntry)
+		// No existing "pending" entry found — create a new one
+		reg.DB.Create(&newEntry)
 	}
 
 	// Verify: the approved entry is untouched
-	var approved db.AuditLogEntry
-	database.Where("media_name = ? AND action = ?", mediaName, "Approved").First(&approved)
+	var approved db.ApprovalQueueItem
+	database.Where("media_name = ? AND status = ?", mediaName, "approved").First(&approved)
 	if approved.ID == 0 {
 		t.Fatal("Expected approved entry to still exist")
 	}
@@ -212,20 +238,20 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 		t.Errorf("Expected approved entry sizeBytes untouched, got %d", approved.SizeBytes)
 	}
 
-	// Verify: a new "Queued for Approval" entry was created (separate from the approved one)
-	var queued db.AuditLogEntry
-	database.Where("media_name = ? AND action = ?", mediaName, "Queued for Approval").First(&queued)
+	// Verify: a new "pending" entry was created (separate from the approved one)
+	var queued db.ApprovalQueueItem
+	database.Where("media_name = ? AND status = ?", mediaName, "pending").First(&queued)
 	if queued.ID == 0 {
-		t.Fatal("Expected new 'Queued for Approval' entry to be created")
+		t.Fatal("Expected new 'pending' entry to be created")
 	}
 	if queued.Reason != "Score: 4.50 (re-evaluated)" {
-		t.Errorf("Expected new queued entry reason, got %q", queued.Reason)
+		t.Errorf("Expected new pending entry reason, got %q", queued.Reason)
 	}
 
-	// Verify: total entries = 2 (one approved, one queued)
+	// Verify: total entries = 2 (one approved, one pending)
 	var total int64
-	database.Model(&db.AuditLogEntry{}).Where("media_name = ?", mediaName).Count(&total)
+	database.Model(&db.ApprovalQueueItem{}).Where("media_name = ?", mediaName).Count(&total)
 	if total != 2 {
-		t.Errorf("Expected 2 total entries (1 approved + 1 queued), got %d", total)
+		t.Errorf("Expected 2 total entries (1 approved + 1 pending), got %d", total)
 	}
 }

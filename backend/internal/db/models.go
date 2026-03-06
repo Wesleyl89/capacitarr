@@ -112,14 +112,14 @@ const (
 type ApprovalQueueItem struct {
 	ID            uint       `gorm:"primarykey" json:"id"`
 	MediaName     string     `gorm:"index;not null" json:"mediaName"`
-	MediaType     string     `gorm:"not null" json:"mediaType"`                                // movie, show, season, episode, artist, album, book
-	Reason        string     `gorm:"not null" json:"reason"`                                   // e.g. "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
-	ScoreDetails  string     `gorm:"type:text" json:"scoreDetails"`                            // JSON-encoded []ScoreFactor
-	SizeBytes     int64      `gorm:"not null;default:0" json:"sizeBytes"`                      // File size in bytes
-	IntegrationID uint       `gorm:"not null" json:"integrationId"`                            // FK to IntegrationConfig (required)
-	ExternalID    string     `gorm:"not null;default:''" json:"externalId"`                    // External ID in the integration
-	Status        string     `gorm:"not null;default:'pending'" json:"status"`                 // pending, approved, rejected
-	SnoozedUntil  *time.Time `gorm:"column:snoozed_until" json:"snoozedUntil,omitempty"`      // When snooze expires (rejected items)
+	MediaType     string     `gorm:"not null" json:"mediaType"`                          // movie, show, season, episode, artist, album, book
+	Reason        string     `gorm:"not null" json:"reason"`                             // e.g. "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
+	ScoreDetails  string     `gorm:"type:text" json:"scoreDetails"`                      // JSON-encoded []ScoreFactor
+	SizeBytes     int64      `gorm:"not null;default:0" json:"sizeBytes"`                // File size in bytes
+	IntegrationID uint       `gorm:"not null" json:"integrationId"`                      // FK to IntegrationConfig (required)
+	ExternalID    string     `gorm:"not null;default:''" json:"externalId"`              // External ID in the integration
+	Status        string     `gorm:"not null;default:'pending'" json:"status"`           // pending, approved, rejected
+	SnoozedUntil  *time.Time `gorm:"column:snoozed_until" json:"snoozedUntil,omitempty"` // When snooze expires (rejected items)
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }

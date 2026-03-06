@@ -20,6 +20,8 @@ import (
 
 	"capacitarr/internal/config"
 	"capacitarr/internal/db"
+	"capacitarr/internal/events"
+	"capacitarr/internal/services"
 	"capacitarr/routes"
 )
 
@@ -106,6 +108,13 @@ func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
 	cfg := TestConfig()
 	api := e.Group("/api")
 
+	// Create a test event bus (no subscribers needed for most tests)
+	bus := events.NewEventBus()
+	t.Cleanup(func() { bus.Close() })
+
+	// Create a test service registry
+	reg := services.NewRegistry(database, bus, cfg)
+
 	// Public routes
 	api.GET("/health", func(c echo.Context) error {
 		return c.String(http.StatusOK, "OK")
@@ -115,14 +124,15 @@ func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
 	protected := api.Group("")
 	protected.Use(routes.RequireAuth(database, cfg))
 
-	routes.RegisterAuthRoutes(api, protected, database, cfg)
-	routes.RegisterIntegrationRoutes(protected, database)
-	routes.RegisterRuleRoutes(protected, database)
+	routes.RegisterAuthRoutes(api, protected, reg)
+	routes.RegisterIntegrationRoutes(protected, reg)
+	routes.RegisterRuleRoutes(protected, reg)
 	routes.RegisterAuditRoutes(protected, database)
-	routes.RegisterApprovalRoutes(protected, database)
+	routes.RegisterApprovalRoutes(protected, reg)
 	routes.RegisterActivityRoutes(protected, database)
 	routes.RegisterEngineHistoryRoutes(protected, database)
-	routes.RegisterDataRoutes(protected, database)
+	routes.RegisterDataRoutes(protected, reg)
+	routes.RegisterNotificationRoutes(protected, reg)
 	routes.RegisterVersionRoutes(protected, database, "v0.0.0-test")
 
 	return e

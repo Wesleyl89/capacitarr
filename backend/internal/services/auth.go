@@ -16,6 +16,11 @@ import (
 	"capacitarr/internal/events"
 )
 
+// BcryptCost is the cost factor for bcrypt password hashing across all auth
+// operations. The Go default is 10; we use 12 for stronger brute-force
+// resistance while keeping hashing under ~250ms on typical hardware.
+const BcryptCost = 12
+
 // AuthService manages authentication, password changes, username changes, and API keys.
 type AuthService struct {
 	db  *gorm.DB
@@ -64,7 +69,7 @@ func (s *AuthService) ChangePassword(username, currentPwd, newPwd string) error 
 		return fmt.Errorf("current password is incorrect")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPwd), BcryptCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}

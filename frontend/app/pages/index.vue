@@ -10,7 +10,7 @@
     <!-- Header -->
     <div
       data-slot="page-header"
-      class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4"
+      class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
       <div>
         <h1 class="text-3xl font-bold tracking-tight">
@@ -71,7 +71,7 @@
       v-motion
       :initial="{ opacity: 0, y: 12 }"
       :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
-      class="mb-8"
+      class="mb-6"
       :class="engineIsRunning ? 'engine-running-glow' : ''"
     >
       <UiCardContent class="pt-5">
@@ -187,10 +187,10 @@
           {{ showMiniSparklines ? $t('dashboard.hideDetails') : $t('dashboard.showDetails') }}
         </button>
 
-        <!-- Mini sparklines: duration + freed bytes -->
+        <!-- Mini sparklines: duration + recent activity (matched heights) -->
         <div
           v-if="showMiniSparklines && engineHistoryData.length > 0"
-          class="grid grid-cols-2 gap-3 mb-3 items-start"
+          class="grid grid-cols-2 gap-3 mb-3"
         >
           <!-- Run Duration -->
           <div class="rounded-lg bg-muted px-3 py-2">
@@ -220,7 +220,7 @@
                 {{ $t('dashboard.viewAll') }}
               </NuxtLink>
             </div>
-            <UiScrollArea v-if="recentActivity.length > 0" class="pr-3" style="height: 70px">
+            <UiScrollArea v-if="recentActivity.length > 0" class="h-[86px] pr-3">
               <div
                 v-for="entry in recentActivity"
                 :key="entry.id"
@@ -241,8 +241,7 @@
             </UiScrollArea>
             <div
               v-else
-              class="flex items-center justify-center text-[11px] text-muted-foreground/60"
-              style="height: 70px"
+              class="flex items-center justify-center text-[11px] text-muted-foreground/60 h-[86px]"
             >
               {{ $t('dashboard.noActivityYet') }}
             </div>
@@ -324,7 +323,7 @@
     <ApprovalQueueCard v-if="approvalQueueVisible" />
 
     <!-- Per-Disk-Group Sections -->
-    <div v-if="diskGroups.length > 0" class="space-y-6 mb-8">
+    <div v-if="diskGroups.length > 0" class="space-y-5 mb-6">
       <DiskGroupSection
         v-for="group in diskGroups"
         :key="group.id"
@@ -338,7 +337,7 @@
     </div>
 
     <!-- Summary Cards (informational, at the bottom) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8" data-stagger>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6" data-stagger>
       <!-- Total Storage -->
       <UiCard
         v-motion
@@ -430,7 +429,7 @@
     </div>
 
     <!-- Lifetime Stats Cards (Row 2) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8" data-stagger>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6" data-stagger>
       <!-- Total Space Reclaimed -->
       <UiCard
         v-motion
@@ -523,7 +522,7 @@
       v-motion
       :initial="{ opacity: 0, y: 8 }"
       :enter="{ opacity: 1, y: 0 }"
-      class="rounded-xl border-2 border-dashed border-border p-12 text-center mb-8"
+      class="rounded-xl border-2 border-dashed border-border p-12 text-center mb-6"
     >
       <component :is="HardDriveIcon" class="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
       <h3 class="text-muted-foreground font-medium mb-1.5">
@@ -536,7 +535,7 @@
 
     <!-- Skeleton Loading State -->
     <template v-if="loading">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         <UiCard v-for="i in 3" :key="i" class="animate-pulse">
           <UiCardContent class="pt-5">
             <div class="flex items-center gap-2 mb-3">
@@ -572,12 +571,17 @@ import {
   UserIcon,
   PlugIcon,
   AlertCircleIcon,
-  PauseIcon,
   XCircleIcon,
   PlusCircleIcon,
   PencilIcon,
   PowerIcon,
   KeyIcon,
+  SlidersHorizontalIcon,
+  AlarmClockOffIcon,
+  DatabaseIcon,
+  BellIcon,
+  BellRingIcon,
+  BellOffIcon,
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 import type {
@@ -607,6 +611,9 @@ const {
   fetchStats: engineFetchStats,
   triggerRunNow: engineTriggerRunNow,
 } = useEngineControl();
+
+// SSE event stream — subscribe for real-time dashboard updates
+const { on: sseOn, off: sseOff } = useEventStream();
 
 // Approval queue (shown when execution mode is "approval")
 const { isApprovalMode, fetchQueue: fetchApprovalQueue } = useApprovalQueue();
@@ -868,7 +875,7 @@ const countdownText = computed(() => {
   return t('dashboard.nextRunHourMin', { hour: hours, min: mins });
 });
 
-// --- Auto refresh ---
+// --- Auto refresh (non-event data only: disk groups, integrations, dashboard stats) ---
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function startAutoRefresh() {
@@ -894,20 +901,116 @@ watch(refreshInterval, () => {
   startAutoRefresh();
 });
 
-// When the engine finishes a run (detected via navbar or dashboard Run Now, or scheduled),
+// When the engine finishes a run (detected via SSE engine_complete event),
 // immediately refresh all dashboard data so the UI reflects the latest state.
 watch(engineRunCompletionCounter, () => {
   fetchDashboardData(true);
+  fetchEngineHistory();
   refreshKey.value++;
 });
+
+// --- SSE event subscriptions for real-time dashboard updates ---
+
+// Handler: prepend any activity event to the recent activity feed in real-time.
+// The SSE data payload includes { message, ... }; we construct an ActivityEvent
+// from the SSE event type + data.
+function handleActivityEvent(eventType: string) {
+  return (data: unknown) => {
+    const payload = data as Record<string, unknown>;
+    const entry: ActivityEvent = {
+      id: Date.now(), // Temporary client-side ID for key uniqueness
+      eventType,
+      message: (payload.message as string) || eventType.replace(/_/g, ' '),
+      metadata: JSON.stringify(payload),
+      createdAt: new Date().toISOString(),
+    };
+    // Prepend to feed, cap at 100 entries
+    recentActivity.value = [entry, ...recentActivity.value].slice(0, 100);
+  };
+}
+
+// All event types that should prepend to the activity feed
+const activityEventTypes = [
+  'engine_start',
+  'engine_complete',
+  'engine_error',
+  'engine_mode_changed',
+  'manual_run_triggered',
+  'settings_changed',
+  'threshold_changed',
+  'login',
+  'password_changed',
+  'username_changed',
+  'api_key_generated',
+  'integration_added',
+  'integration_updated',
+  'integration_removed',
+  'integration_test',
+  'integration_test_failed',
+  'approval_approved',
+  'approval_rejected',
+  'approval_unsnoozed',
+  'approval_bulk_unsnoozed',
+  'approval_orphans_recovered',
+  'deletion_success',
+  'deletion_failed',
+  'deletion_dry_run',
+  'rule_created',
+  'rule_updated',
+  'rule_deleted',
+  'notification_channel_added',
+  'notification_channel_updated',
+  'notification_channel_removed',
+  'notification_sent',
+  'notification_delivery_failed',
+  'data_reset',
+  'server_started',
+] as const;
+
+// Keep handler refs so we can unsubscribe on unmount
+const _activityHandlers = new Map<string, (data: unknown) => void>();
+
+// Handler: approval queue changes — refresh the queue
+function handleApprovalChange() {
+  fetchApprovalQueue();
+}
 
 onMounted(async () => {
   await fetchDashboardData();
   startAutoRefresh();
+
+  // Subscribe to all activity event types for the real-time feed
+  for (const eventType of activityEventTypes) {
+    const handler = handleActivityEvent(eventType);
+    _activityHandlers.set(eventType, handler);
+    sseOn(eventType, handler);
+  }
+
+  // Subscribe to approval-related events to refresh the queue
+  sseOn('approval_approved', handleApprovalChange);
+  sseOn('approval_rejected', handleApprovalChange);
+  sseOn('approval_unsnoozed', handleApprovalChange);
+  sseOn('approval_bulk_unsnoozed', handleApprovalChange);
+  sseOn('approval_orphans_recovered', handleApprovalChange);
+  sseOn('deletion_success', handleApprovalChange);
 });
 
 onUnmounted(() => {
   stopAutoRefresh();
+
+  // Unsubscribe all activity event handlers
+  for (const [eventType, handler] of _activityHandlers) {
+    sseOff(eventType, handler);
+  }
+  _activityHandlers.clear();
+
+  // Unsubscribe approval handlers
+  sseOff('approval_approved', handleApprovalChange);
+  sseOff('approval_rejected', handleApprovalChange);
+  sseOff('approval_unsnoozed', handleApprovalChange);
+  sseOff('approval_bulk_unsnoozed', handleApprovalChange);
+  sseOff('approval_orphans_recovered', handleApprovalChange);
+  sseOff('deletion_success', handleApprovalChange);
 });
 
 async function fetchDashboardData(silent = false) {
@@ -1094,7 +1197,7 @@ async function fetchEngineHistory() {
 
 async function fetchRecentActivity() {
   try {
-    const data = (await api('/api/v1/activity/recent?limit=25')) as ActivityEvent[];
+    const data = (await api('/api/v1/activity/recent?limit=100')) as ActivityEvent[];
     recentActivity.value = data || [];
   } catch (err) {
     console.warn('[Dashboard] fetchRecentActivity failed:', err);

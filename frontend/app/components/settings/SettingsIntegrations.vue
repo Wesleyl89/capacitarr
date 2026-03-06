@@ -184,8 +184,7 @@
             <div class="pt-1 space-y-2">
               <UiButton
                 type="button"
-                class="w-full text-black font-semibold"
-                style="background-color: #e5a00d"
+                class="w-full bg-[#e5a00d] text-black font-semibold hover:bg-[#c98c0b]"
                 :disabled="plexAuthLoading"
                 @click="startPlexAuth"
               >

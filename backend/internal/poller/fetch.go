@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"capacitarr/internal/db"
 	"capacitarr/internal/integrations"
 )
@@ -29,7 +31,7 @@ type fetchResult struct {
 
 // fetchAllIntegrations queries all enabled integrations and collects media items,
 // root folders, disk space info, and enrichment clients.
-func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
+func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fetchResult {
 	result := fetchResult{
 		serviceClients: make(map[uint]integrations.Integration),
 		rootFolders:    make(map[string]bool),
@@ -45,11 +47,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 			now := time.Now()
 			if err := result.enrichment.tautulli.TestConnection(); err != nil {
 				slog.Warn("Tautulli connection failed", "component", "poller", "operation", "tautulli_connect", "integration", cfg.Name, "error", err)
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
 			} else {
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_sync":  &now,
 					"last_error": "",
 				})
@@ -64,11 +66,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 			now := time.Now()
 			if err := result.enrichment.overseerr.TestConnection(); err != nil {
 				slog.Warn("Overseerr connection failed", "component", "poller", "operation", "overseerr_connect", "integration", cfg.Name, "error", err)
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
 			} else {
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_sync":  &now,
 					"last_error": "",
 				})
@@ -83,11 +85,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 			now := time.Now()
 			if err := result.enrichment.jellyfin.TestConnection(); err != nil {
 				slog.Warn("Jellyfin connection failed", "component", "poller", "operation", "jellyfin_connect", "integration", cfg.Name, "error", err)
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
 			} else {
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_sync":  &now,
 					"last_error": "",
 				})
@@ -102,11 +104,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 			now := time.Now()
 			if err := result.enrichment.emby.TestConnection(); err != nil {
 				slog.Warn("Emby connection failed", "component", "poller", "operation", "emby_connect", "integration", cfg.Name, "error", err)
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_error": err.Error(),
 				})
 			} else {
-				db.DB.Model(&cfg).Updates(map[string]interface{}{
+				database.Model(&cfg).Updates(map[string]interface{}{
 					"last_sync":  &now,
 					"last_error": "",
 				})
@@ -115,7 +117,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 			continue
 		}
 
-		client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+		client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
 		if client == nil {
 			slog.Debug("No client for integration type", "component", "poller", "type", cfg.Type, "integration", cfg.Name)
 			continue
@@ -125,7 +127,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 		if cfg.Type == "plex" {
 			// Plex is only used for protection rules, not disk usage tracking
 			now := time.Now()
-			db.DB.Model(&cfg).Updates(map[string]interface{}{
+			database.Model(&cfg).Updates(map[string]interface{}{
 				"last_sync":  &now,
 				"last_error": "",
 			})
@@ -163,7 +165,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 					}
 				}
 			}
-			db.DB.Model(&cfg).Updates(map[string]interface{}{
+			database.Model(&cfg).Updates(map[string]interface{}{
 				"media_size_bytes": totalSize,
 				"media_count":      mediaCount,
 			})
@@ -189,7 +191,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 		if err != nil {
 			slog.Warn("Disk space fetch failed", "component", "poller", "operation", "fetch_disk_space",
 				"integration", cfg.Name, "type", cfg.Type, "error", err)
-			db.DB.Model(&cfg).Updates(map[string]interface{}{
+			database.Model(&cfg).Updates(map[string]interface{}{
 				"last_error": err.Error(),
 			})
 			continue
@@ -197,7 +199,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig) fetchResult {
 
 		// Update last sync time, clear error
 		now := time.Now()
-		db.DB.Model(&cfg).Updates(map[string]interface{}{
+		database.Model(&cfg).Updates(map[string]interface{}{
 			"last_sync":  &now,
 			"last_error": "",
 		})

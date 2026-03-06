@@ -37,13 +37,13 @@ const features = [
   {
     icon: 'i-lucide-shield-check',
     title: 'Safety First',
-    description: 'Preview everything before it happens. Safety guards, dry-run mode, and a complete audit log ensure nothing is deleted by accident.',
+    description: 'Preview everything before it happens. Approval queue, safety guards, dry-run mode, and a complete audit trail ensure nothing is deleted by accident.',
     color: 'emerald',
   },
   {
-    icon: 'i-lucide-bell',
-    title: 'Notifications',
-    description: 'Get alerted via Discord, Slack, or in-app notifications when the engine runs, scores change, or items are flagged for cleanup.',
+    icon: 'i-lucide-radio',
+    title: 'Real-Time Updates',
+    description: 'Server-Sent Events push engine state, deletions, and activity to the browser instantly — no polling. 34 typed event types keep you informed.',
     color: 'rose',
   },
   {

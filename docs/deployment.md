@@ -112,6 +112,47 @@ location /capacitarr/ {
 
 ---
 
+## SSE (Server-Sent Events) Proxy Configuration
+
+Capacitarr uses Server-Sent Events (SSE) for real-time updates via `GET /api/v1/events`. SSE requires that reverse proxies do **not** buffer responses — otherwise events will queue up and arrive in batches instead of streaming in real-time.
+
+### nginx
+
+Add `proxy_buffering off` and increase timeouts for the SSE endpoint:
+
+```nginx
+location /api/v1/events {
+    proxy_pass http://127.0.0.1:2187;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection '';
+    proxy_http_version 1.1;
+    chunked_transfer_encoding off;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 86400s;
+}
+```
+
+### Caddy
+
+Caddy handles SSE correctly by default — no special configuration is needed. Caddy does not buffer proxied responses, so events stream through immediately.
+
+### Traefik
+
+Traefik handles SSE correctly by default. If you have custom middleware that buffers responses, ensure it does not apply to the `/api/v1/events` path.
+
+### Cloudflare
+
+If you use Cloudflare in front of your reverse proxy, note that Cloudflare's free plan buffers HTTP responses. SSE connections will work but events may arrive with latency. To avoid this:
+
+- Use a Cloudflare **orange cloud off** (DNS only) rule for the SSE path
+- Or upgrade to a plan that supports streaming responses
+
+---
+
 ## Proxy Authentication (Authelia / Authentik / Organizr)
 
 If you run an authentication proxy (Authelia, Authentik, Organizr, etc.) in front of Capacitarr, you can configure it to trust the proxy's authentication header instead of requiring users to log in again.

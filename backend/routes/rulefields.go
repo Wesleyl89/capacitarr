@@ -284,7 +284,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 		}
 
 		// Create the appropriate client and check if it implements RuleValueFetcher
-		client := CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+		client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
 		if client == nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported integration type for rule values"})
 		}

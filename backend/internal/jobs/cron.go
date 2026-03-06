@@ -5,20 +5,22 @@ import (
 	"log/slog"
 	"time"
 
+	"gorm.io/gorm"
+
 	"capacitarr/internal/db"
 	"github.com/robfig/cron/v3"
 )
 
 // Start creates and starts the background cron scheduler for time-series rollup and pruning jobs.
-func Start() *cron.Cron {
+func Start(database *gorm.DB) *cron.Cron {
 	c := cron.New()
 
 	// 1. Rollup "raw" to "hourly" every hour at minute 0
 	_, err := c.AddFunc("@hourly", func() {
 		slog.Info("Running hourly rollup", "component", "jobs")
-		rollupData("raw", "hourly", time.Now().Add(-time.Hour).Truncate(time.Hour), time.Now().Truncate(time.Hour))
+		rollupData(database, "raw", "hourly", time.Now().Add(-time.Hour).Truncate(time.Hour), time.Now().Truncate(time.Hour))
 		// Keep raw data for 2 hours (enough for real-time zooming)
-		pruneData("raw", time.Now().Add(-2*time.Hour))
+		pruneData(database, "raw", time.Now().Add(-2*time.Hour))
 	})
 	if err != nil {
 		slog.Error("Failed to add hourly cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -27,9 +29,9 @@ func Start() *cron.Cron {
 	// 2. Rollup "hourly" to "daily" every day at midnight
 	_, err = c.AddFunc("@daily", func() {
 		slog.Info("Running daily rollup", "component", "jobs")
-		rollupData("hourly", "daily", time.Now().Add(-24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
+		rollupData(database, "hourly", "daily", time.Now().Add(-24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
 		// Keep hourly snapshots for 7 days
-		pruneData("hourly", time.Now().Add(-7*24*time.Hour))
+		pruneData(database, "hourly", time.Now().Add(-7*24*time.Hour))
 	})
 	if err != nil {
 		slog.Error("Failed to add daily cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -38,9 +40,9 @@ func Start() *cron.Cron {
 	// 3. Rollup "daily" to "weekly" every week on Sunday at midnight
 	_, err = c.AddFunc("@weekly", func() {
 		slog.Info("Running weekly rollup", "component", "jobs")
-		rollupData("daily", "weekly", time.Now().Add(-7*24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
+		rollupData(database, "daily", "weekly", time.Now().Add(-7*24*time.Hour).Truncate(24*time.Hour), time.Now().Truncate(24*time.Hour))
 		// Keep daily snapshots for 30 days
-		pruneData("daily", time.Now().Add(-30*24*time.Hour))
+		pruneData(database, "daily", time.Now().Add(-30*24*time.Hour))
 	})
 	if err != nil {
 		slog.Error("Failed to add weekly cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -49,7 +51,7 @@ func Start() *cron.Cron {
 	// 4. Prune "weekly" data older than 1 year
 	_, err = c.AddFunc("@monthly", func() {
 		slog.Info("Running pruning of old data", "component", "jobs")
-		pruneData("weekly", time.Now().Add(-365*24*time.Hour))
+		pruneData(database, "weekly", time.Now().Add(-365*24*time.Hour))
 	})
 	if err != nil {
 		slog.Error("Failed to add monthly cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -57,7 +59,7 @@ func Start() *cron.Cron {
 
 	// 5. Prune old engine run stats — keep the last 1000 rows
 	_, err = c.AddFunc("@daily", func() {
-		pruneEngineRunStats(1000)
+		pruneEngineRunStats(database, 1000)
 	})
 	if err != nil {
 		slog.Error("Failed to add engine stats cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -65,7 +67,7 @@ func Start() *cron.Cron {
 
 	// 6. Prune old in-app notifications — uses audit log retention setting
 	_, err = c.AddFunc("@daily", func() {
-		pruneOldNotifications()
+		pruneOldNotifications(database)
 	})
 	if err != nil {
 		slog.Error("Failed to add notification cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
@@ -73,10 +75,18 @@ func Start() *cron.Cron {
 
 	// 7. Prune old activity events — fixed 7-day retention
 	_, err = c.AddFunc("@daily", func() {
-		pruneActivityEvents()
+		pruneActivityEvents(database)
 	})
 	if err != nil {
 		slog.Error("Failed to add activity events cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
+	}
+
+	// 8. Prune old audit log entries — uses audit log retention setting
+	_, err = c.AddFunc("@daily", func() {
+		pruneAuditLog(database)
+	})
+	if err != nil {
+		slog.Error("Failed to add audit log cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
 	c.Start()
@@ -84,10 +94,10 @@ func Start() *cron.Cron {
 	return c
 }
 
-func rollupData(fromRes, toRes string, start, end time.Time) {
+func rollupData(database *gorm.DB, fromRes, toRes string, start, end time.Time) {
 	// Query distinct disk_group_id values from the source resolution in the time window
 	var groupIDs []uint
-	err := db.DB.Model(&db.LibraryHistory{}).
+	err := database.Model(&db.LibraryHistory{}).
 		Where("resolution = ? AND timestamp >= ? AND timestamp < ? AND disk_group_id IS NOT NULL", fromRes, start, end).
 		Distinct("disk_group_id").
 		Pluck("disk_group_id", &groupIDs).Error
@@ -103,7 +113,7 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 			AvgUsed  float64
 		}
 
-		err := db.DB.Model(&db.LibraryHistory{}).
+		err := database.Model(&db.LibraryHistory{}).
 			Select("AVG(total_capacity) as avg_total, AVG(used_capacity) as avg_used").
 			Where("resolution = ? AND timestamp >= ? AND timestamp < ? AND disk_group_id = ?", fromRes, start, end, gid).
 			Scan(&avgResult).Error
@@ -122,24 +132,24 @@ func rollupData(fromRes, toRes string, start, end time.Time) {
 				Resolution:    toRes,
 				DiskGroupID:   &diskGroupID,
 			}
-			if err := db.DB.Create(&record).Error; err != nil {
+			if err := database.Create(&record).Error; err != nil {
 				slog.Error("Failed to save rollup record", "component", "jobs", "operation", "rollup_save", "to", toRes, "diskGroupId", gid, "error", err)
 			}
 		}
 	}
 }
 
-func pruneData(resolution string, before time.Time) {
-	if err := db.DB.Where("resolution = ? AND timestamp < ?", resolution, before).Delete(&db.LibraryHistory{}).Error; err != nil {
+func pruneData(database *gorm.DB, resolution string, before time.Time) {
+	if err := database.Where("resolution = ? AND timestamp < ?", resolution, before).Delete(&db.LibraryHistory{}).Error; err != nil {
 		slog.Error("Failed to prune data", "component", "jobs", "operation", "prune", "resolution", resolution, "error", err)
 	}
 }
 
 // pruneOldNotifications deletes in-app notifications older than the audit log retention period.
 // If retention is 0 (forever), no cleanup is performed.
-func pruneOldNotifications() {
+func pruneOldNotifications(database *gorm.DB) {
 	var prefs db.PreferenceSet
-	if err := db.DB.First(&prefs).Error; err != nil {
+	if err := database.First(&prefs).Error; err != nil {
 		slog.Error("Failed to fetch preferences for notification cleanup", "component", "jobs", "operation", "prune_notifications", "error", err)
 		return
 	}
@@ -149,7 +159,7 @@ func pruneOldNotifications() {
 	}
 
 	cutoff := time.Now().Add(-time.Duration(prefs.AuditLogRetentionDays) * 24 * time.Hour)
-	deleted := db.DB.Where("created_at < ?", cutoff).Delete(&db.InAppNotification{})
+	deleted := database.Where("created_at < ?", cutoff).Delete(&db.InAppNotification{})
 	if deleted.Error != nil {
 		slog.Error("Failed to prune old notifications", "component", "jobs", "operation", "prune_notifications", "error", deleted.Error)
 	} else if deleted.RowsAffected > 0 {
@@ -158,21 +168,21 @@ func pruneOldNotifications() {
 }
 
 // pruneEngineRunStats keeps only the most recent `keep` rows in engine_run_stats.
-func pruneEngineRunStats(keep int) {
+func pruneEngineRunStats(database *gorm.DB, keep int) {
 	var count int64
-	db.DB.Model(&db.EngineRunStats{}).Count(&count)
+	database.Model(&db.EngineRunStats{}).Count(&count)
 	if count <= int64(keep) {
 		return
 	}
 
 	// Find the ID threshold — delete everything below the Nth newest row
 	var cutoffRow db.EngineRunStats
-	result := db.DB.Order("run_at DESC").Offset(keep).Limit(1).First(&cutoffRow)
+	result := database.Order("run_at DESC").Offset(keep).Limit(1).First(&cutoffRow)
 	if result.Error != nil {
 		return
 	}
 
-	deleted := db.DB.Where("run_at <= ?", cutoffRow.RunAt).Delete(&db.EngineRunStats{})
+	deleted := database.Where("run_at <= ?", cutoffRow.RunAt).Delete(&db.EngineRunStats{})
 	if deleted.Error != nil {
 		slog.Error("Failed to prune engine run stats", "component", "jobs", "operation", "prune_engine_stats", "error", deleted.Error)
 	} else if deleted.RowsAffected > 0 {
@@ -180,11 +190,33 @@ func pruneEngineRunStats(keep int) {
 	}
 }
 
+// pruneAuditLog deletes audit log entries older than the configured retention period.
+// If retention is 0 (forever), no cleanup is performed.
+func pruneAuditLog(database *gorm.DB) {
+	var prefs db.PreferenceSet
+	if err := database.First(&prefs).Error; err != nil {
+		slog.Error("Failed to fetch preferences for audit log cleanup", "component", "jobs", "operation", "prune_audit_log", "error", err)
+		return
+	}
+
+	if prefs.AuditLogRetentionDays <= 0 {
+		return // 0 = keep forever
+	}
+
+	cutoff := time.Now().UTC().AddDate(0, 0, -prefs.AuditLogRetentionDays)
+	deleted := database.Where("created_at < ?", cutoff).Delete(&db.AuditLogEntry{})
+	if deleted.Error != nil {
+		slog.Error("Failed to prune audit log", "component", "jobs", "operation", "prune_audit_log", "error", deleted.Error)
+	} else if deleted.RowsAffected > 0 {
+		slog.Info("Pruned old audit log entries", "component", "jobs", "deleted", deleted.RowsAffected, "retentionDays", prefs.AuditLogRetentionDays)
+	}
+}
+
 // pruneActivityEvents removes activity events older than 7 days.
 // Activity events are transient dashboard context, not permanent records.
-func pruneActivityEvents() {
+func pruneActivityEvents(database *gorm.DB) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -7)
-	deleted := db.DB.Where("created_at < ?", cutoff).Delete(&db.ActivityEvent{})
+	deleted := database.Where("created_at < ?", cutoff).Delete(&db.ActivityEvent{})
 	if deleted.Error != nil {
 		slog.Error("Failed to prune activity events", "component", "jobs", "operation", "prune_activity_events", "error", deleted.Error)
 	} else if deleted.RowsAffected > 0 {

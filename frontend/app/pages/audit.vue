@@ -9,7 +9,7 @@
 
     <div
       data-slot="page-header"
-      class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4"
+      class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
       <div>
         <h1 class="text-3xl font-bold tracking-tight">
@@ -50,13 +50,13 @@
           <div class="flex items-center gap-1.5 flex-wrap">
             <UiButton
               v-for="action in auditActionTypes"
-              :key="action"
-              :variant="auditActionFilter === action ? 'default' : 'outline'"
+              :key="action.value"
+              :variant="auditActionFilter === action.value ? 'default' : 'outline'"
               size="sm"
               class="rounded-full h-7 px-3 text-xs"
-              @click="toggleActionFilter(action)"
+              @click="toggleActionFilter(action.value)"
             >
-              {{ action }}
+              {{ action.label }}
             </UiButton>
           </div>
         </div>
@@ -209,7 +209,7 @@
                 </UiTableCell>
                 <UiTableCell>
                   <UiBadge :variant="actionBadgeVariant(group.entry.action)">
-                    {{ group.entry.action }}
+                    {{ actionLabel(group.entry.action) }}
                   </UiBadge>
                 </UiTableCell>
                 <UiTableCell>
@@ -245,7 +245,7 @@
                   </UiTableCell>
                   <UiTableCell>
                     <UiBadge :variant="actionBadgeVariant(season.action)">
-                      {{ season.action }}
+                      {{ actionLabel(season.action) }}
                     </UiBadge>
                   </UiTableCell>
                   <UiTableCell>
@@ -320,7 +320,7 @@ import {
   ArrowDownIcon,
   ArrowUpDownIcon,
 } from 'lucide-vue-next';
-import type { AuditLog, AuditResponse, SelectedDetailItem } from '~/types/api';
+import type { AuditLogEntry, AuditResponse, SelectedDetailItem } from '~/types/api';
 
 const api = useApi();
 
@@ -329,7 +329,7 @@ const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () =
   await resetAndFetch();
 });
 
-const logs = ref<AuditLog[]>([]);
+const logs = ref<AuditLogEntry[]>([]);
 const total = ref(0);
 const pending = ref(false);
 const loadingMore = ref(false);
@@ -339,11 +339,12 @@ const selectedItem = ref<SelectedDetailItem | null>(null);
 // Audit filters
 const auditSearch = ref('');
 const auditActionFilter = ref<string | null>(null);
+// Action values must match the backend db.Action* constants exactly
+// (deleted, dry_run, dry_delete) — sent as ?action= query param.
 const auditActionTypes = [
-  'Deleted',
-  'Dry-Run',
-  'Queued for Approval',
-  'Queued for Deletion',
+  { value: 'deleted', label: 'Deleted' },
+  { value: 'dry_run', label: 'Dry-Run' },
+  { value: 'dry_delete', label: 'Dry-Delete' },
 ] as const;
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -362,7 +363,7 @@ function toggleAuditSort(column: AuditSortColumn) {
   resetAndFetch();
 }
 
-function selectItem(entry: AuditLog) {
+function selectItem(entry: AuditLogEntry) {
   const scoreMatch = entry.reason?.match(/^Score:\s*([\d.]+)/);
   const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
   selectedItem.value = {
@@ -437,8 +438,8 @@ onMounted(() => fetchLogs(false));
 // ─── Show/Season Grouping ─────────────────────────────────────────────────────
 interface AuditGroupItem {
   key: string;
-  entry: AuditLog;
-  seasons: AuditLog[];
+  entry: AuditLogEntry;
+  seasons: AuditLogEntry[];
 }
 
 const groupedLogs = computed<AuditGroupItem[]>(() => {
@@ -520,11 +521,25 @@ function extractSeasonLabel(mediaName: string): string {
   return parts.length > 1 ? `Season ${parts[parts.length - 1]}` : mediaName;
 }
 
-// ─── Action badge variant mapping ─────────────────────────────────────────────
+// ─── Action badge variant mapping (uses raw backend db.Action* values) ────────
 function actionBadgeVariant(action: string): 'destructive' | 'outline' | 'secondary' | 'default' {
-  if (action === 'Deleted') return 'destructive';
-  if (action === 'Queued for Approval') return 'outline';
-  if (action === 'Queued for Deletion') return 'outline';
+  if (action === 'deleted') return 'destructive';
+  if (action === 'dry_delete') return 'outline';
+  if (action === 'dry_run') return 'secondary';
   return 'default';
+}
+
+/** Human-readable label for raw backend action values */
+function actionLabel(action: string): string {
+  switch (action) {
+    case 'deleted':
+      return 'Deleted';
+    case 'dry_run':
+      return 'Dry-Run';
+    case 'dry_delete':
+      return 'Dry-Delete';
+    default:
+      return action;
+  }
 }
 </script>
