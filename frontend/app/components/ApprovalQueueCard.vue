@@ -28,6 +28,88 @@ const totalCount = computed(
   () => pendingItems.value.length + snoozedItems.value.length + approvedItems.value.length,
 );
 
+// --- Section jump navigation ---
+const scrollAreaRef = ref<InstanceType<
+  typeof import('~/components/ui/scroll-area/ScrollArea.vue').default
+> | null>(null);
+const pendingSectionRef = ref<HTMLElement | null>(null);
+const snoozedSectionRef = ref<HTMLElement | null>(null);
+const progressSectionRef = ref<HTMLElement | null>(null);
+
+/** Which section is currently most visible in the scroll viewport */
+const activeSection = ref<'pending' | 'snoozed' | 'progress'>('pending');
+
+/** Whether the jump bar should be shown (2+ visible sections) */
+const showJumpBar = computed(() => {
+  return (
+    [pendingItems.value.length, snoozedItems.value.length, approvedItems.value.length].filter(
+      (n) => n > 0,
+    ).length > 1
+  );
+});
+
+/** Scroll to a section within the scroll area viewport */
+function scrollToSection(el: HTMLElement | null) {
+  if (!el || !scrollAreaRef.value) return;
+  // Reka UI ScrollArea wraps content in a ScrollAreaViewport div
+  const viewport = scrollAreaRef.value?.$el?.querySelector('[data-slot="scroll-area-viewport"]');
+  if (viewport) {
+    viewport.scrollTo({ top: el.offsetTop, behavior: 'smooth' });
+  }
+}
+
+// IntersectionObserver to track which section is currently visible
+let sectionObserver: IntersectionObserver | null = null;
+
+function setupSectionObserver() {
+  cleanupSectionObserver();
+
+  const viewport = scrollAreaRef.value?.$el?.querySelector('[data-slot="scroll-area-viewport"]');
+  if (!viewport) return;
+
+  sectionObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.1) {
+          const section = (entry.target as HTMLElement).dataset.section;
+          if (section === 'pending' || section === 'snoozed' || section === 'progress') {
+            activeSection.value = section;
+          }
+        }
+      }
+    },
+    {
+      root: viewport,
+      threshold: [0.1, 0.5],
+    },
+  );
+
+  // Observe each section that exists
+  if (pendingSectionRef.value) sectionObserver.observe(pendingSectionRef.value);
+  if (snoozedSectionRef.value) sectionObserver.observe(snoozedSectionRef.value);
+  if (progressSectionRef.value) sectionObserver.observe(progressSectionRef.value);
+}
+
+function cleanupSectionObserver() {
+  if (sectionObserver) {
+    sectionObserver.disconnect();
+    sectionObserver = null;
+  }
+}
+
+// Re-setup observer when sections change visibility
+watch([pendingItems, snoozedItems, approvedItems], () => {
+  nextTick(() => setupSectionObserver());
+});
+
+onMounted(() => {
+  nextTick(() => setupSectionObserver());
+});
+
+onUnmounted(() => {
+  cleanupSectionObserver();
+});
+
 /** Expanded group keys (for show groups with seasons) */
 const expandedKeys = ref<Set<string>>(new Set());
 
@@ -246,14 +328,41 @@ onUnmounted(() => {
             {{ t('approval.subtitle') }}
           </UiCardDescription>
         </div>
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
-          <UiBadge v-if="pendingItems.length > 0" variant="default" class="text-xs">
+        <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <UiBadge
+            v-if="pendingItems.length > 0"
+            variant="default"
+            :class="[
+              'text-xs transition-colors',
+              showJumpBar ? 'cursor-pointer hover:bg-primary/80' : '',
+              activeSection === 'pending' && showJumpBar ? 'ring-1 ring-primary-foreground/50' : '',
+            ]"
+            @click="showJumpBar && scrollToSection(pendingSectionRef)"
+          >
             {{ t('approval.pendingCount', { count: pendingItems.length }) }}
           </UiBadge>
-          <UiBadge v-if="snoozedItems.length > 0" variant="secondary" class="text-xs">
+          <UiBadge
+            v-if="snoozedItems.length > 0"
+            variant="secondary"
+            :class="[
+              'text-xs transition-colors',
+              showJumpBar ? 'cursor-pointer hover:bg-secondary/80' : '',
+              activeSection === 'snoozed' && showJumpBar ? 'ring-1 ring-foreground/20' : '',
+            ]"
+            @click="showJumpBar && scrollToSection(snoozedSectionRef)"
+          >
             {{ t('approval.snoozedCount', { count: snoozedItems.length }) }}
           </UiBadge>
-          <UiBadge v-if="approvedItems.length > 0" variant="outline" class="text-xs">
+          <UiBadge
+            v-if="approvedItems.length > 0"
+            variant="outline"
+            :class="[
+              'text-xs transition-colors',
+              showJumpBar ? 'cursor-pointer hover:bg-muted' : '',
+              activeSection === 'progress' && showJumpBar ? 'ring-1 ring-foreground/20' : '',
+            ]"
+            @click="showJumpBar && scrollToSection(progressSectionRef)"
+          >
             {{ t('approval.deletingCount', { count: approvedItems.length }) }}
           </UiBadge>
         </div>
@@ -265,10 +374,10 @@ onUnmounted(() => {
         {{ t('approval.noPending') }}
       </div>
 
-      <UiScrollArea v-else class="h-[480px] pr-4">
+      <UiScrollArea v-else ref="scrollAreaRef" class="h-[480px] pr-4">
         <div class="space-y-4">
           <!-- Section 1: Pending Approval -->
-          <div v-if="pendingItems.length > 0">
+          <div v-if="pendingItems.length > 0" ref="pendingSectionRef" data-section="pending">
             <div class="flex items-center justify-between mb-2">
               <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {{ t('approval.pending') }}
@@ -487,7 +596,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Section 2: Snoozed -->
-          <div v-if="snoozedItems.length > 0">
+          <div v-if="snoozedItems.length > 0" ref="snoozedSectionRef" data-section="snoozed">
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               {{ t('approval.snoozed') }}
             </h4>
@@ -543,7 +652,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Section 3: In Progress (Approved/Deleting) -->
-          <div v-if="approvedItems.length > 0">
+          <div v-if="approvedItems.length > 0" ref="progressSectionRef" data-section="progress">
             <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               {{ t('approval.inProgress') }}
             </h4>
