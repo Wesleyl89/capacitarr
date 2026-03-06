@@ -28,24 +28,27 @@ The standard CI pipeline runs on every push and merge request:
 ### Step-by-Step
 
 ```bash
-# 1. Determine the next version
+# 1. Run the full CI pipeline locally (must pass before releasing)
+make ci
+
+# 2. Determine the next version
 git cliff --bumped-version                    # e.g., v0.2.0
 
-# 2. Generate the full changelog
+# 3. Generate the full changelog
 git cliff --bump -o CHANGELOG.md
 
-# 3. Update package.json version (strip the 'v' prefix)
+# 4. Update package.json version (strip the 'v' prefix)
 VERSION=$(git cliff --bumped-version)
 SEMVER=${VERSION#v}
 npm version "$SEMVER" --no-git-tag-version
 cd frontend && npm version "$SEMVER" --no-git-tag-version && cd ..
 
-# 4. Commit and tag
+# 5. Commit and tag
 git add CHANGELOG.md package.json package-lock.json frontend/package.json
 git commit -m "chore(release): $VERSION"
 git tag "$VERSION"
 
-# 5. Push (two-step to avoid duplicate pipelines)
+# 6. Push (two-step to avoid duplicate pipelines)
 git push origin main        # branch pipeline: lint/test/build/security/pages
 git push origin "$VERSION"  # tag pipeline: full release (binaries + Docker + GitLab release)
 ```
@@ -60,7 +63,7 @@ There is a convenience script in the root `package.json`:
 npm run release
 ```
 
-This runs the full release flow locally (changelog generation, version bump, commit, and tag). You still need to push afterward:
+This runs the full CI pipeline (`make ci`) first, then performs the release flow (changelog generation, version bump, commit, and tag). If CI fails, the release is aborted. You still need to push afterward:
 
 ```bash
 git push origin main
