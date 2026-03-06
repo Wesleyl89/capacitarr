@@ -1,7 +1,7 @@
 # Grid View with Media Posters
 
 **Created:** 2026-03-06T14:15Z
-**Status:** 📋 Planned
+**Status:** 🔨 In Progress (Phase 1 ✅ Complete, Phase 2 pending)
 **Scope:** Approval Queue + Deletion Preview (NOT Audit Log)
 **Branch:** `feature/grid-view-posters`
 
@@ -64,7 +64,7 @@ flowchart TD
 | **Deletion Preview** (`RulePreviewTable.vue`) | ✅ Yes | Search/filter/pagination preserved; grid changes item rendering only |
 | **Audit Log** (`audit.vue`) | ❌ No | Tabular log data, not suited for poster grid |
 
-## Phase 0: Branch & Setup
+## Phase 0: Branch & Setup ✅
 
 **Goal:** Create the feature branch and establish the working context.
 
@@ -81,9 +81,13 @@ All work for this plan is committed to `feature/grid-view-posters` and merged to
 
 ---
 
-## Phase 1: Backend — Poster URL Plumbing
+## Phase 1: Backend — Poster URL Plumbing ✅
 
 **Goal:** Make poster URLs available in the API responses without changing any frontend rendering yet.
+
+> **Completed:** All steps pass `make ci`. Poster URLs flow through two paths:
+> - **Deletion preview**: `posterUrl` flows live through `MediaItem` from *arr API
+> - **Approval queue**: `poster_url` persisted in DB since queue items are snapshots
 
 ### Step 1.1: Add `PosterURL` to `MediaItem` struct
 
