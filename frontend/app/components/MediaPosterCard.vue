@@ -93,7 +93,7 @@ const showFallback = computed(() => !props.posterUrl || imageError.value || !ima
     class="group relative aspect-[2/3] overflow-hidden rounded-lg border cursor-pointer transition-all hover:ring-2 hover:ring-primary/50"
     :class="{
       'ring-2 ring-emerald-500/50': isProtected,
-      'ring-2 ring-red-500/40': isFlagged && !isProtected,
+      'opacity-40': isFlagged && !isProtected,
       'ring-2 ring-primary bg-primary/5': selected,
     }"
     @click="$emit('click')"

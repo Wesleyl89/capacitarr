@@ -115,19 +115,85 @@
           <div
             class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
           >
-            <MediaPosterCard
-              v-for="(group, groupIdx) in renderedGroups"
-              :key="group.key"
-              :title="group.entry.item.title"
-              :poster-url="group.entry.item.posterUrl"
-              :year="group.entry.item.year"
-              :media-type="group.entry.item.type"
-              :score="group.entry.isProtected ? undefined : group.entry.score"
-              :size-bytes="group.entry.item.sizeBytes"
-              :is-protected="group.entry.isProtected"
-              :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
-              @click="selectPreviewItem(group.entry)"
-            />
+            <template v-for="(group, groupIdx) in renderedGroups" :key="group.key">
+              <!-- Deletion line: full-width divider -->
+              <div
+                v-if="deletionLineIndex !== null && deletionLineIndex === groupIdx"
+                class="col-span-full flex items-center gap-2 py-1"
+              >
+                <div class="flex-1 h-px bg-destructive/40" />
+                <span class="text-xs font-medium text-destructive whitespace-nowrap"
+                  >Engine stops here (target reached)</span
+                >
+                <div class="flex-1 h-px bg-destructive/40" />
+              </div>
+              <!-- Show groups: popover with individual seasons -->
+              <UiPopover v-if="group.seasons.length > 0">
+                <UiPopoverTrigger as-child>
+                  <MediaPosterCard
+                    :title="group.entry.item.title"
+                    :poster-url="group.entry.item.posterUrl"
+                    :year="group.entry.item.year"
+                    :media-type="group.entry.item.type"
+                    :score="group.entry.isProtected ? undefined : group.entry.score"
+                    :size-bytes="group.entry.item.sizeBytes"
+                    :is-protected="group.entry.isProtected"
+                    :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
+                    :season-count="group.seasons.length"
+                    @click.prevent
+                  />
+                </UiPopoverTrigger>
+                <UiPopoverContent class="w-72 p-0" side="bottom" align="start">
+                  <div class="px-3 py-2 border-b">
+                    <p class="text-sm font-medium truncate">
+                      {{ group.entry.item.title }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                      {{ group.seasons.length }} season{{ group.seasons.length !== 1 ? 's' : '' }}
+                    </p>
+                  </div>
+                  <div
+                    class="max-h-60 overflow-y-auto"
+                    :class="{
+                      'opacity-50': deletionLineIndex !== null && groupIdx >= deletionLineIndex,
+                    }"
+                  >
+                    <div
+                      v-for="season in group.seasons"
+                      :key="season.item.title"
+                      class="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                      @click="selectPreviewItem(season)"
+                    >
+                      <span
+                        class="text-xs font-mono tabular-nums font-semibold w-10 text-right shrink-0"
+                        :class="season.isProtected ? 'text-emerald-500' : 'text-primary'"
+                      >
+                        {{ season.isProtected ? '✓' : season.score.toFixed(2) }}
+                      </span>
+                      <span class="text-xs truncate flex-1">
+                        {{ extractPreviewSeasonLabel(season.item.title) }}
+                      </span>
+                      <span class="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {{ formatBytes(season.item.sizeBytes) }}
+                      </span>
+                    </div>
+                  </div>
+                </UiPopoverContent>
+              </UiPopover>
+              <!-- Non-show items: direct click to detail -->
+              <MediaPosterCard
+                v-else
+                :title="group.entry.item.title"
+                :poster-url="group.entry.item.posterUrl"
+                :year="group.entry.item.year"
+                :media-type="group.entry.item.type"
+                :score="group.entry.isProtected ? undefined : group.entry.score"
+                :size-bytes="group.entry.item.sizeBytes"
+                :is-protected="group.entry.isProtected"
+                :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
+                @click="selectPreviewItem(group.entry)"
+              />
+            </template>
           </div>
           <!-- Progressive rendering indicator -->
           <div
