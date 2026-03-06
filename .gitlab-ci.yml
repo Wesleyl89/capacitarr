@@ -53,7 +53,7 @@ lint:frontend:
 
 test:go:
   stage: test
-  image: golang:1.25-alpine
+  image: golang:1.26-alpine
   interruptible: true
   before_script:
     # Create placeholder for go:embed directive (frontend isn't built during test)
@@ -88,7 +88,7 @@ build:docker:
 
 security:govulncheck:
   stage: security
-  image: golang:1.25-alpine
+  image: golang:1.26-alpine
   interruptible: true
   before_script:
     - go install golang.org/x/vuln/cmd/govulncheck@latest

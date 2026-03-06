@@ -66,10 +66,10 @@ lint\:ci:
 ## Run all tests (same Docker images + commands as CI pipeline)
 test\:ci:
 	@echo "═══ CI Test Stage ═══"
-	@echo "→ [test:go] go test (Docker: golang:1.25-alpine)..."
+	@echo "→ [test:go] go test (Docker: golang:1.26-alpine)..."
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
 	docker run --rm -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
-		golang:1.25-alpine sh -c "cd /app && go test -v ./... -count=1"
+		golang:1.26-alpine sh -c "cd /app && go test -v ./... -count=1"
 	@echo "→ [test:frontend] vitest (Docker: node:22-alpine)..."
 	docker run --rm -e CI=true -v $(CURDIR)/frontend:/app $(NODE_CACHE_VOLS) -w /app \
 		node:22-alpine sh -c "\
@@ -81,10 +81,10 @@ test\:ci:
 ## Run security scans (same Docker images + commands as CI pipeline)
 security\:ci:
 	@echo "═══ CI Security Stage ═══"
-	@echo "→ [security:govulncheck] (Docker: golang:1.25-alpine)..."
+	@echo "→ [security:govulncheck] (Docker: golang:1.26-alpine)..."
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
 	docker run --rm -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
-		golang:1.25-alpine sh -c "\
+		golang:1.26-alpine sh -c "\
 			go install golang.org/x/vuln/cmd/govulncheck@latest && \
 			cd /app && govulncheck ./..."
 	@echo "→ [security:pnpm-audit] (Docker: node:22-alpine)..."
