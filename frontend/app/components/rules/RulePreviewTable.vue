@@ -144,7 +144,6 @@
                     :is-protected="group.entry.isProtected"
                     :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
                     :season-count="group.seasons.length"
-                    @click.prevent
                   />
                 </UiPopoverTrigger>
                 <UiPopoverContent class="w-72 p-0" side="bottom" align="start">

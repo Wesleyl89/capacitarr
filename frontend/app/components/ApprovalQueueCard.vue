@@ -435,7 +435,6 @@ onUnmounted(() => {
                       :selectable="group.auditIds.length > 0"
                       :selected="isGroupFullySelected(group)"
                       :season-count="group.seasonCount"
-                      @click.prevent
                       @select="toggleGroupSelect(group)"
                     />
                   </UiPopoverTrigger>
@@ -713,7 +712,6 @@ onUnmounted(() => {
                       :score="group.score"
                       :size-bytes="group.totalSizeBytes"
                       :season-count="group.seasonCount"
-                      @click.prevent
                     />
                   </UiPopoverTrigger>
                   <UiPopoverContent class="w-72 p-0" side="bottom" align="start">
