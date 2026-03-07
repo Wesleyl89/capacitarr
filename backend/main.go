@@ -200,7 +200,7 @@ func main() {
 	// Initialize background jobs
 	pollerInstance := poller.New(reg)
 	pollerInstance.Start()
-	cronScheduler := jobs.Start(db.DB)
+	cronScheduler := jobs.Start(reg)
 
 	// Initialize Echo instance
 	e := echo.New()
