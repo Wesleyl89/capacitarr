@@ -150,7 +150,7 @@ const showFallback = computed(() => !props.posterUrl || imageError.value || !ima
       class="absolute top-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
       :class="scoreBadgeClass"
     >
-      {{ (score * 100).toFixed(0) }}
+      {{ score.toFixed(2) }}
     </div>
 
     <!-- Top-left: Selection checkbox (when selectable) or Media type chip -->

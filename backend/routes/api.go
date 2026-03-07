@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -70,39 +69,11 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 	// Metrics History
 	protected.GET("/metrics/history", func(c echo.Context) error {
 		resolution := c.QueryParam("resolution")
-		if resolution == "" {
-			resolution = "raw"
-		}
-
 		diskGroupID := c.QueryParam("disk_group_id")
-		since := c.QueryParam("since") // e.g. "1h", "24h", "7d", "30d"
+		since := c.QueryParam("since")
 
-		query := database.Where("resolution = ?", resolution)
-		if diskGroupID != "" {
-			query = query.Where("disk_group_id = ?", diskGroupID)
-		}
-
-		// Apply time range filter
-		if since != "" {
-			var duration time.Duration
-			switch since {
-			case "1h":
-				duration = 1 * time.Hour
-			case "24h":
-				duration = 24 * time.Hour
-			case "7d":
-				duration = 7 * 24 * time.Hour
-			case "30d":
-				duration = 30 * 24 * time.Hour
-			}
-			if duration > 0 {
-				cutoff := time.Now().Add(-duration)
-				query = query.Where("timestamp >= ?", cutoff)
-			}
-		}
-
-		history := make([]db.LibraryHistory, 0)
-		if err := query.Order("timestamp asc").Limit(1000).Find(&history).Error; err != nil {
+		history, err := reg.Metrics.GetHistory(resolution, diskGroupID, since)
+		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching metrics"})
 		}
 
@@ -158,12 +129,12 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 
 	// Worker Metrics
 	protected.GET("/metrics/worker", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, buildWorkerMetrics(reg))
+		return c.JSON(http.StatusOK, reg.Metrics.GetWorkerMetrics())
 	})
 
 	// Worker Stats (alias for dashboard consumption)
 	protected.GET("/worker/stats", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, buildWorkerMetrics(reg))
+		return c.JSON(http.StatusOK, reg.Metrics.GetWorkerMetrics())
 	})
 
 	// Engine Run Now - trigger an immediate evaluation cycle
@@ -174,15 +145,21 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 
 	// Lifetime stats (cumulative counters, not cleared by data reset)
 	protected.GET("/lifetime-stats", func(c echo.Context) error {
-		var stats db.LifetimeStats
-		if err := database.FirstOrCreate(&stats, db.LifetimeStats{ID: 1}).Error; err != nil {
+		stats, err := reg.Metrics.GetLifetimeStats()
+		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch lifetime stats"})
 		}
 		return c.JSON(http.StatusOK, stats)
 	})
 
 	// Dashboard stats (aggregates lifetime stats, protected count, library growth rate)
-	protected.GET("/dashboard-stats", handleDashboardStats(reg))
+	protected.GET("/dashboard-stats", func(c echo.Context) error {
+		stats, err := reg.Metrics.GetDashboardStats()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch dashboard stats"})
+		}
+		return c.JSON(http.StatusOK, stats)
+	})
 
 	// Audit routes (history-only)
 	RegisterAuditRoutes(protected, database)
@@ -203,71 +180,5 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 	RegisterDataRoutes(protected, reg)
 
 	// Version check routes (update check with cache)
-	RegisterVersionRoutes(protected, database, appVersion)
-}
-
-// buildWorkerMetrics assembles worker metrics from the EngineService and DeletionService.
-// Keys match the frontend TypeScript WorkerStats interface.
-func buildWorkerMetrics(reg *services.Registry) map[string]interface{} {
-	stats := reg.Engine.GetStats()
-
-	// Add poll interval from preferences
-	prefs, err := reg.Settings.GetPreferences()
-	if err == nil {
-		stats["pollIntervalSeconds"] = prefs.PollIntervalSeconds
-	}
-
-	// Add deletion worker state
-	stats["queueDepth"] = 0 // Queue depth is internal to DeletionService
-	stats["currentlyDeleting"] = reg.Deletion.CurrentlyDeleting()
-	stats["processed"] = reg.Deletion.Processed()
-	stats["failed"] = reg.Deletion.Failed()
-
-	return stats
-}
-
-func handleDashboardStats(reg *services.Registry) echo.HandlerFunc {
-	database := reg.DB
-	return func(c echo.Context) error {
-		// 1. Lifetime stats
-		var lifetime db.LifetimeStats
-		database.FirstOrCreate(&lifetime, db.LifetimeStats{ID: 1})
-
-		// 2. Protected count from engine service
-		engineStats := reg.Engine.GetStats()
-		protectedCount, _ := engineStats["protectedCount"].(int64)
-
-		// 3. Library growth rate: compare most recent entry to 7 days ago
-		var recent db.LibraryHistory
-		var weekAgo db.LibraryHistory
-		growthBytes := int64(0)
-		hasGrowthData := false
-
-		cutoff := time.Now().Add(-7 * 24 * time.Hour)
-		// Use Find+Limit instead of First to avoid GORM logging "record not found" —
-		// having no library history is expected on fresh installs or after data resets.
-		var recentRows []db.LibraryHistory
-		database.Where("resolution = ?", "raw").
-			Order("timestamp DESC").Limit(1).Find(&recentRows)
-		if len(recentRows) > 0 {
-			recent = recentRows[0]
-			var weekAgoRows []db.LibraryHistory
-			database.Where("resolution = ? AND timestamp <= ?", "raw", cutoff).
-				Order("timestamp DESC").Limit(1).Find(&weekAgoRows)
-			if len(weekAgoRows) > 0 {
-				weekAgo = weekAgoRows[0]
-				growthBytes = recent.UsedCapacity - weekAgo.UsedCapacity
-				hasGrowthData = true
-			}
-		}
-
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"totalBytesReclaimed": lifetime.TotalBytesReclaimed,
-			"totalItemsRemoved":   lifetime.TotalItemsRemoved,
-			"totalEngineRuns":     lifetime.TotalEngineRuns,
-			"protectedCount":      protectedCount,
-			"growthBytesPerWeek":  growthBytes,
-			"hasGrowthData":       hasGrowthData,
-		})
-	}
+	RegisterVersionRoutes(protected, reg)
 }

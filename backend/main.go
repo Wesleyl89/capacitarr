@@ -185,6 +185,7 @@ func main() {
 
 	// ─── Service Registry ──────────────────────────────────────────────────
 	reg := services.NewRegistry(db.DB, bus, cfg)
+	reg.InitVersion(version)
 
 	// Start the background deletion worker (replaces old init() goroutine)
 	reg.Deletion.Start()
@@ -281,7 +282,7 @@ func main() {
 		// Stop background jobs
 		pollerInstance.Stop()
 		cronScheduler.Stop()
-		routes.RuleValueCache.Close()
+		reg.RuleValueCache.Close()
 
 		// Stop services
 		reg.Deletion.Stop()

@@ -1,8 +1,11 @@
 package services
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 
+	"capacitarr/internal/cache"
 	"capacitarr/internal/config"
 	"capacitarr/internal/events"
 )
@@ -27,23 +30,39 @@ type Registry struct {
 	Auth                *AuthService
 	NotificationChannel *NotificationChannelService
 	Data                *DataService
+	Rules               *RulesService
+	Metrics             *MetricsService
+	Version             *VersionService
+	RuleValueCache      *cache.TTLCache
 }
 
 // NewRegistry creates a fully wired Registry with all services.
 func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *Registry {
 	auditLog := NewAuditLogService(database)
+	engineSvc := NewEngineService(database, bus)
+	deletionSvc := NewDeletionService(database, bus, auditLog)
+
 	return &Registry{
 		DB:                  database,
 		Bus:                 bus,
 		Cfg:                 cfg,
 		Approval:            NewApprovalService(database, bus),
-		Deletion:            NewDeletionService(database, bus, auditLog),
+		Deletion:            deletionSvc,
 		AuditLog:            auditLog,
-		Engine:              NewEngineService(database, bus),
+		Engine:              engineSvc,
 		Settings:            NewSettingsService(database, bus),
 		Integration:         NewIntegrationService(database, bus),
 		Auth:                NewAuthService(database, bus, cfg),
 		NotificationChannel: NewNotificationChannelService(database, bus),
 		Data:                NewDataService(database, bus),
+		Rules:               NewRulesService(database, bus),
+		Metrics:             NewMetricsService(database, engineSvc, deletionSvc),
+		RuleValueCache:      cache.New(5 * time.Minute),
 	}
+}
+
+// InitVersion creates and registers the VersionService. Called by main.go
+// after Registry construction, when the application version string is known.
+func (r *Registry) InitVersion(appVersion string) {
+	r.Version = NewVersionService(r.DB, appVersion, DefaultGitLabReleasesURL)
 }

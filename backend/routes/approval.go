@@ -53,8 +53,8 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		// Safety check: block approvals when deletions are disabled
-		var prefs db.PreferenceSet
-		if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+		prefs, err := reg.Settings.GetPreferences()
+		if err != nil {
 			slog.Error("Failed to load preferences for approval check", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "Failed to load preferences",
@@ -136,8 +136,8 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		// Load preferences to get configured snooze duration
-		var prefs db.PreferenceSet
-		if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+		prefs, err := reg.Settings.GetPreferences()
+		if err != nil {
 			slog.Error("Failed to load preferences for snooze duration", "error", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "Failed to load preferences",

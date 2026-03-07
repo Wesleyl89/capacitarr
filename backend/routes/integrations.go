@@ -217,7 +217,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 
 		// Invalidate rule value cache for this integration on successful test
 		if req.IntegrationID != nil {
-			RuleValueCache.InvalidatePrefix(strconv.Itoa(*req.IntegrationID) + ":")
+			reg.RuleValueCache.InvalidatePrefix(strconv.Itoa(*req.IntegrationID) + ":")
 		}
 
 		reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
@@ -236,7 +236,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		// Invalidate all rule value caches on sync
-		RuleValueCache.InvalidateAll()
+		reg.RuleValueCache.InvalidateAll()
 
 		results := make([]map[string]interface{}, 0)
 		for _, cfg := range configs {

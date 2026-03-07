@@ -7,38 +7,31 @@ import (
 	"testing"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/services"
 	"capacitarr/internal/testutil"
-	"capacitarr/routes"
 )
 
 // mockGitLabReleases spins up a local HTTP server that returns a canned
-// GitLab-style releases response, then configures the version checker to
-// use it. The server is closed and the original URL restored when the test
-// finishes.
-func mockGitLabReleases(t *testing.T, responseJSON string) {
+// GitLab-style releases response, then configures the VersionService to
+// use it. The server is closed when the test finishes.
+func mockGitLabReleases(t *testing.T, reg *services.Registry, responseJSON string) {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(responseJSON))
 	}))
-	t.Cleanup(func() {
-		srv.Close()
-		routes.SetGitlabReleasesURLForTest(
-			"https://gitlab.com/api/v4/projects/79833150/releases?per_page=1",
-		)
-	})
+	t.Cleanup(srv.Close)
 
-	routes.SetGitlabReleasesURLForTest(srv.URL)
+	reg.Version.SetReleasesURL(srv.URL)
 }
 
 // ---------- GET /api/version/check ----------
 
 func TestVersionCheck_DisabledByPreference(t *testing.T) {
-	routes.ResetVersionCacheForTest()
-
 	database := testutil.SetupTestDB(t)
-	e := testutil.SetupTestServer(t, database)
+	e, reg := testutil.SetupTestServerWithRegistry(t, database)
+	reg.Version.ResetCache()
 
 	// Disable update checks in preferences
 	if err := database.Model(&db.PreferenceSet{}).Where("id = 1").Update("check_for_updates", false).Error; err != nil {
@@ -75,11 +68,10 @@ func TestVersionCheck_DisabledByPreference(t *testing.T) {
 }
 
 func TestVersionCheck_ReturnsCurrentVersion(t *testing.T) {
-	routes.ResetVersionCacheForTest()
-	mockGitLabReleases(t, `[{"tag_name":"v1.2.3"}]`)
-
 	database := testutil.SetupTestDB(t)
-	e := testutil.SetupTestServer(t, database)
+	e, reg := testutil.SetupTestServerWithRegistry(t, database)
+	reg.Version.ResetCache()
+	mockGitLabReleases(t, reg, `[{"tag_name":"v1.2.3"}]`)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/version/check", nil)
 	rec := httptest.NewRecorder()
@@ -112,11 +104,10 @@ func TestVersionCheck_ReturnsCurrentVersion(t *testing.T) {
 // ---------- POST /api/version/check (manual "check now") ----------
 
 func TestVersionCheckNow_BypassesCache(t *testing.T) {
-	routes.ResetVersionCacheForTest()
-	mockGitLabReleases(t, `[{"tag_name":"v2.0.0"}]`)
-
 	database := testutil.SetupTestDB(t)
-	e := testutil.SetupTestServer(t, database)
+	e, reg := testutil.SetupTestServerWithRegistry(t, database)
+	reg.Version.ResetCache()
+	mockGitLabReleases(t, reg, `[{"tag_name":"v2.0.0"}]`)
 
 	// First: warm the cache via GET (returns v2.0.0)
 	reqGet := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/version/check", nil)
@@ -166,10 +157,9 @@ func TestVersionCheckNow_BypassesCache(t *testing.T) {
 }
 
 func TestVersionCheckNow_DisabledByPreference(t *testing.T) {
-	routes.ResetVersionCacheForTest()
-
 	database := testutil.SetupTestDB(t)
-	e := testutil.SetupTestServer(t, database)
+	e, reg := testutil.SetupTestServerWithRegistry(t, database)
+	reg.Version.ResetCache()
 
 	// Disable update checks
 	if err := database.Model(&db.PreferenceSet{}).Where("id = 1").Update("check_for_updates", false).Error; err != nil {
@@ -199,7 +189,7 @@ func TestVersionCheckNow_DisabledByPreference(t *testing.T) {
 	}
 }
 
-// ---------- compareSemver ----------
+// ---------- CompareSemver ----------
 
 func TestCompareSemver(t *testing.T) {
 	tests := []struct {
@@ -221,9 +211,9 @@ func TestCompareSemver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := routes.CompareSemverForTest(tt.a, tt.b)
+			got := services.CompareSemver(tt.a, tt.b)
 			if got != tt.expected {
-				t.Errorf("compareSemver(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.expected)
+				t.Errorf("CompareSemver(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.expected)
 			}
 		})
 	}

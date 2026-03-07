@@ -1,7 +1,7 @@
 # Service Layer Audit & Remediation Plan
 
 **Created:** 2026-03-07T03:02Z
-**Status:** 📋 Ready for review
+**Status:** 🚧 In progress — Phase 1 ✅ Complete
 **Branch:** `refactor/service-layer-audit`
 **Scope:** Backend service layer consistency, route cleanup, code quality hardening
 
@@ -105,6 +105,32 @@ RuleValueCache *cache.Cache
 ```
 
 Wire in `NewRegistry()`.
+
+---
+
+### Phase 1 Execution Notes
+
+**Completed:** 2026-03-07T03:16Z
+
+All 8 steps executed. Deviations from plan:
+
+- **Step 1.3 (MetricsService):** `GetDashboardStats` returns `map[string]interface{}` instead of a typed struct, matching the existing `handleDashboardStats` pattern in `api.go` for zero-friction Phase 2 migration.
+- **Step 1.5 (RuleValueCache):** Added `RuleValueCache *cache.TTLCache` field to Registry and initialized in `NewRegistry()`. Did NOT modify route files (Phase 2 scope). The package-level `var RuleValueCache` in `routes/rulefields.go` remains for now.
+- **Step 1.6 (VersionService):** `CompareSemver` is a public standalone function (not a method) since it has no receiver dependency. `splitPrerelease` and `parseVersionParts` remain unexported helpers. Added `SetAppVersion(v string)` method for main.go to call post-construction.
+- **Step 1.8 (Registry):** Added `InitVersion(appVersion string)` method instead of modifying `NewRegistry` signature. `VersionService` is nil after `NewRegistry()` — main.go must call `reg.InitVersion(appVersion)`.
+- **Lint fixes:** Error strings in `RulesService.Create` lowercased per `staticcheck ST1005`. Added `//nolint:gosec` with justification on version status code log line per existing pattern.
+
+All new files:
+- `backend/internal/services/rules.go` — RulesService (CRUD + reorder)
+- `backend/internal/services/rules_test.go` — 10 test functions
+- `backend/internal/services/metrics.go` — MetricsService (history, stats, dashboard, worker)
+- `backend/internal/services/metrics_test.go` — 8 test functions
+- `backend/internal/services/version.go` — VersionService (update checks, semver comparison)
+- `backend/internal/services/version_test.go` — 8 test functions
+
+Modified: `backend/internal/services/registry.go` — added Rules, Metrics, Version, RuleValueCache fields + InitVersion method.
+
+`make ci` passes: 0 lint issues, all tests pass, no vulnerabilities.
 
 ---
 

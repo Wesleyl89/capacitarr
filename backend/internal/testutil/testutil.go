@@ -100,6 +100,15 @@ func TestConfig() *config.Config {
 // with a known JWT secret.
 func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
 	t.Helper()
+	e, _ := SetupTestServerWithRegistry(t, database)
+	return e
+}
+
+// SetupTestServerWithRegistry creates an Echo instance and returns both the
+// server and the service registry. Use this when tests need to access the
+// registry directly (e.g., to configure VersionService's mock URL).
+func SetupTestServerWithRegistry(t *testing.T, database *gorm.DB) (*echo.Echo, *services.Registry) {
+	t.Helper()
 
 	e := echo.New()
 	e.HideBanner = true
@@ -114,6 +123,7 @@ func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
 
 	// Create a test service registry
 	reg := services.NewRegistry(database, bus, cfg)
+	reg.InitVersion("v0.0.0-test")
 
 	// Public routes
 	api.GET("/health", func(c echo.Context) error {
@@ -133,9 +143,9 @@ func SetupTestServer(t *testing.T, database *gorm.DB) *echo.Echo {
 	routes.RegisterEngineHistoryRoutes(protected, database)
 	routes.RegisterDataRoutes(protected, reg)
 	routes.RegisterNotificationRoutes(protected, reg)
-	routes.RegisterVersionRoutes(protected, database, "v0.0.0-test")
+	routes.RegisterVersionRoutes(protected, reg)
 
-	return e
+	return e, reg
 }
 
 // GenerateTestJWT creates a valid JWT token string signed with TestJWTSecret

@@ -5,23 +5,20 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
-	"capacitarr/internal/cache"
 	"capacitarr/internal/db"
 	"capacitarr/internal/integrations"
+	"capacitarr/internal/services"
 )
-
-// RuleValueCache is the package-level TTL cache for rule value lookups.
-// Exported so that integration test/sync endpoints can invalidate it.
-var RuleValueCache = cache.New(5 * time.Minute)
 
 // registerRuleFieldRoutes sets up the /rule-fields and /rule-values endpoints.
 // These are extracted from RegisterRuleRoutes for modularity.
-func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
+func registerRuleFieldRoutes(protected *echo.Group, reg *services.Registry) {
+	database := reg.DB
+	ruleValueCache := reg.RuleValueCache
+
 	// ---------------------------------------------------------
 	// RULE FIELD OPTIONS (dynamic based on integrations)
 	// Accepts optional ?service_type=sonarr to filter fields.
@@ -186,7 +183,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 
 		// Check cache first
 		cacheKey := fmt.Sprintf("%d:%s", integrationID, action)
-		if cached, ok := RuleValueCache.Get(cacheKey); ok {
+		if cached, ok := ruleValueCache.Get(cacheKey); ok {
 			return c.JSON(http.StatusOK, cached)
 		}
 
@@ -202,7 +199,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 					{Value: "deleted", Label: "Deleted"},
 				},
 			}
-			RuleValueCache.Set(cacheKey, result)
+			ruleValueCache.Set(cacheKey, result)
 			return c.JSON(http.StatusOK, result)
 
 		case "monitored", "requested", "incollection", "watchedbyreq": // Boolean fields
@@ -213,7 +210,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 					{Value: "false", Label: "No"},
 				},
 			}
-			RuleValueCache.Set(cacheKey, result)
+			ruleValueCache.Set(cacheKey, result)
 			return c.JSON(http.StatusOK, result)
 
 		case "type": // Media Type
@@ -227,7 +224,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 					{Value: "book", Label: "Book"},
 				},
 			}
-			RuleValueCache.Set(cacheKey, result)
+			ruleValueCache.Set(cacheKey, result)
 			return c.JSON(http.StatusOK, result)
 
 		// Free-text fields — return input metadata
@@ -352,7 +349,7 @@ func registerRuleFieldRoutes(protected *echo.Group, database *gorm.DB) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown action: " + action})
 		}
 
-		RuleValueCache.Set(cacheKey, result)
+		ruleValueCache.Set(cacheKey, result)
 		return c.JSON(http.StatusOK, result)
 	})
 }
