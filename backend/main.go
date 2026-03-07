@@ -169,26 +169,27 @@ func main() {
 	// ─── Event Bus + Subscribers ───────────────────────────────────────────
 	bus := events.NewEventBus()
 
-	// Activity Persister — writes all events to the activity_events table
-	activityPersister := events.NewActivityPersister(db.DB, bus)
-	activityPersister.Start()
-
 	// SSE Broadcaster — fans out events to connected browser tabs
 	sseBroadcaster := events.NewSSEBroadcaster(bus)
 	sseBroadcaster.Start()
 
-	slog.Info("Event bus started (partial)", "component", "main", "subscribers", "activity_persister, sse_broadcaster")
+	slog.Info("Event bus started (partial)", "component", "main", "subscribers", "sse_broadcaster")
 
 	// ─── Service Registry ──────────────────────────────────────────────────
 	reg := services.NewRegistry(db.DB, bus, cfg)
 	reg.InitVersion(version)
 
-	// Notification Subscriber — dispatches notifications via configured channels
-	// Must be created after the service registry since it depends on NotificationChannel service
+	// Activity Persister — writes all events to the activity_events table via SettingsService.
+	// Must be created after the service registry since it depends on SettingsService.
+	activityPersister := events.NewActivityPersister(reg.Settings, bus)
+	activityPersister.Start()
+
+	// Notification Subscriber — dispatches notifications via configured channels.
+	// Must be created after the service registry since it depends on NotificationChannel service.
 	notifSubscriber := notifications.NewEventBusSubscriber(reg.NotificationChannel, bus)
 	notifSubscriber.Start()
 
-	slog.Info("Notification subscriber started", "component", "main")
+	slog.Info("Event subscribers started", "component", "main", "subscribers", "activity_persister, notification_subscriber")
 
 	// Start the background deletion worker (replaces old init() goroutine)
 	reg.Deletion.Start()
@@ -285,7 +286,7 @@ func main() {
 		// Stop background jobs
 		pollerInstance.Stop()
 		cronScheduler.Stop()
-		reg.RuleValueCache.Close()
+		reg.Integration.CloseCache()
 
 		// Stop services
 		reg.Deletion.Stop()

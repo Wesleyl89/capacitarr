@@ -3,28 +3,29 @@ package events
 import (
 	"encoding/json"
 	"log/slog"
-	"time"
-
-	"gorm.io/gorm"
-
-	"capacitarr/internal/db"
 )
 
-// ActivityPersister subscribes to an EventBus and writes every event
-// as an ActivityEvent row in the database. It runs as a background goroutine.
-type ActivityPersister struct {
-	database *gorm.DB
-	bus      *EventBus
-	ch       chan Event
-	done     chan struct{}
+// ActivityWriter provides the ability to create activity event records.
+// Implemented by SettingsService to keep DB access within the service layer.
+type ActivityWriter interface {
+	CreateActivity(eventType, message, metadata string) error
 }
 
-// NewActivityPersister creates a new ActivityPersister wired to the given bus and database.
-func NewActivityPersister(database *gorm.DB, bus *EventBus) *ActivityPersister {
+// ActivityPersister subscribes to an EventBus and writes every event
+// as an ActivityEvent row via the ActivityWriter. It runs as a background goroutine.
+type ActivityPersister struct {
+	writer ActivityWriter
+	bus    *EventBus
+	ch     chan Event
+	done   chan struct{}
+}
+
+// NewActivityPersister creates a new ActivityPersister wired to the given bus and writer.
+func NewActivityPersister(writer ActivityWriter, bus *EventBus) *ActivityPersister {
 	return &ActivityPersister{
-		database: database,
-		bus:      bus,
-		done:     make(chan struct{}),
+		writer: writer,
+		bus:    bus,
+		done:   make(chan struct{}),
 	}
 }
 
@@ -49,21 +50,14 @@ func (p *ActivityPersister) run() {
 	}
 }
 
-// persist writes a single event as an ActivityEvent row.
+// persist writes a single event as an ActivityEvent row via the ActivityWriter.
 func (p *ActivityPersister) persist(event Event) {
 	metadata := ""
 	if jsonBytes, err := json.Marshal(event); err == nil {
 		metadata = string(jsonBytes)
 	}
 
-	entry := db.ActivityEvent{
-		EventType: event.EventType(),
-		Message:   event.EventMessage(),
-		Metadata:  metadata,
-		CreatedAt: time.Now().UTC(),
-	}
-
-	if err := p.database.Create(&entry).Error; err != nil {
+	if err := p.writer.CreateActivity(event.EventType(), event.EventMessage(), metadata); err != nil {
 		slog.Error("Failed to persist activity event",
 			"component", "events",
 			"eventType", event.EventType(),

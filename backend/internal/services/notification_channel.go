@@ -179,7 +179,7 @@ func (s *NotificationChannelService) TestChannel(id uint) error {
 	case "slack":
 		return notifications.SendSlack(cfg.WebhookURL, event)
 	case "inapp":
-		return notifications.SendInApp(s.db, event)
+		return s.CreateInApp(event.Title, event.Message, notifications.SeverityForEvent(event.Type), event.Type)
 	default:
 		return fmt.Errorf("unknown channel type: %s", cfg.Type)
 	}

@@ -269,6 +269,23 @@ func (s *EngineService) PruneOldStats(keep int) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// IncrementDeletedStats atomically increments the deleted counter and freed bytes
+// on an engine run stats row. Used by the DeletionService after a successful deletion.
+func (s *EngineService) IncrementDeletedStats(runStatsID uint, sizeBytes int64) error {
+	if runStatsID == 0 {
+		return nil
+	}
+	result := s.db.Model(&db.EngineRunStats{}).Where("id = ?", runStatsID).
+		UpdateColumns(map[string]interface{}{
+			"deleted":     gorm.Expr("deleted + ?", 1),
+			"freed_bytes": gorm.Expr("freed_bytes + ?", sizeBytes),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("failed to increment deleted stats: %w", result.Error)
+	}
+	return nil
+}
+
 // GetStats returns the current engine statistics as a map.
 // Keys match the frontend TypeScript WorkerStats interface.
 func (s *EngineService) GetStats() map[string]interface{} {

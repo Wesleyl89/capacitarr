@@ -81,7 +81,7 @@ func (s *EventBusSubscriber) handle(event events.Event) {
 			case "slack":
 				sendErr = SendSlack(c.WebhookURL, ne)
 			case "inapp":
-				severity := severityForEvent(ne.Type)
+				severity := SeverityForEvent(ne.Type)
 				sendErr = s.provider.CreateInApp(ne.Title, ne.Message, severity, ne.Type)
 			default:
 				slog.Warn("Unknown notification channel type", "component", "notifications", "type", c.Type)

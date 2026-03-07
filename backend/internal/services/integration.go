@@ -3,10 +3,13 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
+	"capacitarr/internal/cache"
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
 	"capacitarr/internal/integrations"
@@ -15,15 +18,314 @@ import (
 // ErrNotFound is returned when a requested record does not exist.
 var ErrNotFound = errors.New("record not found")
 
-// IntegrationService manages integration CRUD and connection testing.
-type IntegrationService struct {
-	db  *gorm.DB
-	bus *events.EventBus
+// DiskGroupUpserter provides write access to disk groups.
+// Defined here to avoid import cycles between IntegrationService and SettingsService.
+type DiskGroupUpserter interface {
+	UpsertDiskGroup(disk integrations.DiskSpace) (*db.DiskGroup, error)
 }
 
-// NewIntegrationService creates a new IntegrationService.
+// IntegrationService manages integration CRUD, connection testing, and
+// external API lookups (rule values, quality profiles, tags, languages).
+// It also owns the RuleValueCache for caching external API responses.
+type IntegrationService struct {
+	db             *gorm.DB
+	bus            *events.EventBus
+	settings       DiskGroupUpserter
+	ruleValueCache *cache.TTLCache
+}
+
+// SetSettingsService wires the SettingsService dependency for disk group upserts.
+// Called by Registry after construction to avoid circular initialization.
+func (s *IntegrationService) SetSettingsService(settings DiskGroupUpserter) {
+	s.settings = settings
+}
+
+// NewIntegrationService creates a new IntegrationService with an embedded rule value cache.
 func NewIntegrationService(database *gorm.DB, bus *events.EventBus) *IntegrationService {
-	return &IntegrationService{db: database, bus: bus}
+	return &IntegrationService{
+		db:             database,
+		bus:            bus,
+		ruleValueCache: cache.New(5 * time.Minute),
+	}
+}
+
+// CloseCache stops the background cache janitor. Call during graceful shutdown.
+func (s *IntegrationService) CloseCache() {
+	s.ruleValueCache.Close()
+}
+
+// InvalidateRuleValueCache removes all cached entries for a specific integration.
+func (s *IntegrationService) InvalidateRuleValueCache(integrationID int) {
+	s.ruleValueCache.InvalidatePrefix(strconv.Itoa(integrationID) + ":")
+}
+
+// InvalidateAllRuleValueCaches removes all cached rule value entries.
+func (s *IntegrationService) InvalidateAllRuleValueCaches() {
+	s.ruleValueCache.InvalidateAll()
+}
+
+// TestConnectionResult holds the outcome of a connection test.
+type TestConnectionResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// TestConnection tests connectivity to an integration given a type, URL, and API key.
+// If apiKey is empty or masked and integrationID is provided, the stored key is used.
+// On success/failure, the appropriate event is published to the event bus.
+func (s *IntegrationService) TestConnection(intType, url, apiKey string, integrationID *int) TestConnectionResult {
+	// Resolve masked or empty API keys to the stored value
+	if (apiKey == "" || isMaskedKey(apiKey)) && integrationID != nil && *integrationID > 0 {
+		existing, err := s.GetByID(uint(*integrationID))
+		if err == nil {
+			apiKey = existing.APIKey
+		}
+	}
+
+	// Enrichment-only services have separate client constructors
+	switch intType {
+	case "tautulli":
+		client := integrations.NewTautulliClient(url, apiKey)
+		if err := client.TestConnection(); err != nil {
+			s.PublishTestFailure(intType, intType, url, err.Error())
+			return TestConnectionResult{Success: false, Error: err.Error()}
+		}
+		s.PublishTestSuccess(intType, intType, url)
+		return TestConnectionResult{Success: true, Message: "Connection successful"}
+
+	case "overseerr":
+		client := integrations.NewOverseerrClient(url, apiKey)
+		if err := client.TestConnection(); err != nil {
+			s.PublishTestFailure(intType, intType, url, err.Error())
+			return TestConnectionResult{Success: false, Error: err.Error()}
+		}
+		s.PublishTestSuccess(intType, intType, url)
+		return TestConnectionResult{Success: true, Message: "Connection successful"}
+
+	case "jellyfin":
+		client := integrations.NewJellyfinClient(url, apiKey)
+		if err := client.TestConnection(); err != nil {
+			s.PublishTestFailure(intType, intType, url, err.Error())
+			return TestConnectionResult{Success: false, Error: err.Error()}
+		}
+		s.PublishTestSuccess(intType, intType, url)
+		return TestConnectionResult{Success: true, Message: "Connection successful"}
+
+	case "emby":
+		client := integrations.NewEmbyClient(url, apiKey)
+		if err := client.TestConnection(); err != nil {
+			s.PublishTestFailure(intType, intType, url, err.Error())
+			return TestConnectionResult{Success: false, Error: err.Error()}
+		}
+		s.PublishTestSuccess(intType, intType, url)
+		return TestConnectionResult{Success: true, Message: "Connection successful"}
+
+	case "plex":
+		client := integrations.NewPlexClient(url, apiKey)
+		if err := client.TestConnection(); err != nil {
+			s.PublishTestFailure(intType, intType, url, err.Error())
+			return TestConnectionResult{Success: false, Error: err.Error()}
+		}
+		s.PublishTestSuccess(intType, intType, url)
+		return TestConnectionResult{Success: true, Message: "Connection successful"}
+	}
+
+	// Standard *arr integrations
+	client := integrations.NewClient(intType, url, apiKey)
+	if client == nil {
+		return TestConnectionResult{Success: false, Error: "Unknown integration type"}
+	}
+
+	if err := client.TestConnection(); err != nil {
+		s.PublishTestFailure(intType, intType, url, err.Error())
+		return TestConnectionResult{Success: false, Error: err.Error()}
+	}
+
+	// Invalidate rule value cache on successful test
+	if integrationID != nil {
+		s.InvalidateRuleValueCache(*integrationID)
+	}
+
+	s.PublishTestSuccess(intType, intType, url)
+	return TestConnectionResult{Success: true, Message: "Connection successful"}
+}
+
+// FetchRuleValues retrieves autocomplete values for a given rule field action
+// from the specified integration. Results are cached with a 5-minute TTL.
+// Returns (result, error). Static field types (booleans, free-text) are handled
+// inline without an external API call.
+func (s *IntegrationService) FetchRuleValues(integrationID uint, action string) (interface{}, error) {
+	cacheKey := fmt.Sprintf("%d:%s", integrationID, action)
+
+	// Check cache first
+	if cached, ok := s.ruleValueCache.Get(cacheKey); ok {
+		return cached, nil
+	}
+
+	// Static field types — no external API call needed
+	switch action {
+	case "seriesstatus":
+		result := map[string]interface{}{
+			"type": "closed",
+			"options": []integrations.NameValue{
+				{Value: "continuing", Label: "Continuing"},
+				{Value: "ended", Label: "Ended"},
+				{Value: "upcoming", Label: "Upcoming"},
+				{Value: "deleted", Label: "Deleted"},
+			},
+		}
+		s.ruleValueCache.Set(cacheKey, result)
+		return result, nil
+
+	case "monitored", "requested", "incollection", "watchedbyreq":
+		result := map[string]interface{}{
+			"type": "closed",
+			"options": []integrations.NameValue{
+				{Value: "true", Label: "Yes"},
+				{Value: "false", Label: "No"},
+			},
+		}
+		s.ruleValueCache.Set(cacheKey, result)
+		return result, nil
+
+	case "type":
+		result := map[string]interface{}{
+			"type": "closed",
+			"options": []integrations.NameValue{
+				{Value: "movie", Label: "Movie"},
+				{Value: "show", Label: "Show"},
+				{Value: "season", Label: "Season"},
+				{Value: "artist", Label: "Artist"},
+				{Value: "book", Label: "Book"},
+			},
+		}
+		s.ruleValueCache.Set(cacheKey, result)
+		return result, nil
+
+	// Free-text field metadata — no caching needed, return immediately
+	case "title":
+		return map[string]interface{}{
+			"type": "free", "inputType": "text", "placeholder": "e.g., Breaking Bad", "suffix": "",
+		}, nil
+	case "rating":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 7.5", "suffix": "",
+		}, nil
+	case "sizebytes":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 5368709120", "suffix": "bytes (≈ GB)",
+		}, nil
+	case "timeinlibrary":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 30", "suffix": "days",
+		}, nil
+	case "year":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 2020", "suffix": "",
+		}, nil
+	case "seasoncount":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 5", "suffix": "",
+		}, nil
+	case "episodecount":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 100", "suffix": "",
+		}, nil
+	case "playcount":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 0", "suffix": "",
+		}, nil
+	case "requestcount":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 3", "suffix": "",
+		}, nil
+	case "lastplayed":
+		return map[string]interface{}{
+			"type": "free", "inputType": "number", "placeholder": "e.g., 30", "suffix": "days",
+		}, nil
+	case "requestedby":
+		return map[string]interface{}{
+			"type": "free", "inputType": "text", "placeholder": "e.g., john", "suffix": "",
+		}, nil
+	}
+
+	// Dynamic fields — require API call to the *arr service
+	cfg, err := s.GetByID(integrationID)
+	if err != nil {
+		return nil, fmt.Errorf("integration not found: %w", err)
+	}
+
+	client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
+	if client == nil {
+		return nil, fmt.Errorf("unsupported integration type for rule values")
+	}
+
+	fetcher, ok := client.(integrations.RuleValueFetcher)
+	if !ok {
+		return nil, fmt.Errorf("integration does not support rule value lookups")
+	}
+
+	var result map[string]interface{}
+
+	switch action {
+	case "quality":
+		profiles, fetchErr := fetcher.GetQualityProfiles()
+		if fetchErr != nil {
+			return nil, fmt.Errorf("failed to fetch quality profiles: %w", fetchErr)
+		}
+		result = map[string]interface{}{"type": "closed", "options": profiles}
+
+	case "tag":
+		tags, fetchErr := fetcher.GetTags()
+		if fetchErr != nil {
+			return nil, fmt.Errorf("failed to fetch tags: %w", fetchErr)
+		}
+		result = map[string]interface{}{"type": "combobox", "suggestions": tags}
+
+	case "genre":
+		result = map[string]interface{}{
+			"type": "combobox",
+			"suggestions": []integrations.NameValue{
+				{Value: "Action", Label: "Action"},
+				{Value: "Adventure", Label: "Adventure"},
+				{Value: "Animation", Label: "Animation"},
+				{Value: "Comedy", Label: "Comedy"},
+				{Value: "Crime", Label: "Crime"},
+				{Value: "Documentary", Label: "Documentary"},
+				{Value: "Drama", Label: "Drama"},
+				{Value: "Fantasy", Label: "Fantasy"},
+				{Value: "Horror", Label: "Horror"},
+				{Value: "Mystery", Label: "Mystery"},
+				{Value: "Romance", Label: "Romance"},
+				{Value: "Sci-Fi", Label: "Sci-Fi"},
+				{Value: "Thriller", Label: "Thriller"},
+			},
+		}
+
+	case "language":
+		langs, fetchErr := fetcher.GetLanguages()
+		if fetchErr != nil {
+			return nil, fmt.Errorf("failed to fetch languages: %w", fetchErr)
+		}
+		if langs == nil {
+			return map[string]interface{}{
+				"type": "free", "inputType": "text", "placeholder": "e.g., English", "suffix": "",
+			}, nil
+		}
+		result = map[string]interface{}{"type": "closed", "options": langs}
+
+	default:
+		return nil, fmt.Errorf("unknown action: %s", action)
+	}
+
+	s.ruleValueCache.Set(cacheKey, result)
+	return result, nil
+}
+
+// isMaskedKey checks if an API key string is a masked version (starts with "•").
+func isMaskedKey(key string) bool {
+	return len(key) > 0 && strings.HasPrefix(key, "•")
 }
 
 // Create persists a new integration config.
@@ -208,7 +510,7 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 		} else {
 			result.DiskSpace = disks
 			for _, d := range disks {
-				s.upsertDiskGroup(d)
+				_, _ = s.settings.UpsertDiskGroup(d)
 			}
 		}
 
@@ -225,28 +527,4 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 	}
 
 	return results, nil
-}
-
-// upsertDiskGroup creates or updates a DiskGroup from discovered disk space.
-func (s *IntegrationService) upsertDiskGroup(disk integrations.DiskSpace) {
-	var group db.DiskGroup
-	result := s.db.Where("mount_path = ?", disk.Path).First(&group)
-
-	usedBytes := disk.TotalBytes - disk.FreeBytes
-
-	if result.Error != nil {
-		// Create new disk group
-		group = db.DiskGroup{
-			MountPath:  disk.Path,
-			TotalBytes: disk.TotalBytes,
-			UsedBytes:  usedBytes,
-		}
-		s.db.Create(&group)
-	} else {
-		// Update existing
-		s.db.Model(&group).Updates(map[string]interface{}{
-			"total_bytes": disk.TotalBytes,
-			"used_bytes":  usedBytes,
-		})
-	}
 }

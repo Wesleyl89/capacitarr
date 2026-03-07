@@ -16,6 +16,13 @@ type MetricsService struct {
 	db       *gorm.DB
 	engine   *EngineService
 	deletion *DeletionService
+	settings SettingsReader
+}
+
+// SetSettingsService wires the SettingsService dependency for preference reads.
+// Called by Registry after construction to avoid circular initialization.
+func (s *MetricsService) SetSettingsService(settings SettingsReader) {
+	s.settings = settings
 }
 
 // NewMetricsService creates a new MetricsService.
@@ -132,6 +139,30 @@ func (s *MetricsService) IncrementEngineRuns() error {
 	return nil
 }
 
+// IncrementDeletionStats atomically increments the lifetime stats counters
+// for total bytes reclaimed and total items removed. Used by the DeletionService
+// after a successful deletion.
+func (s *MetricsService) IncrementDeletionStats(sizeBytes int64) error {
+	result := s.db.Model(&db.LifetimeStats{}).Where("id = 1").
+		UpdateColumns(map[string]interface{}{
+			"total_bytes_reclaimed": gorm.Expr("total_bytes_reclaimed + ?", sizeBytes),
+			"total_items_removed":   gorm.Expr("total_items_removed + ?", 1),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("failed to increment deletion stats: %w", result.Error)
+	}
+	// Ensure the row exists (first run)
+	if result.RowsAffected == 0 {
+		s.db.FirstOrCreate(&db.LifetimeStats{}, db.LifetimeStats{ID: 1})
+		s.db.Model(&db.LifetimeStats{}).Where("id = 1").
+			UpdateColumns(map[string]interface{}{
+				"total_bytes_reclaimed": gorm.Expr("total_bytes_reclaimed + ?", sizeBytes),
+				"total_items_removed":   gorm.Expr("total_items_removed + ?", 1),
+			})
+	}
+	return nil
+}
+
 // RecordLibraryHistory records a library capacity snapshot for a disk group.
 func (s *MetricsService) RecordLibraryHistory(diskGroupID uint, totalBytes, usedBytes int64) error {
 	record := db.LibraryHistory{
@@ -203,9 +234,8 @@ func (s *MetricsService) PruneHistory(resolution string, before time.Time) (int6
 func (s *MetricsService) GetWorkerMetrics() map[string]interface{} {
 	stats := s.engine.GetStats()
 
-	// Add poll interval from preferences
-	var prefs db.PreferenceSet
-	if err := s.db.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err == nil {
+	// Add poll interval from preferences via SettingsService
+	if prefs, err := s.settings.GetPreferences(); err == nil {
 		stats["pollIntervalSeconds"] = prefs.PollIntervalSeconds
 	}
 

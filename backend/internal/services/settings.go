@@ -169,6 +169,20 @@ func (s *SettingsService) PruneOldActivities(days int) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// CreateActivity creates a new activity event record.
+func (s *SettingsService) CreateActivity(eventType, message, metadata string) error {
+	entry := db.ActivityEvent{
+		EventType: eventType,
+		Message:   message,
+		Metadata:  metadata,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.db.Create(&entry).Error; err != nil {
+		return fmt.Errorf("failed to create activity event: %w", err)
+	}
+	return nil
+}
+
 // ListRecentActivities returns the most recent N activity events.
 func (s *SettingsService) ListRecentActivities(limit int) ([]db.ActivityEvent, error) {
 	activities := make([]db.ActivityEvent, 0, limit)

@@ -16,8 +16,11 @@ func newTestMetricsService(t *testing.T) (*MetricsService, *EngineService, *Dele
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
+	settings := NewSettingsService(database, bus)
 	svc := NewMetricsService(database, engine, deletion)
+	svc.SetSettingsService(settings)
+	deletion.SetDependencies(settings, engine, svc)
 	return svc, engine, deletion
 }
 
@@ -40,7 +43,7 @@ func TestMetricsService_GetHistory_WithSeededData(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	// Seed history entries
@@ -88,7 +91,7 @@ func TestMetricsService_GetHistory_WithTimeFilter(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	now := time.Now()
@@ -129,7 +132,7 @@ func TestMetricsService_GetHistory_DefaultResolution(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	database.Create(&db.LibraryHistory{
@@ -156,7 +159,7 @@ func TestMetricsService_GetLifetimeStats_CreatesDefault(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	stats, err := svc.GetLifetimeStats()
@@ -184,7 +187,7 @@ func TestMetricsService_GetDashboardStats_EmptyDB(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	stats, err := svc.GetDashboardStats()
@@ -214,7 +217,7 @@ func TestMetricsService_GetDashboardStats_WithGrowthData(t *testing.T) {
 	bus := newTestBus(t)
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
 	svc := NewMetricsService(database, engine, deletion)
 
 	now := time.Now()
@@ -266,8 +269,11 @@ func TestMetricsService_GetWorkerMetrics_ReturnsExpectedKeys(t *testing.T) {
 	t.Cleanup(func() { bus.Close() })
 	engine := NewEngineService(database, bus)
 	auditLog := NewAuditLogService(database)
-	deletion := NewDeletionService(database, bus, auditLog)
+	deletion := NewDeletionService(bus, auditLog)
+	settings := NewSettingsService(database, bus)
 	svc := NewMetricsService(database, engine, deletion)
+	svc.SetSettingsService(settings)
+	deletion.SetDependencies(settings, engine, svc)
 
 	metrics := svc.GetWorkerMetrics()
 

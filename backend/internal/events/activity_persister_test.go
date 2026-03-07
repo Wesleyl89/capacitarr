@@ -2,46 +2,53 @@ package events
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
-
-	"capacitarr/internal/db"
-
-	_ "github.com/ncruces/go-sqlite3/embed"
-	"github.com/ncruces/go-sqlite3/gormlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
-// setupTestDB creates an in-memory SQLite database with migrations applied.
-// This is a local helper to avoid importing testutil (which pulls in routes).
-func setupTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
+// mockActivityWriter records all CreateActivity calls for testing.
+type mockActivityWriter struct {
+	mu      sync.Mutex
+	entries []activityEntry
+}
 
-	database, err := gorm.Open(gormlite.Open(":memory:"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+type activityEntry struct {
+	EventType string
+	Message   string
+	Metadata  string
+}
+
+func (m *mockActivityWriter) CreateActivity(eventType, message, metadata string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries = append(m.entries, activityEntry{
+		EventType: eventType,
+		Message:   message,
+		Metadata:  metadata,
 	})
-	if err != nil {
-		t.Fatalf("Failed to open in-memory SQLite: %v", err)
-	}
+	return nil
+}
 
-	sqlDB, err := database.DB()
-	if err != nil {
-		t.Fatalf("Failed to get underlying sql.DB: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
+func (m *mockActivityWriter) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.entries)
+}
 
-	if err := db.RunMigrations(sqlDB); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-	return database
+func (m *mockActivityWriter) getAll() []activityEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]activityEntry, len(m.entries))
+	copy(result, m.entries)
+	return result
 }
 
 func TestActivityPersister_PersistsSingleEvent(t *testing.T) {
-	database := setupTestDB(t)
+	writer := &mockActivityWriter{}
 	bus := NewEventBus()
 
-	persister := NewActivityPersister(database, bus)
+	persister := NewActivityPersister(writer, bus)
 	persister.Start()
 
 	bus.Publish(EngineStartEvent{ExecutionMode: "dry-run"})
@@ -51,16 +58,12 @@ func TestActivityPersister_PersistsSingleEvent(t *testing.T) {
 
 	persister.Stop()
 
-	var events []db.ActivityEvent
-	if err := database.Find(&events).Error; err != nil {
-		t.Fatalf("Failed to query activity events: %v", err)
+	entries := writer.getAll()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 activity event, got %d", len(entries))
 	}
 
-	if len(events) != 1 {
-		t.Fatalf("expected 1 activity event, got %d", len(events))
-	}
-
-	evt := events[0]
+	evt := entries[0]
 	if evt.EventType != "engine_start" {
 		t.Errorf("expected event type 'engine_start', got %q", evt.EventType)
 	}
@@ -79,10 +82,10 @@ func TestActivityPersister_PersistsSingleEvent(t *testing.T) {
 }
 
 func TestActivityPersister_PersistsMultipleEvents(t *testing.T) {
-	database := setupTestDB(t)
+	writer := &mockActivityWriter{}
 	bus := NewEventBus()
 
-	persister := NewActivityPersister(database, bus)
+	persister := NewActivityPersister(writer, bus)
 	persister.Start()
 
 	bus.Publish(EngineStartEvent{ExecutionMode: "approval"})
@@ -92,30 +95,25 @@ func TestActivityPersister_PersistsMultipleEvents(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	persister.Stop()
 
-	var count int64
-	database.Model(&db.ActivityEvent{}).Count(&count)
-
-	if count != 3 {
-		t.Fatalf("expected 3 activity events, got %d", count)
+	if writer.count() != 3 {
+		t.Fatalf("expected 3 activity events, got %d", writer.count())
 	}
 
 	// Verify ordering
-	var events []db.ActivityEvent
-	database.Order("id asc").Find(&events)
-
+	entries := writer.getAll()
 	expectedTypes := []string{"engine_start", "engine_complete", "login"}
 	for i, expected := range expectedTypes {
-		if events[i].EventType != expected {
-			t.Errorf("event %d: expected type %q, got %q", i, expected, events[i].EventType)
+		if entries[i].EventType != expected {
+			t.Errorf("event %d: expected type %q, got %q", i, expected, entries[i].EventType)
 		}
 	}
 }
 
 func TestActivityPersister_StopDrainsRemaining(t *testing.T) {
-	database := setupTestDB(t)
+	writer := &mockActivityWriter{}
 	bus := NewEventBus()
 
-	persister := NewActivityPersister(database, bus)
+	persister := NewActivityPersister(writer, bus)
 	persister.Start()
 
 	// Publish events and immediately stop — Stop should drain remaining events
@@ -124,24 +122,21 @@ func TestActivityPersister_StopDrainsRemaining(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	persister.Stop()
 
-	var count int64
-	database.Model(&db.ActivityEvent{}).Count(&count)
-
-	if count != 1 {
-		t.Fatalf("expected 1 activity event after stop, got %d", count)
+	if writer.count() != 1 {
+		t.Fatalf("expected 1 activity event after stop, got %d", writer.count())
 	}
 }
 
 func TestActivityPersister_MetadataContainsFullEvent(t *testing.T) {
-	database := setupTestDB(t)
+	writer := &mockActivityWriter{}
 	bus := NewEventBus()
 
-	persister := NewActivityPersister(database, bus)
+	persister := NewActivityPersister(writer, bus)
 	persister.Start()
 
 	bus.Publish(DeletionSuccessEvent{
-		MediaName:     "Breaking Bad",
-		MediaType:     "show",
+		MediaName:     "Serenity",
+		MediaType:     "movie",
 		SizeBytes:     5069636198,
 		IntegrationID: 42,
 	})
@@ -149,16 +144,18 @@ func TestActivityPersister_MetadataContainsFullEvent(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	persister.Stop()
 
-	var evt db.ActivityEvent
-	database.First(&evt)
+	entries := writer.getAll()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 activity event, got %d", len(entries))
+	}
 
 	var meta DeletionSuccessEvent
-	if err := json.Unmarshal([]byte(evt.Metadata), &meta); err != nil {
+	if err := json.Unmarshal([]byte(entries[0].Metadata), &meta); err != nil {
 		t.Fatalf("failed to unmarshal metadata: %v", err)
 	}
 
-	if meta.MediaName != "Breaking Bad" {
-		t.Errorf("expected mediaName 'Breaking Bad', got %q", meta.MediaName)
+	if meta.MediaName != "Serenity" {
+		t.Errorf("expected mediaName 'Serenity', got %q", meta.MediaName)
 	}
 	if meta.SizeBytes != 5069636198 {
 		t.Errorf("expected sizeBytes 5069636198, got %d", meta.SizeBytes)

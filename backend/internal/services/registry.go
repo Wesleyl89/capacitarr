@@ -1,11 +1,8 @@
 package services
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 
-	"capacitarr/internal/cache"
 	"capacitarr/internal/config"
 	"capacitarr/internal/events"
 )
@@ -35,16 +32,22 @@ type Registry struct {
 	Rules               *RulesService
 	Metrics             *MetricsService
 	Version             *VersionService
-	RuleValueCache      *cache.TTLCache
 }
 
 // NewRegistry creates a fully wired Registry with all services.
 func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *Registry {
 	auditLog := NewAuditLogService(database)
 	engineSvc := NewEngineService(database, bus)
-	deletionSvc := NewDeletionService(database, bus, auditLog)
+	deletionSvc := NewDeletionService(bus, auditLog)
+	settingsSvc := NewSettingsService(database, bus)
+	metricsSvc := NewMetricsService(database, engineSvc, deletionSvc)
 
-	return &Registry{
+	// Wire cross-service dependencies that cannot be injected at construction
+	// time due to circular initialization (DeletionService needs Settings,
+	// Engine, and Metrics but they are constructed in the same function).
+	deletionSvc.SetDependencies(settingsSvc, engineSvc, metricsSvc)
+
+	reg := &Registry{
 		DB:                  database,
 		Bus:                 bus,
 		Cfg:                 cfg,
@@ -52,15 +55,22 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 		Deletion:            deletionSvc,
 		AuditLog:            auditLog,
 		Engine:              engineSvc,
-		Settings:            NewSettingsService(database, bus),
+		Settings:            settingsSvc,
 		Integration:         NewIntegrationService(database, bus),
 		Auth:                NewAuthService(database, bus, cfg),
 		NotificationChannel: NewNotificationChannelService(database, bus),
 		Data:                NewDataService(database, bus),
 		Rules:               NewRulesService(database, bus),
-		Metrics:             NewMetricsService(database, engineSvc, deletionSvc),
-		RuleValueCache:      cache.New(5 * time.Minute),
+		Metrics:             metricsSvc,
 	}
+
+	// Wire IntegrationService's cross-service dependency on SettingsService
+	reg.Integration.SetSettingsService(settingsSvc)
+
+	// Wire MetricsService's cross-service dependency on SettingsService
+	metricsSvc.SetSettingsService(settingsSvc)
+
+	return reg
 }
 
 // InitVersion creates and registers the VersionService. Called by main.go

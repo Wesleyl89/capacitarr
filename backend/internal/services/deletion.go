@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
-	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
@@ -30,9 +29,11 @@ type DeleteJob struct {
 // DeletionService manages the background deletion worker and queue.
 // It replaces the old init()-based goroutine and package-level globals.
 type DeletionService struct {
-	db          *gorm.DB
 	bus         *events.EventBus
 	auditLog    *AuditLogService
+	settings    SettingsReader
+	engine      EngineStatsWriter
+	metrics     DeletionStatsWriter
 	queue       chan DeleteJob
 	rateLimiter *rate.Limiter
 	done        chan struct{}
@@ -43,16 +44,41 @@ type DeletionService struct {
 	failed            atomic.Int64
 }
 
+// SettingsReader provides read access to application preferences.
+// Defined here to avoid import cycles between DeletionService and SettingsService.
+type SettingsReader interface {
+	GetPreferences() (db.PreferenceSet, error)
+}
+
+// EngineStatsWriter provides write access to engine run stats.
+type EngineStatsWriter interface {
+	IncrementDeletedStats(runStatsID uint, sizeBytes int64) error
+}
+
+// DeletionStatsWriter provides write access to lifetime deletion stats.
+type DeletionStatsWriter interface {
+	IncrementDeletionStats(sizeBytes int64) error
+}
+
 // NewDeletionService creates a new DeletionService.
-func NewDeletionService(database *gorm.DB, bus *events.EventBus, auditLog *AuditLogService) *DeletionService {
+// The settings, engine, and metrics dependencies are injected via SetDependencies()
+// after registry construction to avoid circular initialization.
+func NewDeletionService(bus *events.EventBus, auditLog *AuditLogService) *DeletionService {
 	return &DeletionService{
-		db:          database,
 		bus:         bus,
 		auditLog:    auditLog,
 		queue:       make(chan DeleteJob, 500),
 		rateLimiter: rate.NewLimiter(rate.Every(3*time.Second), 1),
 		done:        make(chan struct{}),
 	}
+}
+
+// SetDependencies wires cross-service dependencies that cannot be injected
+// at construction time due to circular initialization in the registry.
+func (s *DeletionService) SetDependencies(settings SettingsReader, engine EngineStatsWriter, metrics DeletionStatsWriter) {
+	s.settings = settings
+	s.engine = engine
+	s.metrics = metrics
 }
 
 // Start begins the background deletion worker.
@@ -114,10 +140,9 @@ func (s *DeletionService) processJob(job DeleteJob) {
 	s.currentlyDeleting.Store(job.Item.Title)
 	defer s.currentlyDeleting.Store("")
 
-	// Check whether actual deletions are enabled
-	var prefs db.PreferenceSet
+	// Check whether actual deletions are enabled via SettingsService
 	deletionsEnabled := false
-	if err := s.db.First(&prefs, 1).Error; err == nil {
+	if prefs, err := s.settings.GetPreferences(); err == nil {
 		deletionsEnabled = prefs.DeletionsEnabled
 	}
 
@@ -170,21 +195,15 @@ func (s *DeletionService) processJob(job DeleteJob) {
 
 	s.processed.Add(1)
 
-	// Increment deleted counter and freed bytes on the engine run stats row
-	if job.RunStatsID > 0 {
-		s.db.Model(&db.EngineRunStats{}).Where("id = ?", job.RunStatsID).
-			UpdateColumns(map[string]interface{}{
-				"deleted":     gorm.Expr("deleted + ?", 1),
-				"freed_bytes": gorm.Expr("freed_bytes + ?", job.Item.SizeBytes),
-			})
+	// Increment deleted counter and freed bytes on the engine run stats row via EngineService
+	if err := s.engine.IncrementDeletedStats(job.RunStatsID, job.Item.SizeBytes); err != nil {
+		slog.Error("Failed to increment engine deleted stats", "component", "services", "error", err)
 	}
 
-	// Increment lifetime stats
-	s.db.Model(&db.LifetimeStats{}).Where("id = 1").
-		UpdateColumns(map[string]interface{}{
-			"total_bytes_reclaimed": gorm.Expr("total_bytes_reclaimed + ?", job.Item.SizeBytes),
-			"total_items_removed":   gorm.Expr("total_items_removed + ?", 1),
-		})
+	// Increment lifetime stats via MetricsService
+	if err := s.metrics.IncrementDeletionStats(job.Item.SizeBytes); err != nil {
+		slog.Error("Failed to increment lifetime deletion stats", "component", "services", "error", err)
+	}
 
 	logEntry := db.AuditLogEntry{
 		MediaName:    job.Item.Title,

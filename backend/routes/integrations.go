@@ -10,7 +10,6 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"capacitarr/internal/db"
-	"capacitarr/internal/integrations"
 	"capacitarr/internal/services"
 )
 
@@ -145,139 +144,33 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		return c.JSON(http.StatusOK, map[string]string{"message": "Integration deleted"})
 	})
 
-	// Test connection
+	// Test connection — delegates to IntegrationService.TestConnection()
 	g.POST("/integrations/test", func(c echo.Context) error {
 		var req struct {
 			Type          string `json:"type"`
 			URL           string `json:"url"`
 			APIKey        string `json:"apiKey"`
-			IntegrationID *int   `json:"integrationId,omitempty"` // Optional: invalidate cache for this integration
+			IntegrationID *int   `json:"integrationId,omitempty"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		}
 
-		// If the API key is masked and we have an integration ID, look up the real key
-		if (req.APIKey == "" || isMaskedKey(req.APIKey)) && req.IntegrationID != nil && *req.IntegrationID > 0 {
-			existing, err := reg.Integration.GetByID(uint(*req.IntegrationID))
-			if err == nil {
-				req.APIKey = existing.APIKey
-			}
-		}
-
-		// Tautulli and Overseerr don't implement the full Integration interface,
-		// so handle their test connections separately
-		if req.Type == intTypeTautulli {
-			tautulli := integrations.NewTautulliClient(req.URL, req.APIKey)
-			if err := tautulli.TestConnection(); err != nil {
-				reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
-				return c.JSON(http.StatusOK, map[string]interface{}{
-					"success": false,
-					"error":   err.Error(),
-				})
-			}
-			reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
-			return c.JSON(http.StatusOK, map[string]interface{}{
-				"success": true,
-				"message": "Connection successful",
-			})
-		}
-
-		if req.Type == intTypeOverseerr {
-			overseerr := integrations.NewOverseerrClient(req.URL, req.APIKey)
-			if err := overseerr.TestConnection(); err != nil {
-				reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
-				return c.JSON(http.StatusOK, map[string]interface{}{
-					"success": false,
-					"error":   err.Error(),
-				})
-			}
-			reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
-			return c.JSON(http.StatusOK, map[string]interface{}{
-				"success": true,
-				"message": "Connection successful",
-			})
-		}
-
-		client := integrations.NewClient(req.Type, req.URL, req.APIKey)
-		if client == nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown integration type"})
-		}
-
-		if err := client.TestConnection(); err != nil {
-			reg.Integration.PublishTestFailure(req.Type, req.Type, req.URL, err.Error())
-			return c.JSON(http.StatusOK, map[string]interface{}{
-				"success": false,
-				"error":   err.Error(),
-			})
-		}
-
-		// Invalidate rule value cache for this integration on successful test
-		if req.IntegrationID != nil {
-			reg.RuleValueCache.InvalidatePrefix(strconv.Itoa(*req.IntegrationID) + ":")
-		}
-
-		reg.Integration.PublishTestSuccess(req.Type, req.Type, req.URL)
-
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"success": true,
-			"message": "Connection successful",
-		})
+		result := reg.Integration.TestConnection(req.Type, req.URL, req.APIKey, req.IntegrationID)
+		return c.JSON(http.StatusOK, result)
 	})
 
 	// Sync all integrations (trigger a manual poll)
 	g.POST("/integrations/sync", func(c echo.Context) error {
-		configs, err := reg.Integration.ListEnabled()
+		// Invalidate all cached rule values before re-syncing
+		reg.Integration.InvalidateAllRuleValueCaches()
+
+		// Delegate to IntegrationService.SyncAll() which handles connection
+		// testing, disk space discovery, media item counting, and disk group
+		// upserts via SettingsService.
+		results, err := reg.Integration.SyncAll()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch integrations"})
-		}
-
-		// Invalidate all rule value caches on sync
-		reg.RuleValueCache.InvalidateAll()
-
-		results := make([]map[string]interface{}, 0)
-		for _, cfg := range configs {
-			client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
-			if client == nil {
-				continue
-			}
-
-			result := map[string]interface{}{
-				"id":   cfg.ID,
-				"name": cfg.Name,
-				"type": cfg.Type,
-			}
-
-			// Test connection
-			if err := client.TestConnection(); err != nil {
-				result["status"] = "error"
-				result["error"] = err.Error()
-				results = append(results, result)
-				continue
-			}
-
-			// Get disk space
-			disks, err := client.GetDiskSpace()
-			if err != nil {
-				result["diskError"] = err.Error()
-			} else {
-				result["diskSpace"] = disks
-				// Update disk groups via service
-				for _, d := range disks {
-					_, _ = reg.Settings.UpsertDiskGroup(d)
-				}
-			}
-
-			// Get media items count
-			items, err := client.GetMediaItems()
-			if err != nil {
-				result["mediaError"] = err.Error()
-			} else {
-				result["mediaCount"] = len(items)
-			}
-
-			result["status"] = "ok"
-			results = append(results, result)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to sync integrations"})
 		}
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
