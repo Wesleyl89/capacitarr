@@ -13,9 +13,11 @@ import (
 // Registry holds all service instances and shared dependencies. Created once
 // in main.go and passed to route registration functions and the poller.
 //
-// DB and Bus are exposed for route handlers that need raw read access (e.g.,
-// listing items, metrics queries). Write operations and business logic should
-// always go through the appropriate service.
+// DB and Bus are exposed on the struct for use by service constructors and
+// internal wiring. Route handlers, middleware, orchestrators, and event
+// subscribers must NOT access DB or Bus directly — all data access must go
+// through the appropriate service method. See .kilocoderules for the full
+// service layer architecture policy.
 type Registry struct {
 	DB  *gorm.DB
 	Bus *events.EventBus
