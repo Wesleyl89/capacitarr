@@ -152,20 +152,20 @@ When a service performs an action (e.g., approving an item, completing an engine
 2. **NotificationDispatcher** — filters events against notification channel subscriptions and delivers to Discord/Slack/in-app
 3. **SSEBroadcaster** — serializes the event as an SSE message and pushes it to all connected browser tabs
 
-### Event Types (34 total)
+### Event Types (39 total)
 
 | Category | Events |
 |----------|--------|
 | **Engine** | `engine_start`, `engine_complete`, `engine_error`, `manual_run_triggered` |
-| **Settings** | `engine_mode_changed`, `settings_changed`, `threshold_changed` |
+| **Settings** | `engine_mode_changed`, `settings_changed`, `threshold_changed`, `threshold_breached` |
 | **Auth** | `login`, `password_changed`, `username_changed`, `api_key_generated` |
 | **Integration** | `integration_added`, `integration_updated`, `integration_removed`, `integration_test`, `integration_test_failed` |
 | **Approval** | `approval_approved`, `approval_rejected`, `approval_unsnoozed`, `approval_bulk_unsnoozed`, `approval_orphans_recovered` |
-| **Deletion** | `deletion_success`, `deletion_failed`, `deletion_dry_run` |
-| **Rules** | `rule_created`, `rule_updated`, `rule_deleted` |
+| **Deletion** | `deletion_success`, `deletion_failed`, `deletion_dry_run`, `deletion_batch_complete` |
+| **Rules** | `rule_created`, `rule_updated`, `rule_deleted`, `rules_exported`, `rules_imported` |
 | **Notifications** | `notification_channel_added`, `notification_channel_updated`, `notification_channel_removed`, `notification_sent`, `notification_delivery_failed` |
 | **Data** | `data_reset` |
-| **System** | `server_started` |
+| **System** | `server_started`, `update_available` |
 
 ### SSE (Server-Sent Events)
 
@@ -238,7 +238,7 @@ Transient dashboard feed with 7-day retention:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Primary key |
-| `event_type` | TEXT | One of 34 event types |
+| `event_type` | TEXT | One of 39 event types |
 | `message` | TEXT | Human-readable message |
 | `metadata` | TEXT | Optional JSON payload |
 | `created_at` | DATETIME | Row creation |

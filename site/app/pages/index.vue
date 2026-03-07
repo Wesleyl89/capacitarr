@@ -43,7 +43,7 @@ const features = [
   {
     icon: 'i-lucide-radio',
     title: 'Real-Time Updates',
-    description: 'Server-Sent Events push engine state, deletions, and activity to the browser instantly — no polling. 34 typed event types keep you informed.',
+    description: 'Server-Sent Events push engine state, deletions, and activity to the browser instantly — no polling. 39 typed event types keep you informed.',
     color: 'rose',
   },
   {

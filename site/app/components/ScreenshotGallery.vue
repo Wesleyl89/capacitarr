@@ -34,6 +34,16 @@ const screenshots: Screenshot[] = [
     title: 'Settings',
     description: 'Connect and configure all your integrations in one place',
   },
+  {
+    src: `${base}/screenshots/scorecard-keep.png`,
+    title: 'Score Detail — Protected',
+    description: 'See exactly why an item is protected, with matched rule and override explanation',
+  },
+  {
+    src: `${base}/screenshots/scorecard-rules.png`,
+    title: 'Score Detail — Breakdown',
+    description: 'Full weighted score breakdown with every factor, custom rule modifiers, and final calculation',
+  },
 ]
 
 const activeIndex = ref(0)

@@ -67,11 +67,11 @@ To configure when cleanup triggers:
 
 Navigate to the **Weights** page and adjust the scoring sliders to tell Capacitarr what matters to you:
 
-- **Age** — Older content scores higher for deletion
-- **Size** — Larger files score higher
-- **Popularity** — Less popular content scores higher
-- **Recency** — Recently watched/listened content is protected
+- **Watch History** — Unwatched content scores higher for deletion
+- **Last Watched** — Content watched long ago (or never) scores higher
+- **File Size** — Larger files score higher, freeing more space per deletion
 - **Rating** — Lower rated content scores higher
+- **Time in Library** — Older content scores higher for deletion
 - **Series Status** — Ended shows score higher for deletion than continuing shows
 
 ## 7. Preview & Run

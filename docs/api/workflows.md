@@ -301,7 +301,7 @@ The server replays any events that occurred between the last received ID and now
 
 ### Supported event types
 
-All 34 event types are documented in the [Architecture](../architecture.md#event-types-34-total) page.
+All 39 event types are documented in the [Architecture](../architecture.md#event-types-39-total) page.
 
 ---
 

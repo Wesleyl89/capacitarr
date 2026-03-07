@@ -16,7 +16,7 @@ Capacitarr integrates with your *arr apps, media servers, and request managers t
 - **Approval Queue** — Review and approve deletion candidates before they are removed, with snooze and bulk operations
 - **Score Transparency** — Full per-item score breakdowns showing each factor's contribution
 - **Complete Audit Trail** — Separate approval queue (state machine) and audit log (permanent deletion history)
-- **34 Activity Event Types** — Every user-visible action is tracked and streamable via SSE
+- **39 Activity Event Types** — Every user-visible action is tracked and streamable via SSE
 - **Notifications** — Discord, Slack, and in-app notifications driven by the event bus
 - **Themeable UI** — Light/dark mode with customizable accent colors, 22 languages
 - **Reverse Proxy Ready** — Subdirectory deployments, proxy authentication (Authelia, Authentik, Organizr), SSE-compatible
@@ -111,7 +111,7 @@ For the complete configuration reference including subdirectory deployment and p
 
 Capacitarr is a single-container application that bundles a Go backend, a Nuxt 4 (Vue 3) frontend, and a SQLite database. The frontend is statically generated at build time and embedded into the Go binary via `go:embed`, producing a single self-contained executable.
 
-The backend uses a **service layer** pattern — all business logic lives in injectable services, not in route handlers. A typed **event bus** publishes 34 event types that drive activity logging, notifications, and real-time UI updates via **Server-Sent Events (SSE)**.
+The backend uses a **service layer** pattern — all business logic lives in injectable services, not in route handlers. A typed **event bus** publishes 39 event types that drive activity logging, notifications, and real-time UI updates via **Server-Sent Events (SSE)**.
 
 ```mermaid
 flowchart TD

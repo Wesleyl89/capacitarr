@@ -685,7 +685,7 @@ const lastUpdated = ref<Date | null>(null);
 const isAutoRefreshing = ref(false);
 const refreshKey = ref(0);
 
-// Icon component for activity events — covers all 34 typed event types
+// Icon component for activity events — covers all 39 typed event types
 function eventIcon(eventType: string) {
   switch (eventType) {
     // Engine
@@ -771,7 +771,7 @@ function eventIcon(eventType: string) {
   }
 }
 
-// Color class for activity event icons — covers all 34 typed event types
+// Color class for activity event icons — covers all 39 typed event types
 function eventIconClass(eventType: string): string {
   switch (eventType) {
     case 'engine_start':

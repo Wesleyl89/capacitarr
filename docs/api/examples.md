@@ -754,7 +754,7 @@ curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
   "$CAPACITARR_URL/events"
 ```
 
-See the [Architecture](../architecture.md) documentation for the complete list of 34 event types.
+See the [Architecture](../architecture.md) documentation for the complete list of 39 event types.
 
 ---
 
