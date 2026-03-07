@@ -382,12 +382,6 @@ func TestApproveEntry_HappyPath(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
-	// Set the global db.DB so the background deletion worker (started by
-	// poller.init) can access the database when it processes the queued job.
-	// We intentionally do NOT restore db.DB to nil in cleanup because the
-	// worker goroutine processes asynchronously and would panic on a nil DB.
-	db.DB = database
-
 	itemID := seedApprovalEntry(t, database)
 
 	req := testutil.AuthenticatedRequest(t, http.MethodPost,

@@ -169,7 +169,8 @@ func main() {
 		slog.Info("Reverse proxy auth header enabled", "component", "main", "header", cfg.AuthHeader)
 	}
 
-	if err := db.Init(cfg); err != nil {
+	database, err := db.Init(cfg)
+	if err != nil {
 		slog.Error("Failed to initialize database", "component", "main", "operation", "init_database", "error", err)
 		os.Exit(1)
 	}
@@ -184,7 +185,7 @@ func main() {
 	slog.Info("Event bus started (partial)", "component", "main", "subscribers", "sse_broadcaster")
 
 	// ─── Service Registry ──────────────────────────────────────────────────
-	reg := services.NewRegistry(db.DB, bus, cfg)
+	reg := services.NewRegistry(database, bus, cfg)
 	reg.InitVersion(version)
 
 	// Activity Persister — writes all events to the activity_events table via SettingsService.

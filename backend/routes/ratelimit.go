@@ -22,6 +22,7 @@ type loginRateLimiter struct {
 	attempts map[string][]time.Time
 	window   time.Duration
 	limit    int
+	done     chan struct{}
 }
 
 // newLoginRateLimiter creates a rate limiter that allows `limit` attempts per
@@ -31,6 +32,7 @@ func newLoginRateLimiter(limit int, window time.Duration) *loginRateLimiter {
 		attempts: make(map[string][]time.Time),
 		window:   window,
 		limit:    limit,
+		done:     make(chan struct{}),
 	}
 	// Background goroutine to periodically evict stale entries and prevent
 	// unbounded memory growth from IPs that stop sending requests.
@@ -65,30 +67,45 @@ func (rl *loginRateLimiter) allow(ip string) bool {
 	return true
 }
 
+// Stop terminates the background cleanup goroutine. Safe to call multiple times.
+func (rl *loginRateLimiter) Stop() {
+	select {
+	case <-rl.done:
+		// already closed
+	default:
+		close(rl.done)
+	}
+}
+
 // cleanup runs every 5 minutes and removes entries for IPs that have no
 // recent attempts, preventing unbounded memory growth.
 func (rl *loginRateLimiter) cleanup() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		cutoff := now.Add(-rl.window)
-		for ip, timestamps := range rl.attempts {
-			valid := timestamps[:0]
-			for _, t := range timestamps {
-				if t.After(cutoff) {
-					valid = append(valid, t)
+	for {
+		select {
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			cutoff := now.Add(-rl.window)
+			for ip, timestamps := range rl.attempts {
+				valid := timestamps[:0]
+				for _, t := range timestamps {
+					if t.After(cutoff) {
+						valid = append(valid, t)
+					}
+				}
+				if len(valid) == 0 {
+					delete(rl.attempts, ip)
+				} else {
+					rl.attempts[ip] = valid
 				}
 			}
-			if len(valid) == 0 {
-				delete(rl.attempts, ip)
-			} else {
-				rl.attempts[ip] = valid
-			}
+			rl.mu.Unlock()
+		case <-rl.done:
+			return
 		}
-		rl.mu.Unlock()
 	}
 }
 

@@ -75,6 +75,17 @@ type TestConnectionResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// testClient runs a connection test, publishes success/failure events, and returns the result.
+// This helper eliminates repetition across enrichment-only and standard integration types.
+func (s *IntegrationService) testClient(intType, url string, testFn func() error) TestConnectionResult {
+	if err := testFn(); err != nil {
+		s.PublishTestFailure(intType, intType, url, err.Error())
+		return TestConnectionResult{Success: false, Error: err.Error()}
+	}
+	s.PublishTestSuccess(intType, intType, url)
+	return TestConnectionResult{Success: true, Message: "Connection successful"}
+}
+
 // TestConnection tests connectivity to an integration given a type, URL, and API key.
 // If apiKey is empty or masked and integrationID is provided, the stored key is used.
 // On success/failure, the appropriate event is published to the event bus.
@@ -90,49 +101,15 @@ func (s *IntegrationService) TestConnection(intType, url, apiKey string, integra
 	// Enrichment-only services have separate client constructors
 	switch intType {
 	case "tautulli":
-		client := integrations.NewTautulliClient(url, apiKey)
-		if err := client.TestConnection(); err != nil {
-			s.PublishTestFailure(intType, intType, url, err.Error())
-			return TestConnectionResult{Success: false, Error: err.Error()}
-		}
-		s.PublishTestSuccess(intType, intType, url)
-		return TestConnectionResult{Success: true, Message: "Connection successful"}
-
+		return s.testClient(intType, url, integrations.NewTautulliClient(url, apiKey).TestConnection)
 	case "overseerr":
-		client := integrations.NewOverseerrClient(url, apiKey)
-		if err := client.TestConnection(); err != nil {
-			s.PublishTestFailure(intType, intType, url, err.Error())
-			return TestConnectionResult{Success: false, Error: err.Error()}
-		}
-		s.PublishTestSuccess(intType, intType, url)
-		return TestConnectionResult{Success: true, Message: "Connection successful"}
-
+		return s.testClient(intType, url, integrations.NewOverseerrClient(url, apiKey).TestConnection)
 	case "jellyfin":
-		client := integrations.NewJellyfinClient(url, apiKey)
-		if err := client.TestConnection(); err != nil {
-			s.PublishTestFailure(intType, intType, url, err.Error())
-			return TestConnectionResult{Success: false, Error: err.Error()}
-		}
-		s.PublishTestSuccess(intType, intType, url)
-		return TestConnectionResult{Success: true, Message: "Connection successful"}
-
+		return s.testClient(intType, url, integrations.NewJellyfinClient(url, apiKey).TestConnection)
 	case "emby":
-		client := integrations.NewEmbyClient(url, apiKey)
-		if err := client.TestConnection(); err != nil {
-			s.PublishTestFailure(intType, intType, url, err.Error())
-			return TestConnectionResult{Success: false, Error: err.Error()}
-		}
-		s.PublishTestSuccess(intType, intType, url)
-		return TestConnectionResult{Success: true, Message: "Connection successful"}
-
+		return s.testClient(intType, url, integrations.NewEmbyClient(url, apiKey).TestConnection)
 	case "plex":
-		client := integrations.NewPlexClient(url, apiKey)
-		if err := client.TestConnection(); err != nil {
-			s.PublishTestFailure(intType, intType, url, err.Error())
-			return TestConnectionResult{Success: false, Error: err.Error()}
-		}
-		s.PublishTestSuccess(intType, intType, url)
-		return TestConnectionResult{Success: true, Message: "Connection successful"}
+		return s.testClient(intType, url, integrations.NewPlexClient(url, apiKey).TestConnection)
 	}
 
 	// Standard *arr integrations
@@ -141,18 +118,14 @@ func (s *IntegrationService) TestConnection(intType, url, apiKey string, integra
 		return TestConnectionResult{Success: false, Error: "Unknown integration type"}
 	}
 
-	if err := client.TestConnection(); err != nil {
-		s.PublishTestFailure(intType, intType, url, err.Error())
-		return TestConnectionResult{Success: false, Error: err.Error()}
-	}
+	result := s.testClient(intType, url, client.TestConnection)
 
-	// Invalidate rule value cache on successful test
-	if integrationID != nil {
+	// Invalidate rule value cache on successful test of *arr integrations
+	if result.Success && integrationID != nil {
 		s.InvalidateRuleValueCache(*integrationID)
 	}
 
-	s.PublishTestSuccess(intType, intType, url)
-	return TestConnectionResult{Success: true, Message: "Connection successful"}
+	return result
 }
 
 // FetchRuleValues retrieves autocomplete values for a given rule field action
