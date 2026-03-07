@@ -342,6 +342,7 @@ export interface NotificationChannel {
   onServerStarted: boolean;
   onThresholdBreach: boolean;
   onUpdateAvailable: boolean;
+  onApprovalActivity: boolean;
   createdAt: string;
   updatedAt: string;
 }

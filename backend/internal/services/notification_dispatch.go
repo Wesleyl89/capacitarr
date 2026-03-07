@@ -223,6 +223,20 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 			Title:   fmt.Sprintf("📦 Update Available: **%s**", e.LatestVersion),
 			Message: fmt.Sprintf("[View Release Notes](%s)", e.ReleaseURL),
 		}, func(cfg db.NotificationConfig) bool { return cfg.OnUpdateAvailable })
+
+	case events.ApprovalApprovedEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertApprovalActivity,
+			Title:   "✅ Approved for Deletion",
+			Message: fmt.Sprintf("**%d** item(s) approved — queued for deletion", 1),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnApprovalActivity })
+
+	case events.ApprovalRejectedEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertApprovalActivity,
+			Title:   "😴 Item Snoozed",
+			Message: fmt.Sprintf("Snoozed for %s", e.SnoozeDuration),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnApprovalActivity })
 	}
 }
 

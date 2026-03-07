@@ -189,14 +189,15 @@ type NotificationConfig struct {
 	WebhookURL string `json:"webhookUrl,omitempty"` // Discord/Slack webhook URL
 	Enabled    bool   `gorm:"default:true" json:"enabled"`
 	// Event subscriptions — which notification types trigger this channel
-	OnCycleDigest     bool      `gorm:"default:true" json:"onCycleDigest"`
-	OnError           bool      `gorm:"default:true" json:"onError"`
-	OnModeChanged     bool      `gorm:"default:true" json:"onModeChanged"`
-	OnServerStarted   bool      `gorm:"default:true" json:"onServerStarted"`
-	OnThresholdBreach bool      `gorm:"default:true" json:"onThresholdBreach"`
-	OnUpdateAvailable bool      `gorm:"default:true" json:"onUpdateAvailable"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	OnCycleDigest      bool      `gorm:"default:true" json:"onCycleDigest"`
+	OnError            bool      `gorm:"default:true" json:"onError"`
+	OnModeChanged      bool      `gorm:"default:true" json:"onModeChanged"`
+	OnServerStarted    bool      `gorm:"default:true" json:"onServerStarted"`
+	OnThresholdBreach  bool      `gorm:"default:true" json:"onThresholdBreach"`
+	OnUpdateAvailable  bool      `gorm:"default:true" json:"onUpdateAvailable"`
+	OnApprovalActivity bool      `gorm:"default:true" json:"onApprovalActivity"`
+	CreatedAt          time.Time `json:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
 // InAppNotification stores a notification displayed in the UI notification panel.

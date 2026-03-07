@@ -48,6 +48,7 @@ const (
 	AlertServerStarted     AlertType = "server_started"
 	AlertThresholdBreached AlertType = "threshold_breached"
 	AlertUpdateAvailable   AlertType = "update_available"
+	AlertApprovalActivity  AlertType = "approval_activity"
 	AlertTest              AlertType = "test"
 )
 
@@ -72,6 +73,14 @@ const (
 const (
 	titleCleanupComplete = "🧹 Cleanup Complete"
 	titleAllClear        = "✅ All Clear"
+)
+
+// In-app notification severity constants.
+const (
+	severityInfo    = "info"
+	severityWarning = "warning"
+	severityError   = "error"
+	severitySuccess = "success"
 )
 
 // Discord embed colors.
@@ -207,6 +216,8 @@ func alertColor(t AlertType) int {
 		return ColorRed
 	case AlertUpdateAvailable:
 		return ColorBlue
+	case AlertApprovalActivity:
+		return ColorAmber
 	case AlertTest:
 		return ColorBlue
 	default:
@@ -218,19 +229,21 @@ func alertColor(t AlertType) int {
 func alertSeverity(t AlertType) string {
 	switch t {
 	case AlertError:
-		return "error"
+		return severityError
 	case AlertModeChanged:
-		return "warning"
+		return severityWarning
 	case AlertServerStarted:
-		return "success"
+		return severitySuccess
 	case AlertThresholdBreached:
-		return "warning"
+		return severityWarning
 	case AlertUpdateAvailable:
-		return "info"
+		return severityInfo
+	case AlertApprovalActivity:
+		return severityInfo
 	case AlertTest:
-		return "info"
+		return severityInfo
 	default:
-		return "info"
+		return severityInfo
 	}
 }
 

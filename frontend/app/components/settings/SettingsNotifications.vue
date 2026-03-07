@@ -77,65 +77,98 @@
         <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Event Subscriptions
         </p>
-        <div class="space-y-2">
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onCycleDigest"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onCycleDigest', val)
-              "
-            />
-            <span>Cycle Digest</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onError"
-              size="sm"
-              @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
-            />
-            <span>Errors</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onModeChanged"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
-              "
-            />
-            <span>Mode Changed</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onServerStarted"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
-              "
-            />
-            <span>Server Started</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onThresholdBreach"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onThresholdBreach', val)
-              "
-            />
-            <span>Threshold Breached</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onUpdateAvailable"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
-              "
-            />
-            <span>Update Available</span>
-          </UiLabel>
+        <div class="space-y-3">
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onCycleDigest"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onCycleDigest', val)
+                "
+              />
+              <span>Cycle Digest</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">One summary after each engine run</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onError"
+                size="sm"
+                @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
+              />
+              <span>Errors</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">When something goes wrong</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onModeChanged"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
+                "
+              />
+              <span>Mode Changed</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">Heads up when you switch modes</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onServerStarted"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
+                "
+              />
+              <span>Server Started</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">A friendly hello after a restart</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onThresholdBreach"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onThresholdBreach', val)
+                "
+              />
+              <span>Threshold Breached</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">Disk is getting full</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onUpdateAvailable"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
+                "
+              />
+              <span>Update Available</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">New version ready to install</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onApprovalActivity"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onApprovalActivity', val)
+                "
+              />
+              <span>Approval Activity</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">
+              Items approved or snoozed in the queue
+            </p>
+          </div>
         </div>
       </UiCardContent>
 
