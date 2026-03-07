@@ -9,20 +9,12 @@ import (
 	"time"
 )
 
-// slackEmoji returns a contextual emoji prefix for the event title.
-func slackEmoji(eventType string) string {
-	switch eventType {
-	case EventThresholdBreach:
-		return emojiRed
-	case EventDeletionExecuted:
-		return emojiYellow
-	case EventEngineError:
-		return emojiRed
-	case EventEngineComplete:
-		return emojiGreen
-	default:
-		return emojiInfo
-	}
+// SlackSender implements Sender for Slack webhook delivery using Block Kit.
+type SlackSender struct{}
+
+// NewSlackSender creates a new SlackSender.
+func NewSlackSender() *SlackSender {
+	return &SlackSender{}
 }
 
 // Slack Block Kit payload types.
@@ -41,33 +33,72 @@ type slackText struct {
 	Text string `json:"text"`
 }
 
-// SendSlack posts a notification event to a Slack webhook URL using Block Kit format.
-func SendSlack(webhookURL string, event NotificationEvent) error {
+// SendDigest delivers a cycle digest notification to a Slack webhook.
+func (s *SlackSender) SendDigest(webhookURL string, digest CycleDigest) error {
 	if webhookURL == "" {
 		return fmt.Errorf("slack webhook URL is empty")
+	}
+
+	// Build header: "⚡ Capacitarr v1.4.0 • auto"
+	header := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
+	if digest.ExecutionMode != "" {
+		header += " • " + digest.ExecutionMode
+	}
+
+	desc := digestDescription(digest)
+
+	// Append disk usage progress bar
+	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Flagged == 0) {
+		bar := ProgressBar(digest.DiskUsagePct, 20)
+		if digest.ExecutionMode == ModeAuto && digest.Flagged > 0 {
+			desc += fmt.Sprintf("\n\n`%s` *%.0f%%* → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
+		} else {
+			desc += fmt.Sprintf("\n\n`%s` *%.0f%%* / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)
+		}
+	}
+
+	// Append version update banner
+	if digest.UpdateAvailable && digest.LatestVersion != "" {
+		desc += fmt.Sprintf("\n\n📦 *%s* available!", digest.LatestVersion)
 	}
 
 	blocks := []slackBlock{
 		{
 			Type: "header",
-			Text: &slackText{
-				Type: "plain_text",
-				Text: slackEmoji(event.Type) + " " + event.Title,
-			},
+			Text: &slackText{Type: "plain_text", Text: header},
 		},
 		{
 			Type: "section",
-			Text: &slackText{
-				Type: "mrkdwn",
-				Text: event.Message,
-			},
+			Text: &slackText{Type: "mrkdwn", Text: digestTitle(digest) + "\n\n" + desc},
+		},
+	}
+
+	return sendSlackPayload(webhookURL, slackPayload{Blocks: blocks})
+}
+
+// SendAlert delivers an immediate alert notification to a Slack webhook.
+func (s *SlackSender) SendAlert(webhookURL string, alert Alert) error {
+	if webhookURL == "" {
+		return fmt.Errorf("slack webhook URL is empty")
+	}
+
+	header := fmt.Sprintf("⚡ Capacitarr %s", alert.Version)
+
+	blocks := []slackBlock{
+		{
+			Type: "header",
+			Text: &slackText{Type: "plain_text", Text: header},
+		},
+		{
+			Type: "section",
+			Text: &slackText{Type: "mrkdwn", Text: alert.Title + "\n\n" + alert.Message},
 		},
 	}
 
 	// Add fields block if there are key-value pairs
-	if len(event.Fields) > 0 {
+	if len(alert.Fields) > 0 {
 		var fields []slackText
-		for k, v := range event.Fields {
+		for k, v := range alert.Fields {
 			fields = append(fields, slackText{
 				Type: "mrkdwn",
 				Text: fmt.Sprintf("*%s:*\n%s", k, v),
@@ -79,8 +110,11 @@ func SendSlack(webhookURL string, event NotificationEvent) error {
 		})
 	}
 
-	payload := slackPayload{Blocks: blocks}
+	return sendSlackPayload(webhookURL, slackPayload{Blocks: blocks})
+}
 
+// sendSlackPayload marshals and sends a Slack webhook payload.
+func sendSlackPayload(webhookURL string, payload slackPayload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal slack payload: %w", err)
@@ -95,7 +129,7 @@ func SendSlack(webhookURL string, event NotificationEvent) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := webhookHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured webhook settings
+	resp, err := webhookHTTPClient.Do(req) //nolint:gosec // URL is from admin-configured webhook settings
 	if err != nil {
 		return fmt.Errorf("slack webhook request failed: %w", err)
 	}

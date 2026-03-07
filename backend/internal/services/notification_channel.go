@@ -9,7 +9,6 @@ import (
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
-	"capacitarr/internal/notifications"
 )
 
 // NotificationChannelService manages notification channel CRUD.
@@ -154,35 +153,6 @@ func (s *NotificationChannelService) ClearAllInApp() error {
 		return fmt.Errorf("failed to clear in-app notifications: %w", err)
 	}
 	return nil
-}
-
-// TestChannel sends a test notification to the specified channel by ID.
-func (s *NotificationChannelService) TestChannel(id uint) error {
-	cfg, err := s.GetByID(id)
-	if err != nil {
-		return err
-	}
-
-	event := notifications.NotificationEvent{
-		Type:    notifications.EventEngineComplete,
-		Title:   "Test Notification",
-		Message: "This is a test notification from Capacitarr. If you see this, the channel is working correctly!",
-		Fields: map[string]string{
-			"Channel": cfg.Name,
-			"Type":    cfg.Type,
-		},
-	}
-
-	switch cfg.Type {
-	case "discord":
-		return notifications.SendDiscord(cfg.WebhookURL, event)
-	case "slack":
-		return notifications.SendSlack(cfg.WebhookURL, event)
-	case "inapp":
-		return s.CreateInApp(event.Title, event.Message, notifications.SeverityForEvent(event.Type), event.Type)
-	default:
-		return fmt.Errorf("unknown channel type: %s", cfg.Type)
-	}
 }
 
 // PruneOldInApp deletes in-app notifications older than the given cutoff time.

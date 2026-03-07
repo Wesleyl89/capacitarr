@@ -80,43 +80,61 @@
         <div class="space-y-2">
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
+              :model-value="channel.onCycleDigest"
+              size="sm"
+              @update:model-value="
+                (val: boolean) => updateChannelEvent(channel, 'onCycleDigest', val)
+              "
+            />
+            <span>Cycle Digest</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channel.onError"
+              size="sm"
+              @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
+            />
+            <span>Errors</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channel.onModeChanged"
+              size="sm"
+              @update:model-value="
+                (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
+              "
+            />
+            <span>Mode Changed</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channel.onServerStarted"
+              size="sm"
+              @update:model-value="
+                (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
+              "
+            />
+            <span>Server Started</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
               :model-value="channel.onThresholdBreach"
               size="sm"
               @update:model-value="
                 (val: boolean) => updateChannelEvent(channel, 'onThresholdBreach', val)
               "
             />
-            <span>Threshold Breach</span>
+            <span>Threshold Breached</span>
           </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
-              :model-value="channel.onDeletionExecuted"
+              :model-value="channel.onUpdateAvailable"
               size="sm"
               @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onDeletionExecuted', val)
+                (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
               "
             />
-            <span>Deletion Executed</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onEngineError"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onEngineError', val)
-              "
-            />
-            <span>Engine Error</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channel.onEngineComplete"
-              size="sm"
-              @update:model-value="
-                (val: boolean) => updateChannelEvent(channel, 'onEngineComplete', val)
-              "
-            />
-            <span>Engine Complete</span>
+            <span>Update Available</span>
           </UiLabel>
         </div>
       </UiCardContent>
@@ -198,6 +216,50 @@
           </p>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
+              :model-value="channelForm.onCycleDigest"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onCycleDigest = val;
+                }
+              "
+            />
+            <span>Cycle Digest</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onError"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onError = val;
+                }
+              "
+            />
+            <span>Errors</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onModeChanged"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onModeChanged = val;
+                }
+              "
+            />
+            <span>Mode Changed</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onServerStarted"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onServerStarted = val;
+                }
+              "
+            />
+            <span>Server Started</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
               :model-value="channelForm.onThresholdBreach"
               @update:model-value="
                 (val: boolean) => {
@@ -205,40 +267,18 @@
                 }
               "
             />
-            <span>Threshold Breach</span>
+            <span>Threshold Breached</span>
           </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
-              :model-value="channelForm.onDeletionExecuted"
+              :model-value="channelForm.onUpdateAvailable"
               @update:model-value="
                 (val: boolean) => {
-                  channelForm.onDeletionExecuted = val;
+                  channelForm.onUpdateAvailable = val;
                 }
               "
             />
-            <span>Deletion Executed</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onEngineError"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onEngineError = val;
-                }
-              "
-            />
-            <span>Engine Error</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onEngineComplete"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onEngineComplete = val;
-                }
-              "
-            />
-            <span>Engine Complete</span>
+            <span>Update Available</span>
           </UiLabel>
         </div>
 
@@ -278,10 +318,12 @@ const channelForm = reactive({
   type: 'discord' as 'discord' | 'slack' | 'inapp',
   name: '',
   webhookUrl: '',
+  onCycleDigest: true,
+  onError: true,
+  onModeChanged: true,
+  onServerStarted: true,
   onThresholdBreach: true,
-  onDeletionExecuted: true,
-  onEngineError: true,
-  onEngineComplete: false,
+  onUpdateAvailable: true,
 });
 
 // ─── Type display helpers ────────────────────────────────────────────────────
@@ -341,10 +383,12 @@ function openAddChannelModal() {
   channelForm.type = 'discord';
   channelForm.name = '';
   channelForm.webhookUrl = '';
+  channelForm.onCycleDigest = true;
+  channelForm.onError = true;
+  channelForm.onModeChanged = true;
+  channelForm.onServerStarted = true;
   channelForm.onThresholdBreach = true;
-  channelForm.onDeletionExecuted = true;
-  channelForm.onEngineError = true;
-  channelForm.onEngineComplete = false;
+  channelForm.onUpdateAvailable = true;
   channelFormError.value = '';
   showChannelModal.value = true;
 }
@@ -354,10 +398,12 @@ function openEditChannelModal(channel: NotificationChannel) {
   channelForm.type = channel.type;
   channelForm.name = channel.name;
   channelForm.webhookUrl = channel.webhookUrl || '';
+  channelForm.onCycleDigest = channel.onCycleDigest;
+  channelForm.onError = channel.onError;
+  channelForm.onModeChanged = channel.onModeChanged;
+  channelForm.onServerStarted = channel.onServerStarted;
   channelForm.onThresholdBreach = channel.onThresholdBreach;
-  channelForm.onDeletionExecuted = channel.onDeletionExecuted;
-  channelForm.onEngineError = channel.onEngineError;
-  channelForm.onEngineComplete = channel.onEngineComplete;
+  channelForm.onUpdateAvailable = channel.onUpdateAvailable;
   channelFormError.value = '';
   showChannelModal.value = true;
 }
@@ -371,10 +417,12 @@ async function onChannelSubmit() {
       name: channelForm.name,
       webhookUrl: channelForm.type !== 'inapp' ? channelForm.webhookUrl : undefined,
       enabled: editingChannel.value ? editingChannel.value.enabled : true,
+      onCycleDigest: channelForm.onCycleDigest,
+      onError: channelForm.onError,
+      onModeChanged: channelForm.onModeChanged,
+      onServerStarted: channelForm.onServerStarted,
       onThresholdBreach: channelForm.onThresholdBreach,
-      onDeletionExecuted: channelForm.onDeletionExecuted,
-      onEngineError: channelForm.onEngineError,
-      onEngineComplete: channelForm.onEngineComplete,
+      onUpdateAvailable: channelForm.onUpdateAvailable,
     };
     if (editingChannel.value) {
       await api(`/api/v1/notifications/channels/${editingChannel.value.id}`, {

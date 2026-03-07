@@ -336,10 +336,12 @@ export interface NotificationChannel {
   name: string;
   webhookUrl?: string;
   enabled: boolean;
+  onCycleDigest: boolean;
+  onError: boolean;
+  onModeChanged: boolean;
+  onServerStarted: boolean;
   onThresholdBreach: boolean;
-  onDeletionExecuted: boolean;
-  onEngineError: boolean;
-  onEngineComplete: boolean;
+  onUpdateAvailable: boolean;
   createdAt: string;
   updatedAt: string;
 }

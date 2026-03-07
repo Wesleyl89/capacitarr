@@ -32,14 +32,14 @@ type VersionCheckResult struct {
 
 // VersionService manages update checks against the GitLab releases API.
 type VersionService struct {
-	db                   *gorm.DB
-	bus                  *events.EventBus
-	appVersion           string
-	releasesURL          string
-	cache                *VersionCheckResult
-	mu                   sync.Mutex
-	cacheTTL             time.Duration
-	lastNotifiedVersion  string // tracks which version we've already published UpdateAvailableEvent for
+	db                  *gorm.DB
+	bus                 *events.EventBus
+	appVersion          string
+	releasesURL         string
+	cache               *VersionCheckResult
+	mu                  sync.Mutex
+	cacheTTL            time.Duration
+	lastNotifiedVersion string // tracks which version we've already published UpdateAvailableEvent for
 }
 
 // NewVersionService creates a new VersionService.

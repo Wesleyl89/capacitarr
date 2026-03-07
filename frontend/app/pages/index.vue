@@ -582,6 +582,7 @@ import {
   BellIcon,
   BellRingIcon,
   BellOffIcon,
+  ArrowUpCircleIcon,
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 import type {
@@ -735,6 +736,14 @@ function eventIcon(eventType: string) {
       return Trash2Icon;
     case 'deletion_failed':
       return AlertCircleIcon;
+    case 'deletion_batch_complete':
+      return CheckCircle2Icon;
+    // Disk
+    case 'threshold_breached':
+      return AlertCircleIcon;
+    // Version
+    case 'update_available':
+      return ArrowUpCircleIcon;
     // Rules
     case 'rule_created':
       return PlusCircleIcon;
@@ -772,6 +781,7 @@ function eventIconClass(eventType: string): string {
     case 'approval_unsnoozed':
     case 'approval_bulk_unsnoozed':
     case 'rule_created':
+    case 'update_available':
       return 'text-primary';
     case 'engine_complete':
     case 'approval_approved':
@@ -779,6 +789,7 @@ function eventIconClass(eventType: string): string {
     case 'integration_added':
     case 'integration_test':
     case 'deletion_success':
+    case 'deletion_batch_complete':
     case 'notification_channel_added':
     case 'notification_sent':
       return 'text-success';
@@ -788,6 +799,7 @@ function eventIconClass(eventType: string): string {
     case 'integration_test_failed':
     case 'integration_removed':
     case 'deletion_failed':
+    case 'threshold_breached':
     case 'data_reset':
     case 'notification_channel_removed':
     case 'notification_delivery_failed':
@@ -955,6 +967,9 @@ const activityEventTypes = [
   'deletion_success',
   'deletion_failed',
   'deletion_dry_run',
+  'deletion_batch_complete',
+  'threshold_breached',
+  'update_available',
   'rule_created',
   'rule_updated',
   'rule_deleted',
@@ -993,6 +1008,13 @@ onMounted(async () => {
   sseOn('approval_bulk_unsnoozed', handleApprovalChange);
   sseOn('approval_orphans_recovered', handleApprovalChange);
   sseOn('deletion_success', handleApprovalChange);
+
+  // When all deletions for a cycle finish, refresh dashboard stats — the numbers are now final
+  sseOn('deletion_batch_complete', () => {
+    fetchDashboardData(true);
+    fetchEngineHistory();
+    refreshKey.value++;
+  });
 });
 
 onUnmounted(() => {

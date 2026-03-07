@@ -10,28 +10,12 @@ import (
 	"time"
 )
 
-// Discord embed color mapping by event type.
-var discordColors = map[string]int{
-	EventThresholdBreach:  15158332, // red (#E74C3C)
-	EventDeletionExecuted: 3066993,  // amber/orange (#2ECC71 — actually green; spec says amber)
-	EventEngineError:      15158332, // red
-	EventEngineComplete:   3066993,  // green
-}
+// DiscordSender implements Sender for Discord webhook delivery using rich embeds.
+type DiscordSender struct{}
 
-// discordEmoji returns a contextual emoji prefix for the event title.
-func discordEmoji(eventType string) string {
-	switch eventType {
-	case EventThresholdBreach:
-		return emojiRed
-	case EventDeletionExecuted:
-		return emojiYellow
-	case EventEngineError:
-		return emojiRed
-	case EventEngineComplete:
-		return emojiGreen
-	default:
-		return emojiInfo
-	}
+// NewDiscordSender creates a new DiscordSender.
+func NewDiscordSender() *DiscordSender {
+	return &DiscordSender{}
 }
 
 // discordPayload matches the Discord webhook embed structure.
@@ -40,11 +24,15 @@ type discordPayload struct {
 }
 
 type discordEmbed struct {
+	Author      *discordAuthor `json:"author,omitempty"`
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	Color       int            `json:"color"`
 	Fields      []discordField `json:"fields,omitempty"`
-	Timestamp   string         `json:"timestamp"`
+}
+
+type discordAuthor struct {
+	Name string `json:"name"`
 }
 
 type discordField struct {
@@ -53,25 +41,62 @@ type discordField struct {
 	Inline bool   `json:"inline"`
 }
 
-// SendDiscord posts a notification event to a Discord webhook URL.
-func SendDiscord(webhookURL string, event NotificationEvent) error {
+// SendDigest delivers a cycle digest notification to a Discord webhook.
+func (s *DiscordSender) SendDigest(webhookURL string, digest CycleDigest) error {
 	if webhookURL == "" {
 		return fmt.Errorf("discord webhook URL is empty")
 	}
 
-	color, ok := discordColors[event.Type]
-	if !ok {
-		color = 3447003 // default blue
+	// Build author line: "Capacitarr v1.4.0 • auto"
+	authorName := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
+	if digest.ExecutionMode != "" {
+		authorName += " • " + digest.ExecutionMode
+	}
+
+	desc := digestDescription(digest)
+
+	// Append disk usage progress bar for auto mode or all-clear
+	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Flagged == 0) {
+		bar := ProgressBar(digest.DiskUsagePct, 20)
+		if digest.ExecutionMode == ModeAuto && digest.Flagged > 0 {
+			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
+		} else {
+			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)
+		}
+	}
+
+	// Append version update banner
+	if digest.UpdateAvailable && digest.LatestVersion != "" {
+		desc += fmt.Sprintf("\n\n📦 **%s** available!", digest.LatestVersion)
 	}
 
 	embed := discordEmbed{
-		Title:       discordEmoji(event.Type) + " " + event.Title,
-		Description: event.Message,
-		Color:       color,
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Author:      &discordAuthor{Name: authorName},
+		Title:       digestTitle(digest),
+		Description: desc,
+		Color:       digestColor(digest),
 	}
 
-	for k, v := range event.Fields {
+	return sendDiscordPayload(webhookURL, discordPayload{Embeds: []discordEmbed{embed}})
+}
+
+// SendAlert delivers an immediate alert notification to a Discord webhook.
+func (s *DiscordSender) SendAlert(webhookURL string, alert Alert) error {
+	if webhookURL == "" {
+		return fmt.Errorf("discord webhook URL is empty")
+	}
+
+	authorName := fmt.Sprintf("⚡ Capacitarr %s", alert.Version)
+
+	embed := discordEmbed{
+		Author:      &discordAuthor{Name: authorName},
+		Title:       alert.Title,
+		Description: alert.Message,
+		Color:       alertColor(alert.Type),
+	}
+
+	// Add fields for alerts that carry structured data
+	for k, v := range alert.Fields {
 		embed.Fields = append(embed.Fields, discordField{
 			Name:   k,
 			Value:  v,
@@ -79,8 +104,11 @@ func SendDiscord(webhookURL string, event NotificationEvent) error {
 		})
 	}
 
-	payload := discordPayload{Embeds: []discordEmbed{embed}}
+	return sendDiscordPayload(webhookURL, discordPayload{Embeds: []discordEmbed{embed}})
+}
 
+// sendDiscordPayload marshals and sends a Discord webhook payload.
+func sendDiscordPayload(webhookURL string, payload discordPayload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal discord payload: %w", err)
@@ -95,7 +123,7 @@ func SendDiscord(webhookURL string, event NotificationEvent) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := webhookHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured webhook settings
+	resp, err := webhookHTTPClient.Do(req) //nolint:gosec // URL is from admin-configured webhook settings
 	if err != nil {
 		return fmt.Errorf("discord webhook request failed: %w", err)
 	}

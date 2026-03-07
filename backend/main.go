@@ -27,7 +27,6 @@ import (
 	"capacitarr/internal/events"
 	"capacitarr/internal/jobs"
 	"capacitarr/internal/logger"
-	"capacitarr/internal/notifications"
 	"capacitarr/internal/poller"
 	"capacitarr/internal/services"
 	"capacitarr/routes"
@@ -184,12 +183,10 @@ func main() {
 	activityPersister := events.NewActivityPersister(reg.Settings, bus)
 	activityPersister.Start()
 
-	// Notification Subscriber — dispatches notifications via configured channels.
-	// Must be created after the service registry since it depends on NotificationChannel service.
-	notifSubscriber := notifications.NewEventBusSubscriber(reg.NotificationChannel, bus)
-	notifSubscriber.Start()
+	// Notification Dispatch Service — subscribes to events, dispatches digests + alerts
+	reg.NotificationDispatch.Start()
 
-	slog.Info("Event subscribers started", "component", "main", "subscribers", "activity_persister, notification_subscriber")
+	slog.Info("Event subscribers started", "component", "main", "subscribers", "activity_persister, notification_dispatch")
 
 	// Start the background deletion worker (replaces old init() goroutine)
 	reg.Deletion.Start()
@@ -292,7 +289,7 @@ func main() {
 		reg.Deletion.Stop()
 
 		// Stop event bus infrastructure
-		notifSubscriber.Stop()
+		reg.NotificationDispatch.Stop()
 		sseBroadcaster.Stop()
 		activityPersister.Stop()
 		bus.Close()

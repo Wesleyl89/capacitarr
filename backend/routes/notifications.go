@@ -112,10 +112,12 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 		existing.WebhookURL = req.WebhookURL
 		existing.Enabled = req.Enabled
+		existing.OnCycleDigest = req.OnCycleDigest
+		existing.OnError = req.OnError
+		existing.OnModeChanged = req.OnModeChanged
+		existing.OnServerStarted = req.OnServerStarted
 		existing.OnThresholdBreach = req.OnThresholdBreach
-		existing.OnDeletionExecuted = req.OnDeletionExecuted
-		existing.OnEngineError = req.OnEngineError
-		existing.OnEngineComplete = req.OnEngineComplete
+		existing.OnUpdateAvailable = req.OnUpdateAvailable
 		existing.UpdatedAt = time.Now()
 
 		updated, updateErr := reg.NotificationChannel.Update(existing.ID, *existing)
@@ -151,7 +153,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
 		}
 
-		if err := reg.NotificationChannel.TestChannel(uint(idNum)); err != nil {
+		if err := reg.NotificationDispatch.TestChannel(uint(idNum)); err != nil {
 			if err.Error() == "not found" {
 				return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
 			}
