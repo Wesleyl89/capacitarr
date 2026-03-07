@@ -1,3 +1,24 @@
+## [1.0.0-rc.9] - 2026-03-07
+
+### 🚀 Features
+
+- *(ui)* Add NumberField and Combobox shadcn-vue components ([805d893](https://gitlab.com/starshadow/software/capacitarr/-/commit/805d893b4fca2e62520f27fa1d4e1088c4f877be))
+- *(rules)* Add custom rules import/export ([b3e8a35](https://gitlab.com/starshadow/software/capacitarr/-/commit/b3e8a352cdb104f8a0cb3f2c4b681fe5e99c3393))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Use zone colors on threshold slider instead of primary gradient ([50be5e4](https://gitlab.com/starshadow/software/capacitarr/-/commit/50be5e45b3177b71baf697e7c9acbaa46090307c))
+- *(ui)* Raise slider thumb z-index above zone color overlays ([36c8f94](https://gitlab.com/starshadow/software/capacitarr/-/commit/36c8f9470f8692f72fd399c00cc0cddc73016076))
+- *(ui)* Correct target thumb selector and enlarge threshold thumbs ([1669982](https://gitlab.com/starshadow/software/capacitarr/-/commit/1669982560648c0fe6a6070d6e386e74acda313e))
+- *(security)* Upgrade Go 1.25 → 1.26 to resolve 4 stdlib vulnerabilities ([3ab190c](https://gitlab.com/starshadow/software/capacitarr/-/commit/3ab190c990632a1214a205c0271fd57419af2a07))
+
+### ⚡ Performance
+
+- *(ci)* Add Docker volume caching for Go and Node dependencies ([7709e63](https://gitlab.com/starshadow/software/capacitarr/-/commit/7709e6328cb285c7d57e336ba214ec19e081f1cb))
+
+### 🛡️ Security
+
+- Add make ci gate to release script ([1ad7882](https://gitlab.com/starshadow/software/capacitarr/-/commit/1ad7882ceb9ba968d2a19618bbca1289752692bd))
 ## [1.0.0-rc.8] - 2026-03-06
 
 ### 🐛 Bug Fixes

@@ -129,10 +129,10 @@ The changelog is configured in [`cliff.toml`](../cliff.toml) at the project root
 |-----|-------|-------|---------|
 | `lint:go` | lint | `golangci/golangci-lint:latest` | Go linting |
 | `lint:frontend` | lint | `node:22-alpine` | ESLint |
-| `test:go` | test | `golang:1.25-alpine` | Go tests with race detector |
+| `test:go` | test | `golang:1.26-alpine` | Go tests with race detector |
 | `test:frontend` | test | `node:22-alpine` | Frontend tests |
 | `build:docker` | build | `docker:latest` | Multi-arch Docker smoke test (no push) |
-| `security:govulncheck` | security | `golang:1.25-alpine` | Go vulnerability check |
+| `security:govulncheck` | security | `golang:1.26-alpine` | Go vulnerability check |
 | `security:pnpm-audit` | security | `node:22-alpine` | npm dependency audit |
 
 ### On Tag Push (`v*`)
