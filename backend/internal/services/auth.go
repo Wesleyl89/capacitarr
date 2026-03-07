@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -102,6 +104,113 @@ func (s *AuthService) ChangeUsername(currentUser, newUsername, password string) 
 		NewUsername: newUsername,
 	})
 	return nil
+}
+
+// IsInitialized returns whether at least one user exists in the database.
+func (s *AuthService) IsInitialized() (bool, error) {
+	var count int64
+	if err := s.db.Model(&db.AuthConfig{}).Count(&count).Error; err != nil {
+		return false, fmt.Errorf("failed to check auth initialization: %w", err)
+	}
+	return count > 0, nil
+}
+
+// Bootstrap creates the first user in a transaction. Returns the created user
+// if this call performed the creation, or nil if another user already exists.
+func (s *AuthService) Bootstrap(username, password string) (*db.AuthConfig, error) {
+	var user *db.AuthConfig
+	txErr := s.db.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&db.AuthConfig{}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil // Another request already created the first user
+		}
+		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+		if hashErr != nil {
+			return hashErr
+		}
+		auth := db.AuthConfig{Username: username, Password: string(hashed)}
+		if err := tx.Create(&auth).Error; err != nil {
+			return err
+		}
+		user = &auth
+		slog.Info("First user bootstrapped", "component", "auth", "username", username)
+		return nil
+	})
+	if txErr != nil {
+		return nil, fmt.Errorf("bootstrap failed: %w", txErr)
+	}
+	return user, nil
+}
+
+// GetByUsername looks up a user by username.
+func (s *AuthService) GetByUsername(username string) (*db.AuthConfig, error) {
+	var auth db.AuthConfig
+	if err := s.db.Where("username = ?", username).First(&auth).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	return &auth, nil
+}
+
+// IsUsernameTaken checks whether a username is already in use.
+func (s *AuthService) IsUsernameTaken(username string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&db.AuthConfig{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return false, fmt.Errorf("failed to check username: %w", err)
+	}
+	return count > 0, nil
+}
+
+// ValidateAPIKey checks the given plaintext API key against stored (hashed or
+// legacy plaintext) keys. If a legacy plaintext key matches, it is transparently
+// upgraded to a SHA-256 hash. Returns the matching AuthConfig on success.
+func (s *AuthService) ValidateAPIKey(plaintextKey string) (*db.AuthConfig, error) {
+	hashedKey := hashAPIKey(plaintextKey)
+
+	// Fast path: look up by the hashed value (new-style keys)
+	var auth db.AuthConfig
+	if err := s.db.Where("api_key = ?", hashedKey).First(&auth).Error; err == nil {
+		return &auth, nil
+	}
+
+	// Slow path: legacy plaintext key — look up directly and upgrade in-place
+	if err := s.db.Where("api_key = ?", plaintextKey).First(&auth).Error; err == nil {
+		if !strings.HasPrefix(auth.APIKey, "sha256:") {
+			s.db.Model(&auth).Update("api_key", hashedKey)
+			slog.Info("Upgraded legacy plaintext API key to SHA-256 hash", "component", "auth", "username", auth.Username)
+		}
+		return &auth, nil
+	}
+
+	return nil, fmt.Errorf("invalid API key")
+}
+
+// EnsureProxyUser creates a user record for a proxy-auth header user if one
+// doesn't already exist. The created user has an unusable password hash.
+func (s *AuthService) EnsureProxyUser(username string) error {
+	var auth db.AuthConfig
+	if err := s.db.Where("username = ?", username).First(&auth).Error; err == nil {
+		return nil // user already exists
+	}
+
+	placeholder, _ := bcrypt.GenerateFromPassword([]byte("proxy-auth-placeholder"), BcryptCost)
+	auth = db.AuthConfig{
+		Username: username,
+		Password: string(placeholder),
+	}
+	if err := s.db.Create(&auth).Error; err != nil {
+		return fmt.Errorf("failed to create proxy user: %w", err)
+	}
+	slog.Info("Auto-created user from proxy auth header", "component", "auth", "username", username) //nolint:gosec // username is from a trusted reverse proxy header
+	return nil
+}
+
+// hashAPIKey produces a SHA-256 hash of the given plaintext API key.
+func hashAPIKey(plaintext string) string {
+	h := sha256.Sum256([]byte(plaintext))
+	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 // GenerateAPIKey creates a new API key, stores its SHA-256 hash and hint,

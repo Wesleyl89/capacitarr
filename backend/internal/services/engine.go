@@ -1,7 +1,9 @@
 package services
 
 import (
+	"fmt"
 	"sync/atomic"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -188,6 +190,83 @@ func (s *EngineService) GetPreview() (*PreviewResult, error) {
 		Items:       evaluated,
 		DiskContext: diskCtx,
 	}, nil
+}
+
+// EngineHistoryPoint holds a single data point for the engine history sparklines.
+type EngineHistoryPoint struct {
+	Timestamp  time.Time `json:"timestamp"`
+	Evaluated  int       `json:"evaluated"`
+	Flagged    int       `json:"flagged"`
+	Deleted    int       `json:"deleted"`
+	FreedBytes int64     `json:"freedBytes"`
+	DurationMs int64     `json:"durationMs"`
+}
+
+// CreateRunStats creates a new engine run stats entry and returns it.
+func (s *EngineService) CreateRunStats(mode string) (*db.EngineRunStats, error) {
+	stats := db.EngineRunStats{
+		RunAt:         time.Now().UTC(),
+		ExecutionMode: mode,
+	}
+	if err := s.db.Create(&stats).Error; err != nil {
+		return nil, fmt.Errorf("failed to create engine run stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// UpdateRunStats updates a run stats entry with the final evaluation results.
+func (s *EngineService) UpdateRunStats(id uint, evaluated, flagged int, durationMs int64) error {
+	result := s.db.Model(&db.EngineRunStats{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"evaluated":   evaluated,
+		"flagged":     flagged,
+		"duration_ms": durationMs,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("failed to update engine run stats: %w", result.Error)
+	}
+	return nil
+}
+
+// GetHistory returns engine run history points within the given duration.
+func (s *EngineService) GetHistory(since time.Duration) ([]EngineHistoryPoint, error) {
+	cutoff := time.Now().UTC().Add(-since)
+
+	var stats []db.EngineRunStats
+	if err := s.db.Where("run_at >= ?", cutoff).
+		Order("run_at ASC").
+		Find(&stats).Error; err != nil {
+		return nil, fmt.Errorf("failed to query engine history: %w", err)
+	}
+
+	points := make([]EngineHistoryPoint, len(stats))
+	for i, st := range stats {
+		points[i] = EngineHistoryPoint{
+			Timestamp:  st.RunAt,
+			Evaluated:  st.Evaluated,
+			Flagged:    st.Flagged,
+			Deleted:    st.Deleted,
+			FreedBytes: st.FreedBytes,
+			DurationMs: st.DurationMs,
+		}
+	}
+
+	return points, nil
+}
+
+// PruneOldStats keeps only the most recent N engine run stats entries.
+func (s *EngineService) PruneOldStats(keep int) (int64, error) {
+	// Get the Nth newest run_at timestamp
+	var cutoffRows []db.EngineRunStats
+	s.db.Order("run_at desc").Offset(keep).Limit(1).Find(&cutoffRows)
+	if len(cutoffRows) == 0 {
+		return 0, nil // fewer than `keep` entries exist
+	}
+
+	result := s.db.Where("run_at <= ?", cutoffRows[0].RunAt).Delete(&db.EngineRunStats{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to prune engine run stats: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 // GetStats returns the current engine statistics as a map.

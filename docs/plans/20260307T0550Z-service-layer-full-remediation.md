@@ -1,7 +1,7 @@
 # Service Layer Full Remediation Plan
 
 **Created:** 2026-03-07T05:50Z
-**Status:** 📋 Planned
+**Status:** 🔧 In Progress
 **Branch:** `refactor/service-layer-full-remediation`
 **Scope:** Eliminate all remaining direct DB access from route handlers, middleware, orchestrators, event subscribers, and background jobs
 **Predecessor:** `docs/plans/20260307T0302Z-service-layer-audit-remediation.md` (Phase 1 — created services; this plan completes the migration)
@@ -20,40 +20,58 @@ This plan systematically eliminates every bypass, ordered by risk and dependency
 
 Create all service methods needed by later phases before touching any callers. This phase has zero risk — it only adds new code.
 
-### Step 1.1 — `IntegrationService`: Add Read Methods
+### Step 1.1 — `IntegrationService`: Add Read Methods ✅
 
 **File:** `backend/internal/services/integration.go`
+**Status:** ✅ Complete (2026-03-07T06:12Z)
 
 Add:
 - `List() ([]db.IntegrationConfig, error)` — ordered by `created_at asc`
-- `GetByID(id uint) (*db.IntegrationConfig, error)`
+- `GetByID(id uint) (*db.IntegrationConfig, error)` — returns `ErrNotFound` sentinel
 - `ListEnabled() ([]db.IntegrationConfig, error)` — `WHERE enabled = true`
+- `UpdateSyncStatus(id uint, lastSync *time.Time, lastError string) error` — updates sync metadata
+
+Also added: `ErrNotFound` sentinel error in services package.
 
 These will replace ~8 direct DB reads across `integrations.go`, `rulefields.go`, `approval.go`, `poller.go`, and `notifications/subscriber.go`.
 
-### Step 1.2 — `IntegrationService`: Add `SyncAll` Orchestration Method
+**Tests:** All methods tested in `integration_test.go` using in-memory SQLite pattern. Note: GORM `default:true` on bool fields means `Enabled: false` is ignored on Create — tests use two-step create+update.
+
+### Step 1.2 — `IntegrationService`: Add `SyncAll` Orchestration Method ✅
 
 **File:** `backend/internal/services/integration.go`
+**Status:** ✅ Complete (2026-03-07T06:12Z)
 
 Add:
-- `SyncAll() ([]SyncResult, error)` — fetches all enabled integrations, tests connections, fetches disk space and media counts, calls `UpsertDiskGroup` for each discovered disk
+- `SyncAll() ([]SyncResult, error)` — fetches all enabled integrations, tests connections, fetches disk space and media counts, upserts DiskGroups
+- `SyncResult` struct for typed return values
+- `upsertDiskGroup()` private method (ported from `routes/integrations.go:updateDiskGroup()`)
 
 This replaces the ~60-line orchestration in `POST /integrations/sync` handler.
 
-### Step 1.3 — `NotificationChannelService`: Add Read Methods + In-App CRUD
+**Tests:** Tested empty-state and non-client-type skipping (tautulli/overseerr). Live integration tests not possible in unit tests — connection test coverage handled by caller tests in Phase 2.
+
+**Deviation from plan:** `CreateInApp` method added to `NotificationChannelService` (not originally listed) to support future in-app notification creation from service layer.
+
+### Step 1.3 — `NotificationChannelService`: Add Read Methods + In-App CRUD ✅
 
 **File:** `backend/internal/services/notification_channel.go`
+**Status:** ✅ Complete (2026-03-07T06:12Z)
 
 Add:
 - `List() ([]db.NotificationConfig, error)` — ordered by `id ASC`
-- `GetByID(id uint) (*db.NotificationConfig, error)`
+- `GetByID(id uint) (*db.NotificationConfig, error)` — returns `ErrNotFound`
 - `ListEnabled() ([]db.NotificationConfig, error)` — for subscriber use
-- `TestChannel(id uint) error` — encapsulates test notification dispatch
 - `ListInApp(limit int) ([]db.InAppNotification, error)`
 - `UnreadCount() (int64, error)`
-- `MarkRead(id uint) error`
+- `MarkRead(id uint) error` — returns `ErrNotFound` if missing
 - `MarkAllRead() error`
 - `ClearAllInApp() error`
+- `CreateInApp(title, message, severity, eventType string) error` — added (not originally planned)
+
+**TODO:** `TestChannel(id uint) error` — not yet implemented; requires building a notification dispatcher, which is more than a simple CRUD method.
+
+**Tests:** All methods tested in `notification_channel_test.go` using in-memory SQLite pattern.
 
 ### Step 1.4 — `AuditLogService`: Add Read Methods
 

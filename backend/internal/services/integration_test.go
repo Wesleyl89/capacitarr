@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -188,5 +189,174 @@ func TestIntegrationService_PublishTestFailure(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for integration_test_failed event")
+	}
+}
+
+func TestIntegrationService_List(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Empty list initially
+	configs, err := svc.List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(configs) != 0 {
+		t.Errorf("expected 0 integrations, got %d", len(configs))
+	}
+
+	// Insert two integrations
+	database.Create(&db.IntegrationConfig{Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+	database.Create(&db.IntegrationConfig{Type: "radarr", Name: "Serenity Radarr", URL: "http://localhost:7878", APIKey: "key2"})
+
+	configs, err = svc.List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(configs) != 2 {
+		t.Fatalf("expected 2 integrations, got %d", len(configs))
+	}
+	if configs[0].Name != "Firefly Sonarr" {
+		t.Errorf("expected first integration 'Firefly Sonarr', got %q", configs[0].Name)
+	}
+}
+
+func TestIntegrationService_GetByID(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	ic := db.IntegrationConfig{Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1"}
+	database.Create(&ic)
+
+	config, err := svc.GetByID(ic.ID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if config.Name != "Firefly Sonarr" {
+		t.Errorf("expected name 'Firefly Sonarr', got %q", config.Name)
+	}
+}
+
+func TestIntegrationService_GetByID_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	_, err := svc.GetByID(99999)
+	if err == nil {
+		t.Fatal("expected error for non-existent integration")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegrationService_ListEnabled(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	database.Create(&db.IntegrationConfig{Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1", Enabled: true})
+	disabled := db.IntegrationConfig{Type: "radarr", Name: "Serenity Radarr", URL: "http://localhost:7878", APIKey: "key2", Enabled: true}
+	database.Create(&disabled)
+	// Explicitly disable — GORM default:true ignores zero-value false on Create
+	database.Model(&disabled).Update("enabled", false)
+
+	configs, err := svc.ListEnabled()
+	if err != nil {
+		t.Fatalf("ListEnabled returned error: %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 enabled integration, got %d", len(configs))
+	}
+	if configs[0].Name != "Firefly Sonarr" {
+		t.Errorf("expected 'Firefly Sonarr', got %q", configs[0].Name)
+	}
+}
+
+func TestIntegrationService_UpdateSyncStatus(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	ic := db.IntegrationConfig{Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1"}
+	database.Create(&ic)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	err := svc.UpdateSyncStatus(ic.ID, &now, "")
+	if err != nil {
+		t.Fatalf("UpdateSyncStatus returned error: %v", err)
+	}
+
+	// Verify the update
+	var updated db.IntegrationConfig
+	database.First(&updated, ic.ID)
+	if updated.LastSync == nil {
+		t.Fatal("expected LastSync to be set")
+	}
+	if updated.LastError != "" {
+		t.Errorf("expected empty LastError, got %q", updated.LastError)
+	}
+
+	// Update with an error
+	err = svc.UpdateSyncStatus(ic.ID, &now, "connection timeout")
+	if err != nil {
+		t.Fatalf("UpdateSyncStatus returned error: %v", err)
+	}
+
+	database.First(&updated, ic.ID)
+	if updated.LastError != "connection timeout" {
+		t.Errorf("expected LastError 'connection timeout', got %q", updated.LastError)
+	}
+}
+
+func TestIntegrationService_UpdateSyncStatus_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	now := time.Now()
+	err := svc.UpdateSyncStatus(99999, &now, "some error")
+	if err == nil {
+		t.Fatal("expected error for non-existent integration")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegrationService_SyncAll_NoEnabled(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// No integrations → empty results
+	results, err := svc.SyncAll()
+	if err != nil {
+		t.Fatalf("SyncAll returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 sync results, got %d", len(results))
+	}
+}
+
+func TestIntegrationService_SyncAll_SkipsNonClientTypes(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Tautulli and Overseerr don't implement the full Integration interface,
+	// so NewClient returns nil and they should be skipped.
+	database.Create(&db.IntegrationConfig{Type: "tautulli", Name: "Firefly Tautulli", URL: "http://localhost:8181", APIKey: "key1", Enabled: true})
+	database.Create(&db.IntegrationConfig{Type: "overseerr", Name: "Serenity Overseerr", URL: "http://localhost:5055", APIKey: "key2", Enabled: true})
+
+	results, err := svc.SyncAll()
+	if err != nil {
+		t.Fatalf("SyncAll returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 sync results (tautulli/overseerr skipped), got %d", len(results))
 	}
 }

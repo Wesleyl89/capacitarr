@@ -6,6 +6,7 @@ import (
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
+	"capacitarr/internal/integrations"
 )
 
 func TestSettingsService_GetPreferences(t *testing.T) {
@@ -113,13 +114,11 @@ func TestSettingsService_UpdateThresholds(t *testing.T) {
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
 
-	if err := svc.UpdateThresholds(group.ID, 90.0, 80.0); err != nil {
+	updated, err := svc.UpdateThresholds(group.ID, 90.0, 80.0)
+	if err != nil {
 		t.Fatalf("UpdateThresholds returned error: %v", err)
 	}
 
-	// Verify DB update
-	var updated db.DiskGroup
-	database.First(&updated, group.ID)
 	if updated.ThresholdPct != 90.0 {
 		t.Errorf("expected threshold 90.0, got %f", updated.ThresholdPct)
 	}
@@ -150,8 +149,101 @@ func TestSettingsService_UpdateThresholds_NotFound(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewSettingsService(database, bus)
 
-	err := svc.UpdateThresholds(99999, 90.0, 80.0)
+	_, err := svc.UpdateThresholds(99999, 90.0, 80.0)
 	if err == nil {
 		t.Fatal("expected error for non-existent disk group")
+	}
+}
+
+func TestSettingsService_ListDiskGroups(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	database.Create(&db.DiskGroup{MountPath: "/mnt/a", TotalBytes: 100, UsedBytes: 50})
+	database.Create(&db.DiskGroup{MountPath: "/mnt/b", TotalBytes: 200, UsedBytes: 100})
+
+	groups, err := svc.ListDiskGroups()
+	if err != nil {
+		t.Fatalf("ListDiskGroups error: %v", err)
+	}
+	if len(groups) != 2 {
+		t.Errorf("expected 2 disk groups, got %d", len(groups))
+	}
+}
+
+func TestSettingsService_GetDiskGroup(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500})
+
+	group, err := svc.GetDiskGroup(1)
+	if err != nil {
+		t.Fatalf("GetDiskGroup error: %v", err)
+	}
+	if group.MountPath != "/mnt/media" {
+		t.Errorf("expected mount path '/mnt/media', got %q", group.MountPath)
+	}
+}
+
+func TestSettingsService_UpsertDiskGroup_Create(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	disk := integrations.DiskSpace{Path: "/mnt/new", TotalBytes: 1000, FreeBytes: 400}
+	group, err := svc.UpsertDiskGroup(disk)
+	if err != nil {
+		t.Fatalf("UpsertDiskGroup error: %v", err)
+	}
+	if group.MountPath != "/mnt/new" {
+		t.Errorf("expected mount path '/mnt/new', got %q", group.MountPath)
+	}
+	if group.UsedBytes != 600 {
+		t.Errorf("expected used bytes 600, got %d", group.UsedBytes)
+	}
+}
+
+func TestSettingsService_UpsertDiskGroup_Update(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	// Create first
+	_, _ = svc.UpsertDiskGroup(integrations.DiskSpace{Path: "/mnt/data", TotalBytes: 1000, FreeBytes: 500})
+
+	// Update
+	group, err := svc.UpsertDiskGroup(integrations.DiskSpace{Path: "/mnt/data", TotalBytes: 2000, FreeBytes: 800})
+	if err != nil {
+		t.Fatalf("UpsertDiskGroup update error: %v", err)
+	}
+	if group.TotalBytes != 2000 {
+		t.Errorf("expected total bytes 2000, got %d", group.TotalBytes)
+	}
+
+	// Should still be 1 group
+	var count int64
+	database.Model(&db.DiskGroup{}).Count(&count)
+	if count != 1 {
+		t.Errorf("expected 1 disk group, got %d", count)
+	}
+}
+
+func TestSettingsService_ListRecentActivities(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	database.Create(&db.ActivityEvent{EventType: "engine_complete", Message: "Done"})
+	database.Create(&db.ActivityEvent{EventType: "login", Message: "User logged in"})
+
+	activities, err := svc.ListRecentActivities(1)
+	if err != nil {
+		t.Fatalf("ListRecentActivities error: %v", err)
+	}
+	if len(activities) != 1 {
+		t.Errorf("expected 1 activity, got %d", len(activities))
 	}
 }

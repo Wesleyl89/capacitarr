@@ -116,6 +116,88 @@ func (s *MetricsService) GetDashboardStats() (map[string]interface{}, error) {
 	}, nil
 }
 
+// IncrementEngineRuns atomically increments the total_engine_runs counter.
+func (s *MetricsService) IncrementEngineRuns() error {
+	result := s.db.Model(&db.LifetimeStats{}).Where("id = 1").
+		UpdateColumn("total_engine_runs", gorm.Expr("total_engine_runs + ?", 1))
+	if result.Error != nil {
+		return fmt.Errorf("failed to increment engine runs: %w", result.Error)
+	}
+	// Ensure the row exists (first run)
+	if result.RowsAffected == 0 {
+		s.db.FirstOrCreate(&db.LifetimeStats{}, db.LifetimeStats{ID: 1})
+		s.db.Model(&db.LifetimeStats{}).Where("id = 1").
+			UpdateColumn("total_engine_runs", gorm.Expr("total_engine_runs + ?", 1))
+	}
+	return nil
+}
+
+// RecordLibraryHistory records a library capacity snapshot for a disk group.
+func (s *MetricsService) RecordLibraryHistory(diskGroupID uint, totalBytes, usedBytes int64) error {
+	record := db.LibraryHistory{
+		Timestamp:     time.Now().UTC(),
+		TotalCapacity: totalBytes,
+		UsedCapacity:  usedBytes,
+		Resolution:    "raw",
+		DiskGroupID:   &diskGroupID,
+	}
+	if err := s.db.Create(&record).Error; err != nil {
+		return fmt.Errorf("failed to record library history: %w", err)
+	}
+	return nil
+}
+
+// RollupHistory aggregates raw library history entries into a coarser resolution.
+// For each (disk_group_id, resolution) bucket, it averages the total and used capacity
+// within the time window and creates a single summary row.
+func (s *MetricsService) RollupHistory(fromRes, toRes string, start, end time.Time) error {
+	// Get distinct disk group IDs with data in the range
+	type groupRow struct {
+		DiskGroupID *uint
+	}
+	var groups []groupRow
+	s.db.Model(&db.LibraryHistory{}).
+		Select("DISTINCT disk_group_id").
+		Where("resolution = ? AND timestamp >= ? AND timestamp < ?", fromRes, start, end).
+		Find(&groups)
+
+	for _, g := range groups {
+		var avgTotal, avgUsed float64
+		row := s.db.Model(&db.LibraryHistory{}).
+			Select("AVG(total_capacity) as avg_total, AVG(used_capacity) as avg_used").
+			Where("resolution = ? AND disk_group_id = ? AND timestamp >= ? AND timestamp < ?",
+				fromRes, g.DiskGroupID, start, end)
+		sqlRow := row.Row()
+		if sqlRow != nil {
+			if err := sqlRow.Scan(&avgTotal, &avgUsed); err != nil {
+				continue // skip this group if scan fails
+			}
+		}
+
+		summary := db.LibraryHistory{
+			Timestamp:     start,
+			TotalCapacity: int64(avgTotal),
+			UsedCapacity:  int64(avgUsed),
+			Resolution:    toRes,
+			DiskGroupID:   g.DiskGroupID,
+		}
+		s.db.Create(&summary)
+	}
+
+	return nil
+}
+
+// PruneHistory deletes library history entries matching the given resolution
+// that are older than the given time.
+func (s *MetricsService) PruneHistory(resolution string, before time.Time) (int64, error) {
+	result := s.db.Where("resolution = ? AND timestamp < ?", resolution, before).
+		Delete(&db.LibraryHistory{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to prune history: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // GetWorkerMetrics assembles worker metrics from the EngineService and DeletionService.
 // Keys match the frontend TypeScript WorkerStats interface.
 func (s *MetricsService) GetWorkerMetrics() map[string]interface{} {

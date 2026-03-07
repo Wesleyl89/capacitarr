@@ -242,3 +242,148 @@ func TestAuthService_GenerateAPIKey_UserNotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent user")
 	}
 }
+
+func TestAuthService_IsInitialized_Empty(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	ok, err := svc.IsInitialized()
+	if err != nil {
+		t.Fatalf("IsInitialized error: %v", err)
+	}
+	if ok {
+		t.Error("expected false for empty DB")
+	}
+}
+
+func TestAuthService_Bootstrap(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	user, err := svc.Bootstrap("admin", "password123")
+	if err != nil {
+		t.Fatalf("Bootstrap error: %v", err)
+	}
+	if user == nil {
+		t.Fatal("expected non-nil user")
+	}
+	if user.Username != "admin" {
+		t.Errorf("expected username 'admin', got %q", user.Username)
+	}
+
+	// Should now be initialized
+	ok, _ := svc.IsInitialized()
+	if !ok {
+		t.Error("expected IsInitialized true after bootstrap")
+	}
+
+	// Second bootstrap should return nil (user already exists)
+	user2, err := svc.Bootstrap("admin2", "password456")
+	if err != nil {
+		t.Fatalf("Second bootstrap error: %v", err)
+	}
+	if user2 != nil {
+		t.Error("expected nil user on second bootstrap")
+	}
+}
+
+func TestAuthService_GetByUsername(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	_, _ = svc.Bootstrap("admin", "password123")
+
+	user, err := svc.GetByUsername("admin")
+	if err != nil {
+		t.Fatalf("GetByUsername error: %v", err)
+	}
+	if user.Username != "admin" {
+		t.Errorf("expected 'admin', got %q", user.Username)
+	}
+
+	_, err = svc.GetByUsername("nonexistent")
+	if err == nil {
+		t.Error("expected error for nonexistent user")
+	}
+}
+
+func TestAuthService_IsUsernameTaken(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	_, _ = svc.Bootstrap("admin", "password123")
+
+	taken, err := svc.IsUsernameTaken("admin")
+	if err != nil {
+		t.Fatalf("IsUsernameTaken error: %v", err)
+	}
+	if !taken {
+		t.Error("expected 'admin' to be taken")
+	}
+
+	taken, err = svc.IsUsernameTaken("other")
+	if err != nil {
+		t.Fatalf("IsUsernameTaken error: %v", err)
+	}
+	if taken {
+		t.Error("expected 'other' to not be taken")
+	}
+}
+
+func TestAuthService_ValidateAPIKey(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	_, _ = svc.Bootstrap("admin", "password123")
+	plaintext, _ := svc.GenerateAPIKey("admin")
+
+	auth, err := svc.ValidateAPIKey(plaintext)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey error: %v", err)
+	}
+	if auth.Username != "admin" {
+		t.Errorf("expected username 'admin', got %q", auth.Username)
+	}
+
+	_, err = svc.ValidateAPIKey("invalid-key")
+	if err == nil {
+		t.Error("expected error for invalid key")
+	}
+}
+
+func TestAuthService_EnsureProxyUser(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	cfg := testConfig()
+	svc := NewAuthService(database, bus, cfg)
+
+	err := svc.EnsureProxyUser("proxyuser")
+	if err != nil {
+		t.Fatalf("EnsureProxyUser error: %v", err)
+	}
+
+	// Should now exist
+	user, err := svc.GetByUsername("proxyuser")
+	if err != nil {
+		t.Fatalf("GetByUsername error after EnsureProxyUser: %v", err)
+	}
+	if user.Username != "proxyuser" {
+		t.Errorf("expected 'proxyuser', got %q", user.Username)
+	}
+
+	// Calling again should be idempotent
+	err = svc.EnsureProxyUser("proxyuser")
+	if err != nil {
+		t.Fatalf("Second EnsureProxyUser error: %v", err)
+	}
+}

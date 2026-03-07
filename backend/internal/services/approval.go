@@ -3,6 +3,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,9 @@ import (
 	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/engine"
 	"capacitarr/internal/events"
+	"capacitarr/internal/integrations"
 )
 
 // Sentinel errors for approval operations.
@@ -215,6 +218,85 @@ func (s *ApprovalService) CleanExpiredSnoozes() (int, error) {
 	}
 
 	return count, nil
+}
+
+// ListQueue returns approval queue items filtered by optional status and capped to limit.
+func (s *ApprovalService) ListQueue(status string, limit int) ([]db.ApprovalQueueItem, error) {
+	items := make([]db.ApprovalQueueItem, 0, limit)
+	query := s.db.Model(&db.ApprovalQueueItem{})
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	if err := query.Order("created_at desc").Limit(limit).Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch approval queue: %w", err)
+	}
+
+	return items, nil
+}
+
+// ExecuteApproval encapsulates the full approval workflow:
+// approve → look up integration → build client → reconstruct MediaItem →
+// parse score details → queue for deletion.
+// The caller must provide pre-validated DeletionService and IntegrationService references
+// via the ExecuteApprovalDeps argument.
+func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps) (*db.ApprovalQueueItem, error) {
+	// 1. Mark as approved via Approve (single fetch + status validation)
+	approved, err := s.Approve(entryID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Look up the integration to construct a client for deletion
+	integration, err := deps.Integration.GetByID(approved.IntegrationID)
+	if err != nil {
+		return approved, fmt.Errorf("integration not found for approval %d: %w", entryID, err)
+	}
+
+	// 3. Build the client
+	client := integrations.NewClient(integration.Type, integration.URL, integration.APIKey)
+	if client == nil {
+		return approved, fmt.Errorf("unsupported integration type %q for approval %d", integration.Type, entryID)
+	}
+
+	// 4. Reconstruct the MediaItem from stored approval data
+	item := integrations.MediaItem{
+		ExternalID:    approved.ExternalID,
+		IntegrationID: approved.IntegrationID,
+		Type:          integrations.MediaType(approved.MediaType),
+		Title:         approved.MediaName,
+		SizeBytes:     approved.SizeBytes,
+	}
+
+	// 5. Parse stored score details back into factors
+	var factors []engine.ScoreFactor
+	if approved.ScoreDetails != "" {
+		if jsonErr := json.Unmarshal([]byte(approved.ScoreDetails), &factors); jsonErr != nil {
+			slog.Warn("Failed to parse score details for approval", "id", approved.ID, "error", jsonErr)
+		}
+	}
+
+	// 6. Queue for background deletion
+	if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
+		Client:  client,
+		Item:    item,
+		Reason:  approved.Reason,
+		Score:   0,
+		Factors: factors,
+	}); queueErr != nil {
+		return approved, fmt.Errorf("deletion queue is full: %w", queueErr)
+	}
+
+	return approved, nil
+}
+
+// ExecuteApprovalDeps holds the service dependencies needed by ExecuteApproval.
+// This avoids circular references — ApprovalService doesn't need to import
+// the full Registry.
+type ExecuteApprovalDeps struct {
+	Integration *IntegrationService
+	Deletion    *DeletionService
 }
 
 // RecoverOrphans finds approved items that have no corresponding active deletion

@@ -118,13 +118,12 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Threshold must be greater than target"})
 		}
 
-		if err := reg.Settings.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct); err != nil {
+		updated, err := reg.Settings.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct)
+		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update disk group"})
 		}
 
-		// Reload the updated group
-		database.First(&group, id)
-		return c.JSON(http.StatusOK, group)
+		return c.JSON(http.StatusOK, updated)
 	})
 
 	// Worker Stats

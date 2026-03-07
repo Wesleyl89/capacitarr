@@ -542,3 +542,62 @@ func TestApprovalService_RecoverOrphans(t *testing.T) {
 		t.Fatal("timeout waiting for orphan recovery event")
 	}
 }
+
+func TestApprovalService_ListQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+
+	// Create items with different statuses
+	_, _ = svc.UpsertPending(db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.80",
+		IntegrationID: intID, ExternalID: "1",
+	})
+	_, _ = svc.UpsertPending(db.ApprovalQueueItem{
+		MediaName: "Serenity", MediaType: "movie", Reason: "Score: 0.90",
+		IntegrationID: intID, ExternalID: "2",
+	})
+
+	// All items
+	items, err := svc.ListQueue("", 100)
+	if err != nil {
+		t.Fatalf("ListQueue returned error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(items))
+	}
+
+	// Filter by status
+	pendingItems, err := svc.ListQueue("pending", 100)
+	if err != nil {
+		t.Fatalf("ListQueue(pending) returned error: %v", err)
+	}
+	if len(pendingItems) != 2 {
+		t.Errorf("expected 2 pending items, got %d", len(pendingItems))
+	}
+}
+
+func TestApprovalService_ListQueue_Limit(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+
+	for i := 0; i < 5; i++ {
+		_, _ = svc.UpsertPending(db.ApprovalQueueItem{
+			MediaName: "Firefly " + string(rune('A'+i)), MediaType: "show", Reason: "Score",
+			IntegrationID: intID, ExternalID: string(rune('1' + i)),
+		})
+	}
+
+	items, err := svc.ListQueue("", 3)
+	if err != nil {
+		t.Fatalf("ListQueue returned error: %v", err)
+	}
+	if len(items) != 3 {
+		t.Errorf("expected 3 items (limit), got %d", len(items))
+	}
+}

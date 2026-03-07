@@ -142,6 +142,112 @@ func TestAuditLogService_PruneOlderThan(t *testing.T) {
 	}
 }
 
+func TestAuditLogService_ListRecent(t *testing.T) {
+	database := setupTestDB(t)
+	svc := NewAuditLogService(database)
+
+	// Create 3 entries
+	for i := 0; i < 3; i++ {
+		_ = svc.Create(db.AuditLogEntry{
+			MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.50",
+			Action: db.ActionDeleted, SizeBytes: 1000,
+		})
+	}
+
+	logs, err := svc.ListRecent(2)
+	if err != nil {
+		t.Fatalf("ListRecent returned error: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(logs))
+	}
+}
+
+func TestAuditLogService_ListGrouped(t *testing.T) {
+	database := setupTestDB(t)
+	svc := NewAuditLogService(database)
+
+	// Create a show season entry and a movie
+	_ = svc.Create(db.AuditLogEntry{
+		MediaName: "Firefly - Season 1", MediaType: "season", Reason: "Score: 0.50",
+		Action: db.ActionDeleted, SizeBytes: 5000,
+	})
+	_ = svc.Create(db.AuditLogEntry{
+		MediaName: "Serenity", MediaType: "movie", Reason: "Score: 0.80",
+		Action: db.ActionDeleted, SizeBytes: 3000,
+	})
+
+	result, err := svc.ListGrouped(100)
+	if err != nil {
+		t.Fatalf("ListGrouped returned error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 results (1 group + 1 single), got %d", len(result))
+	}
+
+	// First should be the group
+	foundGroup := false
+	foundSingle := false
+	for _, r := range result {
+		if r.Type == "group" && r.Group != nil && r.Group.ShowTitle == "Firefly" {
+			foundGroup = true
+		}
+		if r.Type == "single" && r.Entry != nil && r.Entry.MediaName == "Serenity" {
+			foundSingle = true
+		}
+	}
+	if !foundGroup {
+		t.Error("expected a group for 'Firefly'")
+	}
+	if !foundSingle {
+		t.Error("expected a single entry for 'Serenity'")
+	}
+}
+
+func TestAuditLogService_ListPaginated(t *testing.T) {
+	database := setupTestDB(t)
+	svc := NewAuditLogService(database)
+
+	// Create entries
+	for i := 0; i < 5; i++ {
+		_ = svc.Create(db.AuditLogEntry{
+			MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.50",
+			Action: db.ActionDeleted, SizeBytes: 1000,
+		})
+	}
+
+	result, err := svc.ListPaginated(AuditListParams{
+		Limit: 3, Offset: 0, SortBy: "created_at", SortDir: "desc",
+	})
+	if err != nil {
+		t.Fatalf("ListPaginated returned error: %v", err)
+	}
+	if result.Total != 5 {
+		t.Errorf("expected total 5, got %d", result.Total)
+	}
+	if len(result.Data) != 3 {
+		t.Errorf("expected 3 entries in data, got %d", len(result.Data))
+	}
+}
+
+func TestAuditLogService_ListPaginated_Search(t *testing.T) {
+	database := setupTestDB(t)
+	svc := NewAuditLogService(database)
+
+	_ = svc.Create(db.AuditLogEntry{MediaName: "Firefly", MediaType: "show", Action: db.ActionDeleted, Reason: "test"})
+	_ = svc.Create(db.AuditLogEntry{MediaName: "Serenity", MediaType: "movie", Action: db.ActionDeleted, Reason: "test"})
+
+	result, err := svc.ListPaginated(AuditListParams{
+		Limit: 10, Search: "Serenity",
+	})
+	if err != nil {
+		t.Fatalf("ListPaginated returned error: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected total 1 for search, got %d", result.Total)
+	}
+}
+
 func TestAuditLogService_PruneOlderThan_ZeroKeepsForever(t *testing.T) {
 	database := setupTestDB(t)
 	svc := NewAuditLogService(database)

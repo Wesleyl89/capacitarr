@@ -131,3 +131,60 @@ func TestEngineService_GetStats_WithDBRecord(t *testing.T) {
 		t.Errorf("expected lastRunFreedBytes 5000000000, got %v", stats["lastRunFreedBytes"])
 	}
 }
+
+func TestEngineService_CreateRunStats(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewEngineService(database, bus)
+
+	stats, err := svc.CreateRunStats("dry-run")
+	if err != nil {
+		t.Fatalf("CreateRunStats error: %v", err)
+	}
+	if stats.ExecutionMode != "dry-run" {
+		t.Errorf("expected mode 'dry-run', got %q", stats.ExecutionMode)
+	}
+	if stats.ID == 0 {
+		t.Error("expected non-zero ID")
+	}
+}
+
+func TestEngineService_UpdateRunStats(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewEngineService(database, bus)
+
+	stats, _ := svc.CreateRunStats("dry-run")
+
+	err := svc.UpdateRunStats(stats.ID, 100, 15, 2500)
+	if err != nil {
+		t.Fatalf("UpdateRunStats error: %v", err)
+	}
+
+	var updated db.EngineRunStats
+	database.First(&updated, stats.ID)
+	if updated.Evaluated != 100 {
+		t.Errorf("expected evaluated 100, got %d", updated.Evaluated)
+	}
+	if updated.Flagged != 15 {
+		t.Errorf("expected flagged 15, got %d", updated.Flagged)
+	}
+}
+
+func TestEngineService_GetHistory(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewEngineService(database, bus)
+
+	// Create some run stats
+	_, _ = svc.CreateRunStats("dry-run")
+	_, _ = svc.CreateRunStats("approval")
+
+	points, err := svc.GetHistory(24 * time.Hour)
+	if err != nil {
+		t.Fatalf("GetHistory error: %v", err)
+	}
+	if len(points) != 2 {
+		t.Errorf("expected 2 history points, got %d", len(points))
+	}
+}
