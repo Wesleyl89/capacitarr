@@ -74,24 +74,28 @@ func (m *mockSender) getAlerts() []notifications.Alert {
 	return append([]notifications.Alert{}, m.alerts...)
 }
 
-// newTestDispatch creates a dispatch service with mock senders for testing.
-func newTestDispatch(t *testing.T, channels *mockChannelProvider) (*NotificationDispatchService, *mockSender) {
+// newTestDispatch creates a dispatch service with separate mock senders for
+// external channels (discord/slack) and in-app. Returns the service, the
+// external mock (discord+slack), and the in-app mock.
+func newTestDispatch(t *testing.T, channels *mockChannelProvider) (*NotificationDispatchService, *mockSender, *mockSender) {
 	t.Helper()
 	bus := newTestBus(t)
 	svc := NewNotificationDispatchService(bus, channels, nil, "v1.0.0-test")
 
-	// Replace senders with mock
-	mock := &mockSender{}
+	// Replace senders with separate mocks so external and in-app
+	// assertions don't interfere with each other.
+	externalMock := &mockSender{}
+	inappMock := &mockSender{}
 	svc.senders = map[string]notifications.Sender{
-		"discord": mock,
-		"slack":   mock,
-		"inapp":   mock,
+		"discord": externalMock,
+		"slack":   externalMock,
+		"inapp":   inappMock,
 	}
 
 	svc.Start()
 	t.Cleanup(func() { svc.Stop() })
 
-	return svc, mock
+	return svc, externalMock, inappMock
 }
 
 func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
@@ -101,7 +105,7 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	// Simulate a full engine cycle
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
@@ -138,7 +142,7 @@ func TestNotificationDispatch_ReverseGateOrder(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "dry-run"})
 	time.Sleep(50 * time.Millisecond)
@@ -172,7 +176,7 @@ func TestNotificationDispatch_Accumulation(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
 	time.Sleep(50 * time.Millisecond)
@@ -219,7 +223,7 @@ func TestNotificationDispatch_ImmediateAlerts(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	// EngineErrorEvent → immediate alert
 	svc.bus.Publish(events.EngineErrorEvent{Error: "test error"})
@@ -241,7 +245,7 @@ func TestNotificationDispatch_SubscriptionFiltering(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
 	time.Sleep(50 * time.Millisecond)
@@ -263,7 +267,7 @@ func TestNotificationDispatch_ModeChangedAlert(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineModeChangedEvent{OldMode: "dry-run", NewMode: "auto"})
 	time.Sleep(200 * time.Millisecond)
@@ -284,7 +288,7 @@ func TestNotificationDispatch_ServerStartedAlert(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.ServerStartedEvent{Version: "v1.0.0"})
 	time.Sleep(200 * time.Millisecond)
@@ -305,7 +309,7 @@ func TestNotificationDispatch_ApprovalActivityFiltering(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.ApprovalApprovedEvent{MediaName: "Serenity", MediaType: "movie"})
 	time.Sleep(200 * time.Millisecond)
@@ -323,7 +327,7 @@ func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "approval"})
 	time.Sleep(50 * time.Millisecond)
@@ -357,7 +361,7 @@ func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 	}
 }
 
-func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) {
+func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) { //nolint:dupl // test structure intentionally similar
 	// When OnApprovalActivity=false, approval-mode cycle digests should be
 	// suppressed — users who turn off "Approval Activity" expect ALL
 	// approval-related notifications to stop, including the engine cycle
@@ -369,7 +373,7 @@ func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "approval"})
 	time.Sleep(50 * time.Millisecond)
@@ -402,7 +406,7 @@ func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
 		},
 	}
 
-	svc, mock := newTestDispatch(t, channels)
+	svc, mock, _ := newTestDispatch(t, channels)
 
 	// Run an auto-mode cycle
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
@@ -425,5 +429,121 @@ func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
 	}
 	if digests[0].ExecutionMode != "auto" {
 		t.Errorf("expected execution mode 'auto', got %q", digests[0].ExecutionMode)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Always-on in-app notification tests
+// ---------------------------------------------------------------------------
+
+func TestNotificationDispatch_InAppDigestWithZeroChannels(t *testing.T) {
+	// In-app notifications must fire even when the user has zero configured
+	// external channels.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{}, // no channels at all
+	}
+
+	svc, externalMock, inappMock := newTestDispatch(t, channels)
+
+	// Simulate a full engine cycle
+	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.EngineCompleteEvent{
+		Evaluated:     42,
+		Flagged:       2,
+		DurationMs:    300,
+		ExecutionMode: "auto",
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 2, Failed: 0})
+	time.Sleep(200 * time.Millisecond)
+
+	// External channels should not have been called.
+	if got := len(externalMock.getDigests()); got != 0 {
+		t.Errorf("expected 0 external digests, got %d", got)
+	}
+
+	// In-app should have received exactly 1 digest.
+	inappDigests := inappMock.getDigests()
+	if len(inappDigests) != 1 {
+		t.Fatalf("expected 1 in-app digest, got %d", len(inappDigests))
+	}
+	if inappDigests[0].Evaluated != 42 {
+		t.Errorf("expected in-app digest evaluated=42, got %d", inappDigests[0].Evaluated)
+	}
+}
+
+func TestNotificationDispatch_InAppDigestAlongsideExternal(t *testing.T) {
+	// In-app should fire alongside normally configured external channels.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{
+			{ID: 1, Type: "discord", Name: "Test Discord", Enabled: true, OnCycleDigest: true},
+		},
+	}
+
+	svc, externalMock, inappMock := newTestDispatch(t, channels)
+
+	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: "auto"})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.DeletionSuccessEvent{
+		MediaName: "Serenity",
+		MediaType: "movie",
+		SizeBytes: 1073741824,
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.EngineCompleteEvent{
+		Evaluated:     100,
+		Flagged:       1,
+		DurationMs:    500,
+		ExecutionMode: "auto",
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 1, Failed: 0})
+	time.Sleep(200 * time.Millisecond)
+
+	// Discord should have received 1 digest.
+	if got := len(externalMock.getDigests()); got != 1 {
+		t.Fatalf("expected 1 external digest, got %d", got)
+	}
+
+	// In-app should also have received 1 digest.
+	inappDigests := inappMock.getDigests()
+	if len(inappDigests) != 1 {
+		t.Fatalf("expected 1 in-app digest, got %d", len(inappDigests))
+	}
+	if inappDigests[0].Deleted != 1 {
+		t.Errorf("expected in-app digest deleted=1, got %d", inappDigests[0].Deleted)
+	}
+}
+
+func TestNotificationDispatch_InAppAlertWithZeroChannels(t *testing.T) {
+	// In-app alerts must fire even when the user has zero configured
+	// external channels.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{}, // no channels at all
+	}
+
+	svc, externalMock, inappMock := newTestDispatch(t, channels)
+
+	svc.bus.Publish(events.ServerStartedEvent{Version: "v1.0.0"})
+	time.Sleep(200 * time.Millisecond)
+
+	// External channels should not have been called.
+	if got := len(externalMock.getAlerts()); got != 0 {
+		t.Errorf("expected 0 external alerts, got %d", got)
+	}
+
+	// In-app should have received the server started alert.
+	inappAlerts := inappMock.getAlerts()
+	if len(inappAlerts) != 1 {
+		t.Fatalf("expected 1 in-app alert, got %d", len(inappAlerts))
+	}
+	if inappAlerts[0].Type != notifications.AlertServerStarted {
+		t.Errorf("expected alert type 'server_started', got %q", inappAlerts[0].Type)
 	}
 }

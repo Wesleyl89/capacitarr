@@ -22,7 +22,7 @@
     <component :is="BellIcon" class="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
     <h3 class="text-lg font-medium text-foreground mb-2">No notification channels configured</h3>
     <p class="text-muted-foreground mb-6">
-      Set up Discord, Slack, or in-app notifications for engine events.
+      Set up Discord or Slack notifications for engine events.
     </p>
     <UiButton size="lg" @click="openAddChannelModal">
       <component :is="PlusIcon" class="w-4 h-4" />
@@ -60,7 +60,7 @@
               <UiCardTitle class="text-base">
                 {{ channel.name }}
               </UiCardTitle>
-              <UiBadge :variant="channel.type === 'inapp' ? 'secondary' : 'outline'" class="mt-1">
+              <UiBadge variant="outline" class="mt-1">
                 {{ channelTypeLabel(channel.type) }}
               </UiBadge>
             </div>
@@ -220,7 +220,6 @@
             <UiSelectContent>
               <UiSelectItem value="discord"> Discord </UiSelectItem>
               <UiSelectItem value="slack"> Slack </UiSelectItem>
-              <UiSelectItem value="inapp"> In-App </UiSelectItem>
             </UiSelectContent>
           </UiSelect>
         </div>
@@ -230,7 +229,7 @@
           <UiInput v-model="channelForm.name" type="text" placeholder="e.g. My Discord Alerts" />
         </div>
 
-        <div v-if="channelForm.type !== 'inapp'" class="space-y-1.5">
+        <div class="space-y-1.5">
           <UiLabel>Webhook URL</UiLabel>
           <UiInput
             v-model="channelForm.webhookUrl"
@@ -348,7 +347,7 @@ const channelFormError = ref('');
 const testingChannelId = ref<number | null>(null);
 
 const channelForm = reactive({
-  type: 'discord' as 'discord' | 'slack' | 'inapp',
+  type: 'discord' as 'discord' | 'slack',
   name: '',
   webhookUrl: '',
   onCycleDigest: true,
@@ -366,8 +365,6 @@ function channelTypeIcon(type: string) {
       return MessageSquareIcon;
     case 'slack':
       return HashIcon;
-    case 'inapp':
-      return BellIcon;
     default:
       return BellIcon;
   }
@@ -379,8 +376,6 @@ function channelTypeColor(type: string) {
       return 'bg-indigo-500';
     case 'slack':
       return 'bg-green-500';
-    case 'inapp':
-      return 'bg-blue-500';
     default:
       return 'bg-muted-foreground';
   }
@@ -392,8 +387,6 @@ function channelTypeLabel(type: string) {
       return 'Discord';
     case 'slack':
       return 'Slack';
-    case 'inapp':
-      return 'In-App';
     default:
       return type;
   }
@@ -448,7 +441,7 @@ async function onChannelSubmit() {
     const body = {
       type: channelForm.type,
       name: channelForm.name,
-      webhookUrl: channelForm.type !== 'inapp' ? channelForm.webhookUrl : undefined,
+      webhookUrl: channelForm.webhookUrl,
       enabled: editingChannel.value ? editingChannel.value.enabled : true,
       onCycleDigest: channelForm.onCycleDigest,
       onError: channelForm.onError,

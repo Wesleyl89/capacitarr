@@ -30,6 +30,8 @@ var ValidIntegrationTypes = map[string]bool{
 }
 
 // ValidNotificationChannelTypes defines the allowed notification channel types.
+// In-app notifications are always-on and not user-configurable, so "inapp" is
+// intentionally excluded here.
 var ValidNotificationChannelTypes = map[string]bool{
-	"discord": true, "slack": true, "inapp": true,
+	"discord": true, "slack": true,
 }

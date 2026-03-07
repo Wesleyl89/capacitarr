@@ -17,7 +17,6 @@ import (
 const (
 	notifTypeDiscord = "discord"
 	notifTypeSlack   = "slack"
-	notifTypeInApp   = "inapp"
 )
 
 // RegisterNotificationRoutes sets up CRUD endpoints for notification channels
@@ -46,7 +45,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type and name are required"})
 		}
 		if !db.ValidNotificationChannelTypes[req.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord, slack, or inapp"})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord or slack"})
 		}
 		if (req.Type == notifTypeDiscord || req.Type == notifTypeSlack) && req.WebhookURL == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl is required for discord and slack channels"})
@@ -93,7 +92,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		// Validate type if changed
 		if req.Type != "" && !db.ValidNotificationChannelTypes[req.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord, slack, or inapp"})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord or slack"})
 		}
 
 		// Validate webhook URL scheme (must be http or https to prevent SSRF via exotic schemes)

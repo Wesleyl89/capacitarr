@@ -332,7 +332,7 @@ export interface RuleImportResponse {
 
 export interface NotificationChannel {
   id: number;
-  type: 'discord' | 'slack' | 'inapp';
+  type: 'discord' | 'slack';
   name: string;
   webhookUrl?: string;
   enabled: boolean;
