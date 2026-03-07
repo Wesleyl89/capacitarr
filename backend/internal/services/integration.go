@@ -147,6 +147,18 @@ func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, last
 	return nil
 }
 
+// UpdateMediaStats updates the media size and count for an integration.
+func (s *IntegrationService) UpdateMediaStats(id uint, sizeBytes int64, count int) error {
+	result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"media_size_bytes": sizeBytes,
+		"media_count":      count,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("failed to update media stats: %w", result.Error)
+	}
+	return nil
+}
+
 // SyncResult holds the outcome of syncing a single integration.
 type SyncResult struct {
 	ID         uint                     `json:"id"`

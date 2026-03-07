@@ -7,12 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"capacitarr/internal/db"
 	"capacitarr/internal/events"
 	"capacitarr/internal/integrations"
 	"capacitarr/internal/services"
-
-	"gorm.io/gorm"
 )
 
 // Poller orchestrates periodic media library polling and capacity evaluation.
@@ -64,8 +61,8 @@ func (p *Poller) Stop() {
 // getPollInterval reads PollIntervalSeconds from the database preference set.
 // Falls back to 300s (5 min) if not set, and enforces a 30s minimum.
 func (p *Poller) getPollInterval() time.Duration {
-	var prefs db.PreferenceSet
-	if err := p.reg.DB.First(&prefs, 1).Error; err != nil {
+	prefs, err := p.reg.Settings.GetPreferences()
+	if err != nil {
 		return 5 * time.Minute
 	}
 	secs := prefs.PollIntervalSeconds
@@ -95,9 +92,7 @@ func (p *Poller) poll() {
 	p.reg.Engine.SetRunning(true)
 	defer p.reg.Engine.SetRunning(false)
 
-	database := p.reg.DB
 	bus := p.reg.Bus
-
 	pollStart := time.Now()
 
 	// Clean expired snoozes at the start of each cycle — resets rejected items
@@ -108,35 +103,37 @@ func (p *Poller) poll() {
 		slog.Info("Cleaned expired snoozes at cycle start", "component", "poller", "count", count)
 	}
 
-	// Increment lifetime engine runs counter (atomic DB update)
-	database.Model(&db.LifetimeStats{}).Where("id = 1").
-		UpdateColumn("total_engine_runs", gorm.Expr("total_engine_runs + ?", 1))
+	// Increment lifetime engine runs counter via service
+	if err := p.reg.Metrics.IncrementEngineRuns(); err != nil {
+		slog.Error("Failed to increment engine runs", "component", "poller", "error", err)
+	}
 
 	// Reset per-run counters at the start of each poll cycle
 	atomic.StoreInt64(&p.lastRunEvaluated, 0)
 	atomic.StoreInt64(&p.lastRunFlagged, 0)
 	atomic.StoreInt64(&p.lastRunProtected, 0)
 
-	var configs []db.IntegrationConfig
-	if err := database.Where("enabled = ?", true).Find(&configs).Error; err != nil {
+	configs, err := p.reg.Integration.ListEnabled()
+	if err != nil {
 		slog.Error("Failed to load integrations", "component", "poller", "operation", "load_integrations", "error", err)
 		bus.Publish(events.EngineErrorEvent{Error: fmt.Sprintf("failed to load integrations: %v", err)})
 		return
 	}
 
-	var prefs db.PreferenceSet
-	if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+	prefs, err := p.reg.Settings.GetPreferences()
+	if err != nil {
 		slog.Error("Failed to load preferences", "component", "poller", "operation", "load_preferences", "error", err)
 		return
 	}
 
-	// Create engine run stats row (zeroed counters, will be updated after evaluation)
-	runStats := db.EngineRunStats{
-		RunAt:         pollStart,
-		ExecutionMode: prefs.ExecutionMode,
-	}
-	if err := database.Create(&runStats).Error; err != nil {
+	// Create engine run stats row via service
+	runStats, err := p.reg.Engine.CreateRunStats(prefs.ExecutionMode)
+	if err != nil {
 		slog.Error("Failed to create engine run stats", "component", "poller", "operation", "create_stats", "error", err)
+	}
+	var runStatsID uint
+	if runStats != nil {
+		runStatsID = runStats.ID
 	}
 
 	// Publish engine start event
@@ -153,7 +150,7 @@ func (p *Poller) poll() {
 	}
 
 	// Fetch media items, disk space, and enrichment clients from all integrations
-	fetched := fetchAllIntegrations(configs, database)
+	fetched := fetchAllIntegrations(configs, p.reg.Integration)
 
 	// Enrich items with watch history and request data
 	enrichItems(fetched.allItems, fetched.enrichment)
@@ -166,72 +163,43 @@ func (p *Poller) poll() {
 		disk := fetched.diskMap[mountPath]
 		usedBytes := disk.TotalBytes - disk.FreeBytes
 
-		// Upsert DiskGroup
-		var group db.DiskGroup
-		result := database.Where("mount_path = ?", mountPath).First(&group)
-		if result.Error != nil {
-			group = db.DiskGroup{
-				MountPath:  mountPath,
-				TotalBytes: disk.TotalBytes,
-				UsedBytes:  usedBytes,
-			}
-			database.Create(&group)
-		} else {
-			database.Model(&group).Updates(map[string]interface{}{
-				"total_bytes": disk.TotalBytes,
-				"used_bytes":  usedBytes,
-			})
-			// Update the local struct values for threshold check
-			group.TotalBytes = disk.TotalBytes
-			group.UsedBytes = usedBytes
+		// Upsert DiskGroup via service
+		group, upsertErr := p.reg.Settings.UpsertDiskGroup(disk)
+		if upsertErr != nil {
+			slog.Error("Failed to upsert disk group", "component", "poller", "mount", mountPath, "error", upsertErr)
+			continue
 		}
+		// Ensure local struct has latest values for threshold check
+		group.TotalBytes = disk.TotalBytes
+		group.UsedBytes = usedBytes
 
-		// Record LibraryHistory snapshot
-		record := db.LibraryHistory{
-			Timestamp:     time.Now(),
-			TotalCapacity: disk.TotalBytes,
-			UsedCapacity:  usedBytes,
-			Resolution:    "raw",
-			DiskGroupID:   &group.ID,
-		}
-		if err := database.Create(&record).Error; err != nil {
+		// Record LibraryHistory snapshot via service
+		if err := p.reg.Metrics.RecordLibraryHistory(group.ID, disk.TotalBytes, usedBytes); err != nil {
 			slog.Error("Failed to save capacity record", "component", "poller", "operation", "save_capacity",
 				"mount", mountPath, "error", err)
 		}
 
 		// Evaluate and trigger cleanup if threshold breached
-		p.evaluateAndCleanDisk(group, fetched.allItems, fetched.serviceClients, runStats.ID)
+		p.evaluateAndCleanDisk(*group, fetched.allItems, fetched.serviceClients, runStatsID)
 	}
 
 	// Clean up orphaned disk groups that are no longer media mounts
 	if len(mediaMounts) > 0 {
-		var allGroups []db.DiskGroup
-		if err := database.Find(&allGroups).Error; err != nil {
-			slog.Error("Failed to fetch disk groups for orphan cleanup", "component", "poller", "error", err)
-		}
-		for _, g := range allGroups {
-			if !mediaMounts[g.MountPath] {
-				slog.Info("Removing orphaned disk group", "component", "poller",
-					"mount", g.MountPath, "id", g.ID)
-				database.Where("disk_group_id = ?", g.ID).Delete(&db.LibraryHistory{})
-				database.Delete(&g)
-			}
+		if deleted, cleanErr := p.reg.Settings.CleanOrphanedDiskGroups(mediaMounts); cleanErr != nil {
+			slog.Error("Failed to clean orphaned disk groups", "component", "poller", "error", cleanErr)
+		} else if deleted > 0 {
+			slog.Info("Removed orphaned disk groups", "component", "poller", "count", deleted)
 		}
 	}
 
-	// Update engine run stats with final counters.
-	// Note: freed_bytes is NOT set here — it is incremented by the deletion worker
-	// after each successful DeleteMediaItem() call, ensuring it only reflects actual
-	// bytes freed (not flagged/queued bytes that were never deleted).
+	// Update engine run stats via service
 	evaluated := atomic.LoadInt64(&p.lastRunEvaluated)
 	flagged := atomic.LoadInt64(&p.lastRunFlagged)
 	protected := atomic.LoadInt64(&p.lastRunProtected)
 
-	database.Model(&db.EngineRunStats{}).Where("id = ?", runStats.ID).Updates(map[string]interface{}{
-		"evaluated":   int(evaluated),
-		"flagged":     int(flagged),
-		"duration_ms": time.Since(pollStart).Milliseconds(),
-	})
+	if err := p.reg.Engine.UpdateRunStats(runStatsID, int(evaluated), int(flagged), time.Since(pollStart).Milliseconds()); err != nil {
+		slog.Error("Failed to update engine run stats", "component", "poller", "error", err)
+	}
 
 	// Sync per-run stats to EngineService for API consumers
 	p.reg.Engine.SetLastRunStats(int(evaluated), int(flagged), int(protected))

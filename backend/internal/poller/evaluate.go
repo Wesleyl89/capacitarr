@@ -18,10 +18,8 @@ import (
 // evaluateAndCleanDisk scores all media items on a disk group and, when the
 // threshold is breached, queues the highest-scoring candidates for deletion.
 func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem, serviceClients map[uint]integrations.Integration, runStatsID uint) {
-	database := p.reg.DB
-
-	var prefs db.PreferenceSet
-	if err := database.FirstOrCreate(&prefs, db.PreferenceSet{ID: 1}).Error; err != nil {
+	prefs, err := p.reg.Settings.GetPreferences()
+	if err != nil {
 		slog.Error("Failed to load preferences", "component", "poller", "operation", "load_preferences", "error", err)
 		return
 	}
@@ -58,8 +56,8 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 	slog.Debug("Items on disk mount", "component", "poller",
 		"mount", group.MountPath, "itemCount", len(diskItems))
 
-	var rules []db.CustomRule
-	if err := database.Order("sort_order ASC, id ASC").Find(&rules).Error; err != nil {
+	rules, err := p.reg.Rules.List()
+	if err != nil {
 		slog.Error("Failed to load custom rules", "component", "poller", "operation", "load_rules", "error", err)
 		return
 	}

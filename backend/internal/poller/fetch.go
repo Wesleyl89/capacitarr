@@ -4,10 +4,9 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-
 	"capacitarr/internal/db"
 	"capacitarr/internal/integrations"
+	"capacitarr/internal/services"
 )
 
 // fetchResult holds the aggregated results from fetching all integration data.
@@ -21,7 +20,7 @@ type fetchResult struct {
 
 // fetchAllIntegrations queries all enabled integrations and collects media items,
 // root folders, disk space info, and enrichment clients.
-func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fetchResult {
+func fetchAllIntegrations(configs []db.IntegrationConfig, integrationSvc *services.IntegrationService) fetchResult {
 	result := fetchResult{
 		serviceClients: make(map[uint]integrations.Integration),
 		rootFolders:    make(map[string]bool),
@@ -30,21 +29,16 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 
 	for _, cfg := range configs {
 		fetchStart := time.Now()
+		now := time.Now()
 
 		// Tautulli is an enrichment-only service, not a full Integration
 		if cfg.Type == "tautulli" {
 			result.enrichment.Tautulli = integrations.NewTautulliClient(cfg.URL, cfg.APIKey)
-			now := time.Now()
 			if err := result.enrichment.Tautulli.TestConnection(); err != nil {
 				slog.Warn("Tautulli connection failed", "component", "poller", "operation", "tautulli_connect", "integration", cfg.Name, "error", err)
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_error": err.Error(),
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			} else {
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_sync":  &now,
-					"last_error": "",
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 				slog.Debug("Tautulli connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
@@ -53,17 +47,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 		// Overseerr is an enrichment-only service for tracking media requests
 		if cfg.Type == "overseerr" {
 			result.enrichment.Overseerr = integrations.NewOverseerrClient(cfg.URL, cfg.APIKey)
-			now := time.Now()
 			if err := result.enrichment.Overseerr.TestConnection(); err != nil {
 				slog.Warn("Overseerr connection failed", "component", "poller", "operation", "overseerr_connect", "integration", cfg.Name, "error", err)
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_error": err.Error(),
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			} else {
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_sync":  &now,
-					"last_error": "",
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 				slog.Debug("Overseerr connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
@@ -72,17 +60,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 		// Jellyfin is an enrichment-only service for watch history
 		if cfg.Type == "jellyfin" {
 			result.enrichment.Jellyfin = integrations.NewJellyfinClient(cfg.URL, cfg.APIKey)
-			now := time.Now()
 			if err := result.enrichment.Jellyfin.TestConnection(); err != nil {
 				slog.Warn("Jellyfin connection failed", "component", "poller", "operation", "jellyfin_connect", "integration", cfg.Name, "error", err)
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_error": err.Error(),
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			} else {
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_sync":  &now,
-					"last_error": "",
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 				slog.Debug("Jellyfin connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
@@ -91,17 +73,11 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 		// Emby is an enrichment-only service for watch history
 		if cfg.Type == "emby" {
 			result.enrichment.Emby = integrations.NewEmbyClient(cfg.URL, cfg.APIKey)
-			now := time.Now()
 			if err := result.enrichment.Emby.TestConnection(); err != nil {
 				slog.Warn("Emby connection failed", "component", "poller", "operation", "emby_connect", "integration", cfg.Name, "error", err)
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_error": err.Error(),
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			} else {
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_sync":  &now,
-					"last_error": "",
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 				slog.Debug("Emby connected", "component", "poller", "integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
 			continue
@@ -110,18 +86,12 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 		// Plex is an enrichment-only service for watch history cross-referencing
 		if cfg.Type == "plex" {
 			result.enrichment.Plex = integrations.NewPlexClient(cfg.URL, cfg.APIKey)
-			now := time.Now()
 			if err := result.enrichment.Plex.TestConnection(); err != nil {
 				slog.Warn("Plex connection failed", "component", "poller",
 					"operation", "plex_connect", "integration", cfg.Name, "error", err)
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_error": err.Error(),
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			} else {
-				database.Model(&cfg).Updates(map[string]interface{}{
-					"last_sync":  &now,
-					"last_error": "",
-				})
+				_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 				slog.Debug("Plex connected for enrichment", "component", "poller",
 					"integration", cfg.Name, "duration", time.Since(fetchStart).String())
 			}
@@ -165,10 +135,7 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 					}
 				}
 			}
-			database.Model(&cfg).Updates(map[string]interface{}{
-				"media_size_bytes": totalSize,
-				"media_count":      mediaCount,
-			})
+			_ = integrationSvc.UpdateMediaStats(cfg.ID, totalSize, mediaCount)
 			slog.Debug("Media items fetched", "component", "poller",
 				"integration", cfg.Name, "type", cfg.Type,
 				"itemCount", len(items), "duration", time.Since(fetchStart).String())
@@ -191,18 +158,12 @@ func fetchAllIntegrations(configs []db.IntegrationConfig, database *gorm.DB) fet
 		if err != nil {
 			slog.Warn("Disk space fetch failed", "component", "poller", "operation", "fetch_disk_space",
 				"integration", cfg.Name, "type", cfg.Type, "error", err)
-			database.Model(&cfg).Updates(map[string]interface{}{
-				"last_error": err.Error(),
-			})
+			_ = integrationSvc.UpdateSyncStatus(cfg.ID, nil, err.Error())
 			continue
 		}
 
 		// Update last sync time, clear error
-		now := time.Now()
-		database.Model(&cfg).Updates(map[string]interface{}{
-			"last_sync":  &now,
-			"last_error": "",
-		})
+		_ = integrationSvc.UpdateSyncStatus(cfg.ID, &now, "")
 
 		// Collect all disk entries
 		for _, d := range disks {
