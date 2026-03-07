@@ -19,7 +19,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/integrations", func(c echo.Context) error {
 		configs, err := reg.Integration.List()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch integrations"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch integrations")
 		}
 
 		// Mask API keys in response
@@ -34,15 +34,15 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/integrations/:id", func(c echo.Context) error {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		config, err := reg.Integration.GetByID(uint(id))
 		if err != nil {
 			if errors.Is(err, services.ErrNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Integration not found"})
+				return apiError(c, http.StatusNotFound, "Integration not found")
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch integration"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch integration")
 		}
 
 		// Mask API key
@@ -55,30 +55,30 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	g.POST("/integrations", func(c echo.Context) error {
 		var config db.IntegrationConfig
 		if err := c.Bind(&config); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		// Validate required fields
 		if config.Type == "" || config.Name == "" || config.URL == "" || config.APIKey == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type, name, url, and apiKey are required"})
+			return apiError(c, http.StatusBadRequest, "type, name, url, and apiKey are required")
 		}
 
 		// Validate URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		parsedURL, err := url.Parse(config.URL)
 		if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "url must be a valid HTTP or HTTPS URL"})
+			return apiError(c, http.StatusBadRequest, "url must be a valid HTTP or HTTPS URL")
 		}
 
 		// Validate type
 		if !db.ValidIntegrationTypes[config.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be one of: plex, sonarr, radarr, lidarr, readarr, tautulli, overseerr, jellyfin, emby"})
+			return apiError(c, http.StatusBadRequest, "type must be one of: plex, sonarr, radarr, lidarr, readarr, tautulli, overseerr, jellyfin, emby")
 		}
 
 		config.ID = 0 // Ensure auto-increment
 		config.Enabled = true
 		created, createErr := reg.Integration.Create(config)
 		if createErr != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create integration"})
+			return apiError(c, http.StatusInternalServerError, "Failed to create integration")
 		}
 
 		// Mask API key in response
@@ -90,17 +90,17 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	g.PUT("/integrations/:id", func(c echo.Context) error {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		existing, err := reg.Integration.GetByID(uint(id))
 		if err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Integration not found"})
+			return apiError(c, http.StatusNotFound, "Integration not found")
 		}
 
 		var update db.IntegrationConfig
 		if err := c.Bind(&update); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		// Update fields
@@ -111,7 +111,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			// Validate URL scheme on update as well
 			parsedURL, urlErr := url.Parse(update.URL)
 			if urlErr != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "url must be a valid HTTP or HTTPS URL"})
+				return apiError(c, http.StatusBadRequest, "url must be a valid HTTP or HTTPS URL")
 			}
 			existing.URL = update.URL
 		}
@@ -122,7 +122,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 
 		updated, updateErr := reg.Integration.Update(existing.ID, *existing)
 		if updateErr != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update integration"})
+			return apiError(c, http.StatusInternalServerError, "Failed to update integration")
 		}
 
 		// Mask API key in response
@@ -134,11 +134,11 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	g.DELETE("/integrations/:id", func(c echo.Context) error {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil || id == 0 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		if deleteErr := reg.Integration.Delete(uint(id)); deleteErr != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Integration not found"})
+			return apiError(c, http.StatusNotFound, "Integration not found")
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
@@ -155,7 +155,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			IntegrationID *int   `json:"integrationId,omitempty"`
 		}
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		result := reg.Integration.TestConnection(req.Type, req.URL, req.APIKey, req.IntegrationID)
@@ -172,7 +172,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		// upserts via SettingsService.
 		results, err := reg.Integration.SyncAll()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to sync integrations"})
+			return apiError(c, http.StatusInternalServerError, "Failed to sync integrations")
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

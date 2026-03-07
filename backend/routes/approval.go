@@ -28,7 +28,7 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		status := c.QueryParam("status")
 		items, err := reg.Approval.ListQueue(status, limit)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch approval queue"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch approval queue")
 		}
 
 		return c.JSON(http.StatusOK, items)
@@ -39,7 +39,7 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		id := c.Param("id")
 		entryID, err := strconv.ParseUint(id, 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		// Safety check: block approvals when deletions are disabled
@@ -63,13 +63,13 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		})
 		if err != nil {
 			if errors.Is(err, services.ErrApprovalNotPending) {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return apiError(c, http.StatusBadRequest, err.Error())
 			}
 			if errors.Is(err, services.ErrApprovalNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
+				return apiError(c, http.StatusNotFound, "Approval queue entry not found")
 			}
 			slog.Error("Approval execution failed", "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to approve entry"})
+			return apiError(c, http.StatusInternalServerError, "Failed to approve entry")
 		}
 
 		return c.JSON(http.StatusOK, approved)
@@ -80,7 +80,7 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		id := c.Param("id")
 		entryID, err := strconv.ParseUint(id, 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		// Load preferences to get configured snooze duration
@@ -95,12 +95,12 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		rejected, err := reg.Approval.Reject(uint(entryID), prefs.SnoozeDurationHours)
 		if err != nil {
 			if errors.Is(err, services.ErrApprovalNotPending) {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return apiError(c, http.StatusBadRequest, err.Error())
 			}
 			if errors.Is(err, services.ErrApprovalNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
+				return apiError(c, http.StatusNotFound, "Approval queue entry not found")
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reject entry"})
+			return apiError(c, http.StatusInternalServerError, "Failed to reject entry")
 		}
 
 		return c.JSON(http.StatusOK, rejected)
@@ -111,18 +111,18 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		id := c.Param("id")
 		entryID, err := strconv.ParseUint(id, 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		unsnoozed, err := reg.Approval.Unsnooze(uint(entryID))
 		if err != nil {
 			if errors.Is(err, services.ErrApprovalNotPending) {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return apiError(c, http.StatusBadRequest, err.Error())
 			}
 			if errors.Is(err, services.ErrApprovalNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Approval queue entry not found"})
+				return apiError(c, http.StatusNotFound, "Approval queue entry not found")
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to unsnooze entry"})
+			return apiError(c, http.StatusInternalServerError, "Failed to unsnooze entry")
 		}
 
 		return c.JSON(http.StatusOK, unsnoozed)

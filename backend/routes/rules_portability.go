@@ -29,7 +29,7 @@ func RegisterRulePortabilityRoutes(protected *echo.Group, reg *services.Registry
 	protected.GET("/custom-rules/export", func(c echo.Context) error {
 		envelope, err := reg.Rules.Export()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch rules"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch rules")
 		}
 
 		now := time.Now().UTC()
@@ -42,12 +42,12 @@ func RegisterRulePortabilityRoutes(protected *echo.Group, reg *services.Registry
 	protected.POST("/custom-rules/import", func(c echo.Context) error {
 		var req importRequest
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		// Validate version
 		if req.Payload.Version != 1 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported export version"})
+			return apiError(c, http.StatusBadRequest, "Unsupported export version")
 		}
 
 		// Validate required fields and effect values on each rule
@@ -72,7 +72,7 @@ func RegisterRulePortabilityRoutes(protected *echo.Group, reg *services.Registry
 					"unmapped": unmapped,
 				})
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to import rules"})
+			return apiError(c, http.StatusInternalServerError, "Failed to import rules")
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

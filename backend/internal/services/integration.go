@@ -456,18 +456,28 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 
 	results := make([]SyncResult, 0, len(configs))
 	for _, cfg := range configs {
-		client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
-		if client == nil {
-			continue
-		}
-
 		result := SyncResult{
 			ID:   cfg.ID,
 			Name: cfg.Name,
 			Type: cfg.Type,
 		}
 
-		// Test connection
+		// Enrichment-only services — test connection only (no disk/media)
+		client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
+		if client == nil {
+			// Use testClient helper to test enrichment services
+			testResult := s.TestConnection(cfg.Type, cfg.URL, cfg.APIKey, nil)
+			if testResult.Success {
+				result.Status = "ok"
+			} else {
+				result.Status = "error"
+				result.Error = testResult.Error
+			}
+			results = append(results, result)
+			continue
+		}
+
+		// Test connection for *arr integrations
 		if connErr := client.TestConnection(); connErr != nil {
 			result.Status = "error"
 			result.Error = connErr.Error()

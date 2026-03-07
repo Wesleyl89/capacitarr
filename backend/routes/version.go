@@ -13,7 +13,7 @@ func RegisterVersionRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/version/check", func(c echo.Context) error {
 		result, err := reg.Version.CheckForUpdate()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to check for updates"})
+			return apiError(c, http.StatusInternalServerError, "Failed to check for updates")
 		}
 		return c.JSON(http.StatusOK, result)
 	})
@@ -21,7 +21,7 @@ func RegisterVersionRoutes(g *echo.Group, reg *services.Registry) {
 	g.POST("/version/check", func(c echo.Context) error {
 		result, err := reg.Version.ForceCheck()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to check for updates"})
+			return apiError(c, http.StatusInternalServerError, "Failed to check for updates")
 		}
 		return c.JSON(http.StatusOK, result)
 	})

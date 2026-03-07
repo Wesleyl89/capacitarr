@@ -148,27 +148,27 @@ func RegisterRuleFieldRoutes(protected *echo.Group, reg *services.Registry) {
 		integrationIDStr := c.QueryParam("integration_id")
 		action := c.QueryParam("action")
 		if integrationIDStr == "" || action == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "integration_id and action are required"})
+			return apiError(c, http.StatusBadRequest, "integration_id and action are required")
 		}
 
 		integrationID, err := strconv.ParseUint(integrationIDStr, 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid integration_id"})
+			return apiError(c, http.StatusBadRequest, "Invalid integration_id")
 		}
 
 		result, fetchErr := reg.Integration.FetchRuleValues(uint(integrationID), action)
 		if fetchErr != nil {
 			switch {
 			case errors.Is(fetchErr, services.ErrNotFound):
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Integration not found"})
+				return apiError(c, http.StatusNotFound, "Integration not found")
 			case errors.Is(fetchErr, services.ErrUnsupportedIntegrationType),
 				errors.Is(fetchErr, services.ErrIntegrationNoRuleValues):
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": fetchErr.Error()})
+				return apiError(c, http.StatusBadRequest, fetchErr.Error())
 			case errors.Is(fetchErr, services.ErrUnknownAction):
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": fetchErr.Error()})
+				return apiError(c, http.StatusBadRequest, fetchErr.Error())
 			default:
 				slog.Warn("Failed to fetch rule values", "component", "api", "integrationId", integrationID, "action", action, "error", fetchErr)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch rule values"})
+				return apiError(c, http.StatusInternalServerError, "Failed to fetch rule values")
 			}
 		}
 

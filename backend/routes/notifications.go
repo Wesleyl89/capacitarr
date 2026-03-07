@@ -27,7 +27,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/notifications/channels", func(c echo.Context) error {
 		configs, err := reg.NotificationChannel.List()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch notification channels"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch notification channels")
 		}
 		return c.JSON(http.StatusOK, configs)
 	})
@@ -36,25 +36,25 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 	g.POST("/notifications/channels", func(c echo.Context) error {
 		var req db.NotificationConfig
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		// Validate required fields
 		if req.Type == "" || req.Name == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type and name are required"})
+			return apiError(c, http.StatusBadRequest, "type and name are required")
 		}
 		if !db.ValidNotificationChannelTypes[req.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord or slack"})
+			return apiError(c, http.StatusBadRequest, "type must be discord or slack")
 		}
 		if (req.Type == notifTypeDiscord || req.Type == notifTypeSlack) && req.WebhookURL == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl is required for discord and slack channels"})
+			return apiError(c, http.StatusBadRequest, "webhookUrl is required for discord and slack channels")
 		}
 
 		// Validate webhook URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		if req.WebhookURL != "" {
 			parsedURL, err := url.Parse(req.WebhookURL)
 			if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl must be a valid HTTP or HTTPS URL"})
+				return apiError(c, http.StatusBadRequest, "webhookUrl must be a valid HTTP or HTTPS URL")
 			}
 		}
 
@@ -64,7 +64,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		created, createErr := reg.NotificationChannel.Create(req)
 		if createErr != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create notification channel"})
+			return apiError(c, http.StatusInternalServerError, "Failed to create notification channel")
 		}
 
 		return c.JSON(http.StatusCreated, created)
@@ -76,29 +76,29 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		idNum, convErr := strconv.ParseUint(id, 10, 64)
 		if convErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		existing, err := reg.NotificationChannel.GetByID(uint(idNum))
 		if err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
+			return apiError(c, http.StatusNotFound, "Notification channel not found")
 		}
 
 		var req db.NotificationConfig
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		// Validate type if changed
 		if req.Type != "" && !db.ValidNotificationChannelTypes[req.Type] {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be discord or slack"})
+			return apiError(c, http.StatusBadRequest, "type must be discord or slack")
 		}
 
 		// Validate webhook URL scheme (must be http or https to prevent SSRF via exotic schemes)
 		if req.WebhookURL != "" {
 			parsedURL, err := url.Parse(req.WebhookURL)
 			if err != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "webhookUrl must be a valid HTTP or HTTPS URL"})
+				return apiError(c, http.StatusBadRequest, "webhookUrl must be a valid HTTP or HTTPS URL")
 			}
 		}
 
@@ -122,7 +122,7 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		updated, updateErr := reg.NotificationChannel.Update(existing.ID, *existing)
 		if updateErr != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update notification channel"})
+			return apiError(c, http.StatusInternalServerError, "Failed to update notification channel")
 		}
 
 		return c.JSON(http.StatusOK, updated)
@@ -134,11 +134,11 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		idNum, convErr := strconv.ParseUint(id, 10, 64)
 		if convErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		if deleteErr := reg.NotificationChannel.Delete(uint(idNum)); deleteErr != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
+			return apiError(c, http.StatusNotFound, "Notification channel not found")
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
@@ -150,14 +150,14 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 
 		idNum, convErr := strconv.ParseUint(id, 10, 64)
 		if convErr != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		if err := reg.NotificationDispatch.TestChannel(uint(idNum)); err != nil {
 			if errors.Is(err, services.ErrNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Notification channel not found"})
+				return apiError(c, http.StatusNotFound, "Notification channel not found")
 			}
-			return c.JSON(http.StatusBadGateway, map[string]string{"error": "Test notification failed: " + err.Error()})
+			return apiError(c, http.StatusBadGateway, "Test notification failed: "+err.Error())
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "sent"})

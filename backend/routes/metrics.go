@@ -18,7 +18,7 @@ func RegisterMetricsRoutes(g *echo.Group, reg *services.Registry) {
 
 		history, err := reg.Metrics.GetHistory(resolution, diskGroupID, since)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching metrics"})
+			return apiError(c, http.StatusInternalServerError, "Error fetching metrics")
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{"status": "success", "data": history})
@@ -33,7 +33,7 @@ func RegisterMetricsRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/lifetime-stats", func(c echo.Context) error {
 		stats, err := reg.Metrics.GetLifetimeStats()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch lifetime stats"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch lifetime stats")
 		}
 		return c.JSON(http.StatusOK, stats)
 	})
@@ -42,7 +42,7 @@ func RegisterMetricsRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/dashboard-stats", func(c echo.Context) error {
 		stats, err := reg.Metrics.GetDashboardStats()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch dashboard stats"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch dashboard stats")
 		}
 		return c.JSON(http.StatusOK, stats)
 	})

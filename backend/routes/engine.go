@@ -49,12 +49,12 @@ func RegisterEngineRoutes(g *echo.Group, reg *services.Registry) {
 
 		dur, err := parseDuration(rangeParam)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid range parameter"})
+			return apiError(c, http.StatusBadRequest, "invalid range parameter")
 		}
 
 		points, err := reg.Engine.GetHistory(dur)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to query engine history"})
+			return apiError(c, http.StatusInternalServerError, "failed to query engine history")
 		}
 
 		return c.JSON(http.StatusOK, points)

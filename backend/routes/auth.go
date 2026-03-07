@@ -26,7 +26,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	public.GET("/auth/status", func(c echo.Context) error {
 		initialized, err := reg.Auth.IsInitialized()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to check auth status"})
+			return apiError(c, http.StatusInternalServerError, "Failed to check auth status")
 		}
 		return c.JSON(http.StatusOK, map[string]any{
 			"initialized": initialized,
@@ -39,11 +39,11 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	public.POST("/auth/login", func(c echo.Context) error {
 		var req LoginRequest
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		if req.Username == "" || req.Password == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username and password are required"})
+			return apiError(c, http.StatusBadRequest, "Username and password are required")
 		}
 
 		// Try to find existing user
@@ -53,17 +53,17 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 			user, bootstrapErr := reg.Auth.Bootstrap(req.Username, req.Password)
 			if bootstrapErr != nil {
 				slog.Error("First-user bootstrap failed", "component", "auth", "operation", "bootstrap_user", "error", bootstrapErr)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create initial user"})
+				return apiError(c, http.StatusInternalServerError, "Failed to create initial user")
 			}
 			if user == nil {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
+				return apiError(c, http.StatusUnauthorized, "Invalid credentials")
 			}
 		}
 
 		// Delegate credential check + JWT generation + event publishing to AuthService
 		tokenString, loginErr := reg.Auth.Login(req.Username, req.Password)
 		if loginErr != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
+			return apiError(c, http.StatusUnauthorized, "Invalid credentials")
 		}
 
 		// Set HttpOnly JWT cookie for secure transport
@@ -103,21 +103,21 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 			NewPassword     string `json:"newPassword"`
 		}
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		if req.CurrentPassword == "" || req.NewPassword == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Current and new password are required"})
+			return apiError(c, http.StatusBadRequest, "Current and new password are required")
 		}
 		if len(req.NewPassword) < 8 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "New password must be at least 8 characters"})
+			return apiError(c, http.StatusBadRequest, "New password must be at least 8 characters")
 		}
 
 		if err := reg.Auth.ChangePassword(username, req.CurrentPassword, req.NewPassword); err != nil {
 			if errors.Is(err, services.ErrWrongPassword) {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+				return apiError(c, http.StatusUnauthorized, "Current password is incorrect")
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
@@ -135,30 +135,30 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 			CurrentPassword string `json:"currentPassword"`
 		}
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
 		if req.NewUsername == "" || req.CurrentPassword == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "New username and current password are required"})
+			return apiError(c, http.StatusBadRequest, "New username and current password are required")
 		}
 		if len(req.NewUsername) < 3 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username must be at least 3 characters"})
+			return apiError(c, http.StatusBadRequest, "Username must be at least 3 characters")
 		}
 
 		// Check if new username is already taken
 		taken, err := reg.Auth.IsUsernameTaken(req.NewUsername)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to check username availability"})
+			return apiError(c, http.StatusInternalServerError, "Failed to check username availability")
 		}
 		if taken {
-			return c.JSON(http.StatusConflict, map[string]string{"error": "Username already taken"})
+			return apiError(c, http.StatusConflict, "Username already taken")
 		}
 
 		if err := reg.Auth.ChangeUsername(currentUser, req.NewUsername, req.CurrentPassword); err != nil {
 			if errors.Is(err, services.ErrWrongPassword) {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+				return apiError(c, http.StatusUnauthorized, "Current password is incorrect")
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"message": "Username changed successfully"})
@@ -173,7 +173,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 
 		plaintext, err := reg.Auth.GenerateAPIKey(username)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"api_key": plaintext})
@@ -188,7 +188,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 
 		user, err := reg.Auth.GetByUsername(username)
 		if err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+			return apiError(c, http.StatusNotFound, "User not found")
 		}
 
 		// Never return the actual API key (it's hashed in the DB). Instead

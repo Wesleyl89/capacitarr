@@ -31,7 +31,7 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 	protected.GET("/custom-rules", func(c echo.Context) error {
 		rules, err := reg.Rules.List()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch custom rules"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch custom rules")
 		}
 		return c.JSON(http.StatusOK, rules)
 	})
@@ -41,15 +41,15 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 			Order []uint `json:"order"`
 		}
 		if err := c.Bind(&payload); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+			return apiError(c, http.StatusBadRequest, "Invalid request payload")
 		}
 		if len(payload.Order) == 0 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Order array must not be empty"})
+			return apiError(c, http.StatusBadRequest, "Order array must not be empty")
 		}
 
 		if err := reg.Rules.Reorder(payload.Order); err != nil {
 			slog.Error("Failed to reorder rules", "component", "api", "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reorder rules"})
+			return apiError(c, http.StatusInternalServerError, "Failed to reorder rules")
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -57,21 +57,21 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 	protected.PUT("/custom-rules/:id", func(c echo.Context) error {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		var updated db.CustomRule
 		if err := c.Bind(&updated); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+			return apiError(c, http.StatusBadRequest, "Invalid request payload")
 		}
 
 		rule, err := reg.Rules.Update(uint(id), updated)
 		if err != nil {
 			if errors.Is(err, services.ErrRuleNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Rule not found"})
+				return apiError(c, http.StatusNotFound, "Rule not found")
 			}
 			slog.Error("Failed to update custom rule", "component", "api", "operation", "update_rule", "id", id, "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update rule"})
+			return apiError(c, http.StatusInternalServerError, "Failed to update rule")
 		}
 		return c.JSON(http.StatusOK, rule)
 	})
@@ -80,16 +80,16 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 		var newRule db.CustomRule
 		if err := c.Bind(&newRule); err != nil {
 			slog.Debug("Failed to bind rule payload", "component", "api", "operation", "create_rule", "error", err)
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload: " + err.Error()})
+			return apiError(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())
 		}
 
 		rule, err := reg.Rules.Create(newRule)
 		if err != nil {
 			if errors.Is(err, services.ErrRuleValidation) {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return apiError(c, http.StatusBadRequest, err.Error())
 			}
 			slog.Error("Failed to create custom rule", "component", "api", "operation", "create_rule", "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create rule"})
+			return apiError(c, http.StatusInternalServerError, "Failed to create rule")
 		}
 		return c.JSON(http.StatusCreated, rule)
 	})
@@ -97,15 +97,15 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 	protected.DELETE("/custom-rules/:id", func(c echo.Context) error {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
 		if err := reg.Rules.Delete(uint(id)); err != nil {
 			if errors.Is(err, services.ErrRuleNotFound) {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "Rule not found"})
+				return apiError(c, http.StatusNotFound, "Rule not found")
 			}
 			slog.Error("Failed to delete custom rule", "component", "api", "operation", "delete_rule", "id", id, "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete rule"})
+			return apiError(c, http.StatusInternalServerError, "Failed to delete rule")
 		}
 		return c.NoContent(http.StatusNoContent)
 	})

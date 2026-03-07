@@ -251,3 +251,40 @@ func TestDeletionService_BatchTracking_CorrectCounts(t *testing.T) {
 		t.Errorf("expected Failed=2, got %d", bce.Failed)
 	}
 }
+
+func TestDeletionService_GracefulShutdown_DrainsQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode for safety
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	svc.Start()
+
+	// Queue a job, then immediately stop — the worker should drain the queue
+	// before Stop() returns.
+	job := DeleteJob{
+		Client: &mockIntegration{deleteErr: nil},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		Reason: "shutdown-test",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Stop should block until all queued jobs are processed
+	svc.Stop()
+
+	// Verify the job was processed (counter should be 1)
+	if svc.Processed() != 1 {
+		t.Errorf("expected 1 processed job after graceful shutdown, got %d", svc.Processed())
+	}
+}

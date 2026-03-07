@@ -342,13 +342,13 @@ func TestIntegrationService_SyncAll_NoEnabled(t *testing.T) {
 	}
 }
 
-func TestIntegrationService_SyncAll_SkipsNonClientTypes(t *testing.T) {
+func TestIntegrationService_SyncAll_TestsEnrichmentTypes(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewIntegrationService(database, bus)
 
 	// Tautulli and Overseerr don't implement the full Integration interface,
-	// so NewClient returns nil and they should be skipped.
+	// but SyncAll should still test their connections and return results.
 	database.Create(&db.IntegrationConfig{Type: "tautulli", Name: "Firefly Tautulli", URL: "http://localhost:8181", APIKey: "key1", Enabled: true})
 	database.Create(&db.IntegrationConfig{Type: "overseerr", Name: "Serenity Overseerr", URL: "http://localhost:5055", APIKey: "key2", Enabled: true})
 
@@ -356,7 +356,13 @@ func TestIntegrationService_SyncAll_SkipsNonClientTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SyncAll returned error: %v", err)
 	}
-	if len(results) != 0 {
-		t.Errorf("expected 0 sync results (tautulli/overseerr skipped), got %d", len(results))
+	// Enrichment services now get tested — they'll fail (unreachable) but return results
+	if len(results) != 2 {
+		t.Errorf("expected 2 sync results (tautulli + overseerr tested), got %d", len(results))
+	}
+	for _, r := range results {
+		if r.Status != "error" {
+			t.Errorf("expected error status for %s (unreachable), got %q", r.Type, r.Status)
+		}
 	}
 }

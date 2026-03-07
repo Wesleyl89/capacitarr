@@ -28,7 +28,7 @@ func RegisterActivityRoutes(g *echo.Group, reg *services.Registry) {
 		// operational concern (7-day retention, no business logic).
 		activities, err := reg.Settings.ListRecentActivities(limit)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch recent activity events"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch recent activity events")
 		}
 
 		return c.JSON(http.StatusOK, activities)

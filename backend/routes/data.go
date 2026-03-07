@@ -17,7 +17,7 @@ func handleDataReset(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		summary, err := reg.Data.Reset()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

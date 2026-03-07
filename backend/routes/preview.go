@@ -13,7 +13,7 @@ func RegisterPreviewRoutes(protected *echo.Group, reg *services.Registry) {
 	protected.GET("/preview", func(c echo.Context) error {
 		result, err := reg.Engine.GetPreview()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate preview"})
+			return apiError(c, http.StatusInternalServerError, "Failed to generate preview")
 		}
 		return c.JSON(http.StatusOK, result)
 	})

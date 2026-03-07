@@ -27,7 +27,7 @@ func RegisterAuditRoutes(g *echo.Group, reg *services.Registry) {
 
 		logs, err := reg.AuditLog.ListRecent(limit)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch recent audit logs"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch recent audit logs")
 		}
 
 		return c.JSON(http.StatusOK, logs)
@@ -47,7 +47,7 @@ func RegisterAuditRoutes(g *echo.Group, reg *services.Registry) {
 
 		result, err := reg.AuditLog.ListGrouped(limit)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch audit logs"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch audit logs")
 		}
 
 		return c.JSON(http.StatusOK, result)
@@ -81,7 +81,7 @@ func RegisterAuditRoutes(g *echo.Group, reg *services.Registry) {
 			SortDir: strings.ToLower(strings.TrimSpace(c.QueryParam("sort_dir"))),
 		})
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch audit logs"})
+			return apiError(c, http.StatusInternalServerError, "Failed to fetch audit logs")
 		}
 
 		return c.JSON(http.StatusOK, result)
