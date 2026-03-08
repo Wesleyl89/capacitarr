@@ -1,10 +1,15 @@
-## [1.2.3] - 2026-03-08
+## [1.3.0] - 2026-03-08
 
-### 📝 Documentation
+### 🚀 Features
 
-- Add support and donation links (UAnimals, ASPCA, GitHub Sponsors, Ko-fi, Buy Me a Coffee) across README, docs, help page, and marketing site
-- Add `.github/FUNDING.yml` for GitHub Sponsor button
+- *(ui)* Add donation popover to app navbar ([593fb69](https://gitlab.com/starshadow/software/capacitarr/-/commit/593fb69ce84585d8533c151f27ed376e423b3e0d))
+- *(ui)* Use random cat/dog icon for donation button ([71ca3eb](https://gitlab.com/starshadow/software/capacitarr/-/commit/71ca3eb0b19489e4825048d5409a78234298205b))
 
+### 🐛 Bug Fixes
+
+- *(site)* Badges, about section, footer icons, donation popover ([4bb429a](https://gitlab.com/starshadow/software/capacitarr/-/commit/4bb429ae7237a6e39d21e537ac9eea90db601b6e))
+- *(auth,approval)* BASE_URL login redirect and approval queue threshold clearing ([e5a34ac](https://gitlab.com/starshadow/software/capacitarr/-/commit/e5a34ac2d2d2a41d8814f7a7c07a794e2332e2a2))
+- *(ci)* Disable BuildKit provenance to remove unknown/unknown manifest entry ([e61a090](https://gitlab.com/starshadow/software/capacitarr/-/commit/e61a09075c457927eccb7b57cceebed6e5f7c2a4))
 ## [1.2.2] - 2026-03-08
 
 ### 🐛 Bug Fixes
