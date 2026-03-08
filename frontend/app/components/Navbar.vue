@@ -251,6 +251,111 @@
             </UiDropdownMenuContent>
           </UiDropdownMenu>
 
+          <!-- Donation / Support popover -->
+          <UiPopover>
+            <UiPopoverTrigger as-child>
+              <UiButton variant="ghost" size="icon" :aria-label="$t('donate.ariaLabel')">
+                <component :is="HeartHandshakeIcon" class="w-5 h-5" />
+              </UiButton>
+            </UiPopoverTrigger>
+            <UiPopoverContent align="end" class="w-72 p-4">
+              <div class="space-y-3">
+                <!-- Header -->
+                <div class="flex items-center gap-1.5">
+                  <component :is="PawPrintIcon" class="w-4 h-4 text-amber-500" />
+                  <h4 class="text-sm font-semibold">{{ $t('donate.title') }}</h4>
+                </div>
+
+                <!-- Message -->
+                <p class="text-xs leading-relaxed text-muted-foreground">
+                  {{ $t('donate.message') }}
+                </p>
+
+                <!-- Charity links -->
+                <div class="flex flex-col gap-1.5">
+                  <a
+                    href="https://uanimals.org/en/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors"
+                  >
+                    <component :is="HeartIcon" class="w-4 h-4 text-amber-500 shrink-0" />
+                    <div class="min-w-0">
+                      <span class="block text-[13px] font-medium">{{
+                        $t('donate.uanimalsName')
+                      }}</span>
+                      <span class="block text-[11px] text-muted-foreground">{{
+                        $t('donate.uanimalsDesc')
+                      }}</span>
+                    </div>
+                    <component
+                      :is="ExternalLinkIcon"
+                      class="w-3 h-3 ml-auto text-muted-foreground/50 shrink-0"
+                    />
+                  </a>
+
+                  <a
+                    href="https://www.aspca.org/ways-to-help"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors"
+                  >
+                    <component :is="PawPrintIcon" class="w-4 h-4 text-orange-500 shrink-0" />
+                    <div class="min-w-0">
+                      <span class="block text-[13px] font-medium">{{
+                        $t('donate.aspcaName')
+                      }}</span>
+                      <span class="block text-[11px] text-muted-foreground">{{
+                        $t('donate.aspcaDesc')
+                      }}</span>
+                    </div>
+                    <component
+                      :is="ExternalLinkIcon"
+                      class="w-3 h-3 ml-auto text-muted-foreground/50 shrink-0"
+                    />
+                  </a>
+                </div>
+
+                <!-- Separator -->
+                <UiSeparator />
+
+                <!-- Developer support -->
+                <p
+                  class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60"
+                >
+                  {{ $t('donate.devHeading') }}
+                </p>
+
+                <div class="flex flex-wrap gap-x-3 gap-y-1">
+                  <a
+                    href="https://github.com/sponsors/ghent"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {{ $t('donate.githubSponsors') }}
+                  </a>
+                  <a
+                    href="https://ko-fi.com/ghent"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {{ $t('donate.kofi') }}
+                  </a>
+                  <a
+                    href="https://buymeacoffee.com/ghentgames"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {{ $t('donate.buyMeACoffee') }}
+                  </a>
+                </div>
+              </div>
+            </UiPopoverContent>
+          </UiPopover>
+
           <!-- Help -->
           <UiButton variant="ghost" size="icon" as-child>
             <NuxtLink to="/help" aria-label="Help">
@@ -287,6 +392,10 @@ import {
   GlobeIcon,
   ArrowUpCircleIcon,
   RefreshCwIcon,
+  HeartHandshakeIcon,
+  HeartIcon,
+  PawPrintIcon,
+  ExternalLinkIcon,
 } from 'lucide-vue-next';
 import type { ThemeMeta } from '~/composables/useTheme';
 

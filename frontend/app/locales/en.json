@@ -52,6 +52,18 @@
   "nav.darkMode": "Switch to dark mode",
   "nav.lightMode": "Switch to light mode",
 
+  "donate.title": "Support Animal Rescue",
+  "donate.message": "Capacitarr is free software. If it saves you time, we'd love for you to donate to animal rescue instead of supporting us directly.",
+  "donate.uanimalsName": "UAnimals",
+  "donate.uanimalsDesc": "Rescuing animals in Ukraine 🇺🇦",
+  "donate.aspcaName": "ASPCA",
+  "donate.aspcaDesc": "Preventing cruelty to animals",
+  "donate.devHeading": "Support the Developer",
+  "donate.githubSponsors": "GitHub Sponsors",
+  "donate.kofi": "Ko-fi",
+  "donate.buyMeACoffee": "Buy Me a Coffee",
+  "donate.ariaLabel": "Support & Donate",
+
   "login.title": "Welcome Back",
   "login.subtitle": "Sign in to Capacitarr",
   "login.username": "Username",
