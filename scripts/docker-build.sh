@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # scripts/docker-build.sh — Build and push multi-arch Docker image to GitLab Container Registry.
 #
 # This script builds the Capacitarr Docker image for linux/amd64 and linux/arm64,
@@ -11,8 +11,10 @@
 #   CI_REGISTRY_IMAGE   — GitLab registry image path
 #
 # Usage: scripts/docker-build.sh
+#
+# NOTE: Uses /bin/sh (not bash) for Alpine compatibility (docker:latest CI image).
 
-set -euo pipefail
+set -eu
 
 # ── Validate required environment variables ──────────────────────────────────
 
@@ -30,11 +32,14 @@ BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 TAGS="--tag ${IMAGE}:${VERSION} --tag ${IMAGE}:latest"
 
 # Stable releases (no hyphen = no pre-release suffix): add floating tags
-if [[ "$VERSION" != *-* ]]; then
-    MAJOR="${VERSION%%.*}"
-    MINOR="${VERSION%.*}"
-    TAGS="$TAGS --tag ${IMAGE}:stable --tag ${IMAGE}:${MAJOR} --tag ${IMAGE}:${MINOR}"
-fi
+case "$VERSION" in
+    *-*) ;; # pre-release, skip floating tags
+    *)
+        MAJOR="${VERSION%%.*}"
+        MINOR="${VERSION%.*}"
+        TAGS="$TAGS --tag ${IMAGE}:stable --tag ${IMAGE}:${MAJOR} --tag ${IMAGE}:${MINOR}"
+        ;;
+esac
 
 # ── Build and push ───────────────────────────────────────────────────────────
 

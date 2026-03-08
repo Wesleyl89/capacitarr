@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # scripts/docker-mirror.sh — Mirror Docker image from GitLab Container Registry to a target registry.
 #
 # Uses `crane copy` to replicate multi-arch manifest lists between registries
@@ -12,8 +12,10 @@
 #   $1 — Target registry image path (e.g., docker.io/ghentstarshadow/capacitarr)
 #
 # Usage: scripts/docker-mirror.sh docker.io/ghentstarshadow/capacitarr
+#
+# NOTE: Uses /bin/sh (not bash) for Alpine compatibility (crane CI image).
 
-set -euo pipefail
+set -eu
 
 # ── Validate inputs ──────────────────────────────────────────────────────────
 
@@ -41,18 +43,21 @@ echo "Copying ${SOURCE}:latest → ${TARGET}:latest"
 crane copy "${SOURCE}:latest" "${TARGET}:latest"
 
 # Stable releases (no hyphen = no pre-release suffix): copy floating tags
-if [[ "$VERSION" != *-* ]]; then
-    MAJOR="${VERSION%%.*}"
-    MINOR="${VERSION%.*}"
+case "$VERSION" in
+    *-*) ;; # pre-release, skip floating tags
+    *)
+        MAJOR="${VERSION%%.*}"
+        MINOR="${VERSION%.*}"
 
-    echo "Copying ${SOURCE}:stable → ${TARGET}:stable"
-    crane copy "${SOURCE}:stable" "${TARGET}:stable"
+        echo "Copying ${SOURCE}:stable → ${TARGET}:stable"
+        crane copy "${SOURCE}:stable" "${TARGET}:stable"
 
-    echo "Copying ${SOURCE}:${MAJOR} → ${TARGET}:${MAJOR}"
-    crane copy "${SOURCE}:${MAJOR}" "${TARGET}:${MAJOR}"
+        echo "Copying ${SOURCE}:${MAJOR} → ${TARGET}:${MAJOR}"
+        crane copy "${SOURCE}:${MAJOR}" "${TARGET}:${MAJOR}"
 
-    echo "Copying ${SOURCE}:${MINOR} → ${TARGET}:${MINOR}"
-    crane copy "${SOURCE}:${MINOR}" "${TARGET}:${MINOR}"
-fi
+        echo "Copying ${SOURCE}:${MINOR} → ${TARGET}:${MINOR}"
+        crane copy "${SOURCE}:${MINOR}" "${TARGET}:${MINOR}"
+        ;;
+esac
 
 echo "Mirror complete: ${TARGET}"
