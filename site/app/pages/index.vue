@@ -251,6 +251,43 @@ observe(ctaRef, ctaVisible)
               Capacitarr is free, open-source software created by <strong>Ghent Starshadow</strong>.
               Licensed under PolyForm Noncommercial 1.0.0 + CLA. Built with Go, Nuxt 4, and SQLite.
             </p>
+            <div class="about-support">
+              <p class="about-support-heading">
+                <UIcon name="i-lucide-heart" class="size-4 text-rose-500" />
+                Support Animal Rescue
+              </p>
+              <p class="about-support-text">
+                Capacitarr is free software. If it saves you time, please consider donating to animal rescue instead of supporting me directly.
+              </p>
+              <div class="about-support-links">
+                <UButton
+                  to="https://uanimals.org/en/"
+                  target="_blank"
+                  icon="i-lucide-heart"
+                  variant="soft"
+                  color="primary"
+                  size="sm"
+                >
+                  UAnimals
+                </UButton>
+                <UButton
+                  to="https://www.aspca.org/ways-to-help"
+                  target="_blank"
+                  icon="i-lucide-paw-print"
+                  variant="soft"
+                  color="primary"
+                  size="sm"
+                >
+                  ASPCA
+                </UButton>
+              </div>
+              <p class="about-support-dev">
+                Or support the developer:
+                <a href="https://github.com/sponsors/ghent" target="_blank" rel="noopener noreferrer">GitHub Sponsors</a> ·
+                <a href="https://ko-fi.com/ghent" target="_blank" rel="noopener noreferrer">Ko-fi</a> ·
+                <a href="https://buymeacoffee.com/ghentgames" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a>
+              </p>
+            </div>
             <div class="about-ukraine">
               <img src="/flag-ua.svg" alt="Ukrainian flag" class="ukraine-flag">
               <p>I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.</p>
@@ -751,6 +788,57 @@ observe(ctaRef, ctaVisible)
   line-height: 1.6;
   color: var(--color-neutral-500);
   margin-bottom: 1rem;
+}
+
+.about-support {
+  padding: 1rem 0;
+  border-top: 1px solid var(--color-neutral-200);
+}
+
+:root.dark .about-support {
+  border-top-color: var(--color-neutral-800);
+}
+
+.about-support-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin-bottom: 0.375rem;
+}
+
+:root.dark .about-support-heading {
+  color: var(--color-neutral-300);
+}
+
+.about-support-text {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-neutral-500);
+  margin-bottom: 0.75rem;
+}
+
+.about-support-links {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.about-support-dev {
+  font-size: 0.75rem;
+  color: var(--color-neutral-400);
+}
+
+.about-support-dev a {
+  color: var(--color-primary-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.about-support-dev a:hover {
+  color: var(--color-primary-400);
 }
 
 .about-ukraine {

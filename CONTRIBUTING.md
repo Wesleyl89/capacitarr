@@ -122,3 +122,12 @@ The `make ci` command runs the same checks using the same Docker images, so if i
 ## Questions?
 
 If you have questions about contributing, open an issue with the `question` label.
+
+## Support
+
+Capacitarr is free and always will be. If it's useful to you, I'd love for you to donate to one of these animal rescue organizations:
+
+- [UAnimals](https://uanimals.org/en/) — Rescuing and protecting animals in Ukraine
+- [ASPCA](https://www.aspca.org/ways-to-help) — Preventing cruelty to animals in the US
+
+You can also support the developer directly via [GitHub Sponsors](https://github.com/sponsors/ghent), [Ko-fi](https://ko-fi.com/ghent), or [Buy Me a Coffee](https://buymeacoffee.com/ghentgames).

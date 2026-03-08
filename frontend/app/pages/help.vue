@@ -538,6 +538,66 @@
                 </a>
               </div>
 
+              <span class="text-muted-foreground">Donate</span>
+              <div class="space-y-1">
+                <p class="text-xs text-foreground/70">
+                  Instead of supporting me, please consider donating to animal rescue:
+                </p>
+                <div class="flex items-center gap-3">
+                  <a
+                    href="https://uanimals.org/en/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 text-primary hover:underline"
+                  >
+                    <HeartIcon class="w-3.5 h-3.5" />
+                    UAnimals
+                    <ExternalLinkIcon class="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://www.aspca.org/ways-to-help"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 text-primary hover:underline"
+                  >
+                    <PawPrintIcon class="w-3.5 h-3.5" />
+                    ASPCA
+                    <ExternalLinkIcon class="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              <span class="text-muted-foreground">Tip Jar</span>
+              <div class="flex items-center gap-3">
+                <a
+                  href="https://github.com/sponsors/ghent"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 text-primary hover:underline"
+                >
+                  GitHub Sponsors
+                  <ExternalLinkIcon class="w-3 h-3" />
+                </a>
+                <a
+                  href="https://ko-fi.com/ghent"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 text-primary hover:underline"
+                >
+                  Ko-fi
+                  <ExternalLinkIcon class="w-3 h-3" />
+                </a>
+                <a
+                  href="https://buymeacoffee.com/ghentgames"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 text-primary hover:underline"
+                >
+                  Buy Me a Coffee
+                  <ExternalLinkIcon class="w-3 h-3" />
+                </a>
+              </div>
+
               <span class="text-muted-foreground">License</span>
               <span class="text-foreground">PolyForm Noncommercial 1.0.0 + CLA</span>
 
@@ -628,7 +688,13 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronRightIcon, ExternalLinkIcon, ShieldIcon } from 'lucide-vue-next';
+import {
+  ChevronRightIcon,
+  ExternalLinkIcon,
+  HeartIcon,
+  PawPrintIcon,
+  ShieldIcon,
+} from 'lucide-vue-next';
 
 const { uiVersion, uiBuildDate, apiVersion, apiBuildDate } = useVersion();
 const config = useRuntimeConfig();
