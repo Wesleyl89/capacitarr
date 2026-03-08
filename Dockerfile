@@ -29,7 +29,7 @@ ARG COMMIT_SHA=unknown
 ARG TARGETOS TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s -X main.version=${APP_VERSION} -X main.commit=${COMMIT_SHA} -X main.buildDate=${BUILD_DATE}" \
-    -o capacitarr main.go
+    -o capacitarr .
 
 # ── Stage 3: Runtime ───────────────────────────────────────────────────────────
 FROM alpine:3.21
@@ -48,7 +48,7 @@ RUN chmod +x /app/entrypoint.sh
 RUN mkdir -p /config
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:2187/api/v1/health || exit 1
+    CMD curl -f "${CAPACITARR_HEALTH_URL:-http://localhost:2187/api/v1/health}" || exit 1
 
 VOLUME /config
 EXPOSE 2187

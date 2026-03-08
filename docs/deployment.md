@@ -14,7 +14,7 @@
 | `AUTH_HEADER` | (none) | Trusted reverse proxy authentication header name |
 | `PUID` | `1000` | User ID for the container process (Docker only) |
 | `PGID` | `1000` | Group ID for the container process (Docker only) |
-| `NUXT_APP_BASE_URL` | `/` | Frontend base URL path (build-time, must match `BASE_URL`) |
+| `NUXT_APP_BASE_URL` | `/` | **Deprecated** — frontend base URL is derived from `BASE_URL` at runtime |
 
 ---
 
@@ -66,7 +66,7 @@ server {
 
 ### Subdirectory Deployment
 
-When serving Capacitarr at a subdirectory (e.g. `https://example.com/capacitarr/`), set both `BASE_URL` and `NUXT_APP_BASE_URL`:
+When serving Capacitarr at a subdirectory (e.g. `https://example.com/capacitarr/`), set `BASE_URL`:
 
 ```yaml
 services:
@@ -74,10 +74,11 @@ services:
     image: ghentstarshadow/capacitarr:stable
     environment:
       - BASE_URL=/capacitarr/
-      - NUXT_APP_BASE_URL=/capacitarr/
       - JWT_SECRET=your-secret-here
       - SECURE_COOKIES=true
 ```
+
+Only `BASE_URL` is needed — the frontend HTML is automatically rewritten at startup to use the correct asset paths, API base URL, and Vue Router base path. Do **not** set `NUXT_APP_BASE_URL`; it has no effect at runtime.
 
 #### Traefik (Docker labels)
 
@@ -92,11 +93,13 @@ labels:
 
 ```
 example.com {
-    handle_path /capacitarr/* {
+    handle /capacitarr/* {
         reverse_proxy capacitarr:2187
     }
 }
 ```
+
+> **Note:** Use `handle` (not `handle_path`). The `handle_path` directive strips the prefix before forwarding, but Capacitarr expects to receive the full prefixed path when `BASE_URL` is set.
 
 #### nginx
 
@@ -107,6 +110,21 @@ location /capacitarr/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# SSE endpoint — disable buffering for real-time event streaming
+location /capacitarr/api/v1/events {
+    proxy_pass http://127.0.0.1:2187/capacitarr/api/v1/events;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection '';
+    proxy_http_version 1.1;
+    chunked_transfer_encoding off;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 86400s;
 }
 ```
 

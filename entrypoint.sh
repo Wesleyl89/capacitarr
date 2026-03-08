@@ -20,6 +20,18 @@ fi
 mkdir -p /config
 chown "$PUID:$PGID" /config
 
+# Normalize BASE_URL for healthcheck — ensure it starts and ends with /
+HEALTH_BASE="${BASE_URL:-/}"
+case "$HEALTH_BASE" in
+    /*) ;; # already starts with /
+    *)  HEALTH_BASE="/$HEALTH_BASE" ;;
+esac
+case "$HEALTH_BASE" in
+    */) ;; # already ends with /
+    *)  HEALTH_BASE="$HEALTH_BASE/" ;;
+esac
+export CAPACITARR_HEALTH_URL="http://localhost:${PORT:-2187}${HEALTH_BASE}api/v1/health"
+
 echo "Starting Capacitarr as UID=$PUID GID=$PGID"
 
 # Drop privileges and exec the application

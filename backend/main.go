@@ -45,8 +45,22 @@ func getSubFS() fs.FS {
 }
 
 // serveEmbeddedFile reads a file from the embedded FS and writes it to the response
-// with the correct Content-Type based on the file extension.
-func serveEmbeddedFile(c echo.Context, fsys fs.FS, filePath string) error {
+// with the correct Content-Type based on the file extension. If an htmlCache is
+// provided and the file is an HTML entry point, the cached (rewritten) version is
+// served instead of the embedded original.
+func serveEmbeddedFile(c echo.Context, fsys fs.FS, filePath string, cache *htmlCache) error {
+	// Check if we have a cached (rewritten) version for HTML entry points
+	if cache != nil {
+		if filePath == "index.html" && cache.index != nil {
+			c.Response().Header().Set("Cache-Control", "no-cache")
+			return c.Blob(http.StatusOK, "text/html; charset=utf-8", cache.index)
+		}
+		if filePath == "200.html" && cache.spa != nil {
+			c.Response().Header().Set("Cache-Control", "no-cache")
+			return c.Blob(http.StatusOK, "text/html; charset=utf-8", cache.spa)
+		}
+	}
+
 	f, err := fsys.Open(filePath)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
@@ -78,7 +92,9 @@ func serveEmbeddedFile(c echo.Context, fsys fs.FS, filePath string) error {
 // spaHandler serves static files from the embedded filesystem and falls back
 // to 200.html (Nuxt's SPA catch-all) for any path that doesn't match a real
 // file. This allows the client-side Vue Router to handle navigation.
-func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
+// The cache parameter is optional — when non-nil, HTML entry points are served
+// from the pre-rewritten cache instead of the embedded FS.
+func spaHandler(fsys fs.FS, stripPrefix string, cache *htmlCache) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Get the requested path and strip the prefix if configured
 		reqPath := c.Request().URL.Path
@@ -105,12 +121,12 @@ func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
 				indexPath := path.Join(reqPath, "index.html")
 				if idxFile, idxErr := fsys.Open(indexPath); idxErr == nil {
 					_ = idxFile.Close()
-					return serveEmbeddedFile(c, fsys, indexPath)
+					return serveEmbeddedFile(c, fsys, indexPath, cache)
 				}
 				// Directory exists but no index.html — fall through to SPA fallback
 			} else if statErr == nil {
 				// It's a real file, serve it from the embedded FS
-				return serveEmbeddedFile(c, fsys, reqPath)
+				return serveEmbeddedFile(c, fsys, reqPath, cache)
 			}
 		}
 
@@ -127,9 +143,9 @@ func spaHandler(fsys fs.FS, stripPrefix string) echo.HandlerFunc {
 		// SPA catch-all hosting (client-side Vue Router handles the route).
 		if fallback, fbErr := fsys.Open("200.html"); fbErr == nil {
 			_ = fallback.Close()
-			return serveEmbeddedFile(c, fsys, "200.html")
+			return serveEmbeddedFile(c, fsys, "200.html", cache)
 		}
-		return serveEmbeddedFile(c, fsys, "index.html")
+		return serveEmbeddedFile(c, fsys, "index.html", cache)
 	}
 }
 
@@ -311,12 +327,26 @@ func main() {
 	// Serve the embedded Nuxt static frontend with SPA fallback
 	fsys := getSubFS()
 
+	// Build HTML cache for subdirectory deployments — rewrites asset paths,
+	// Vue Router base, and API base URL in the HTML entry points at startup.
+	cache := buildHTMLCache(fsys, cfg.BaseURL)
+
 	if cfg.BaseURL != "" && cfg.BaseURL != "/" {
 		baseURL := strings.TrimRight(cfg.BaseURL, "/")
 		uiGroup := e.Group(baseURL)
-		uiGroup.GET("/*", spaHandler(fsys, baseURL))
+		uiGroup.GET("/*", spaHandler(fsys, baseURL, cache))
+
+		// Handle the exact path without trailing slash (e.g. /capacitarr → /capacitarr/)
+		e.GET(baseURL, func(c echo.Context) error {
+			return c.Redirect(http.StatusMovedPermanently, cfg.BaseURL)
+		})
+
+		// Redirect root to the subdirectory so users don't get a 404 at "/"
+		e.GET("/", func(c echo.Context) error {
+			return c.Redirect(http.StatusMovedPermanently, cfg.BaseURL)
+		})
 	} else {
-		e.GET("/*", spaHandler(fsys, ""))
+		e.GET("/*", spaHandler(fsys, "", cache))
 	}
 
 	// Publish server start event to the event bus

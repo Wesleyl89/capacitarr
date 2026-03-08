@@ -23,7 +23,7 @@ before:
 builds:
   - id: capacitarr
     dir: backend
-    main: ./main.go
+    main: .
     binary: capacitarr
     env:
       - CGO_ENABLED=0

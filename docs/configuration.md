@@ -32,7 +32,7 @@ Capacitarr is configured entirely through environment variables. All variables a
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `NUXT_APP_BASE_URL` | `/` | No | Frontend base URL path. This is a **build-time** variable — it must match `BASE_URL` and is baked into the frontend at container build time. Only needed for subdirectory deployments. |
+| `NUXT_APP_BASE_URL` | `/` | No | **Deprecated — do not set.** The frontend base URL is now derived automatically from `BASE_URL` at runtime. This variable only applies during local development builds outside Docker. |
 
 ## Docker
 
@@ -79,10 +79,11 @@ When running behind a reverse proxy at a subdirectory (e.g., `https://example.co
 ```yaml
 environment:
   - BASE_URL=/capacitarr/
-  - NUXT_APP_BASE_URL=/capacitarr/
   - JWT_SECRET=change-me-to-a-random-string
   - SECURE_COOKIES=true
 ```
+
+Only `BASE_URL` is needed — the frontend is automatically rewritten at startup to use the correct paths. Do **not** set `NUXT_APP_BASE_URL`; it is ignored at runtime.
 
 See the [Deployment Guide](deployment.md) for full reverse proxy configuration examples.
 
