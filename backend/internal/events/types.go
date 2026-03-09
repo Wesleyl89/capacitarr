@@ -402,6 +402,27 @@ func (e DeletionBatchCompleteEvent) EventMessage() string {
 	return fmt.Sprintf("Deletion batch complete: %d succeeded, %d failed", e.Succeeded, e.Failed)
 }
 
+// DeletionProgressEvent is published after each deletion job completes,
+// providing real-time progress data for the frontend progress indicator
+// and sparkline updates.
+type DeletionProgressEvent struct {
+	CurrentItem string `json:"currentItem"`
+	QueueDepth  int    `json:"queueDepth"`
+	Processed   int    `json:"processed"`
+	Succeeded   int    `json:"succeeded"`
+	Failed      int    `json:"failed"`
+	BatchTotal  int    `json:"batchTotal"`
+}
+
+// EventType implements Event.
+func (e DeletionProgressEvent) EventType() string { return "deletion_progress" }
+
+// EventMessage implements Event.
+func (e DeletionProgressEvent) EventMessage() string {
+	return fmt.Sprintf("Deletion progress: %d/%d completed (%d succeeded, %d failed)",
+		e.Processed, e.BatchTotal, e.Succeeded, e.Failed)
+}
+
 // =============================================================================
 // Disk Events
 // =============================================================================

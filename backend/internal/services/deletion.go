@@ -201,6 +201,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 			MediaType: string(job.Item.Type),
 			SizeBytes: job.Item.SizeBytes,
 		})
+		s.publishProgress()
 
 		slog.Info("Dry-Delete completed", "component", "services",
 			"media", job.Item.Title, "action", "Dry-Delete", "freed", job.Item.SizeBytes)
@@ -219,6 +220,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 			IntegrationID: job.Item.IntegrationID,
 			Error:         err.Error(),
 		})
+		s.publishProgress()
 		return
 	}
 
@@ -253,9 +255,24 @@ func (s *DeletionService) processJob(job DeleteJob) {
 		SizeBytes:     job.Item.SizeBytes,
 		IntegrationID: job.Item.IntegrationID,
 	})
+	s.publishProgress()
 
 	slog.Info("Deletion completed", "component", "services",
 		"media", job.Item.Title, "action", "Deleted", "freed", job.Item.SizeBytes)
+}
+
+// publishProgress publishes a DeletionProgressEvent with the current batch
+// progress counters. Called after each job completes (success, failure, or
+// dry-run) to provide real-time progress data for the frontend.
+func (s *DeletionService) publishProgress() {
+	s.bus.Publish(events.DeletionProgressEvent{
+		CurrentItem: s.CurrentlyDeleting(),
+		QueueDepth:  len(s.queue),
+		Processed:   int(s.batchSucceeded.Load()) + int(s.batchFailed.Load()),
+		Succeeded:   int(s.batchSucceeded.Load()),
+		Failed:      int(s.batchFailed.Load()),
+		BatchTotal:  int(s.batchExpected.Load()),
+	})
 }
 
 // checkBatchComplete increments the batch processed counter and publishes

@@ -57,6 +57,25 @@ func (m *mockIntegration) DeleteMediaItem(_ integrations.MediaItem) error {
 	return m.deleteErr
 }
 
+// drainProgressEvent reads from the bus subscription channel until a
+// DeletionProgressEvent arrives or the timeout expires.
+func drainProgressEvent(t *testing.T, ch chan events.Event, timeout time.Duration) *events.DeletionProgressEvent {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case evt := <-ch:
+			if pe, ok := evt.(events.DeletionProgressEvent); ok {
+				return &pe
+			}
+			// Ignore other events
+		case <-deadline:
+			t.Fatal("timeout waiting for DeletionProgressEvent")
+			return nil
+		}
+	}
+}
+
 // drainBatchEvent reads from the bus subscription channel until a
 // DeletionBatchCompleteEvent arrives or the timeout expires.
 func drainBatchEvent(t *testing.T, ch chan events.Event, timeout time.Duration) *events.DeletionBatchCompleteEvent {
@@ -286,5 +305,177 @@ func TestDeletionService_GracefulShutdown_DrainsQueue(t *testing.T) {
 	// Verify the job was processed (counter should be 1)
 	if svc.Processed() != 1 {
 		t.Errorf("expected 1 processed job after graceful shutdown, got %d", svc.Processed())
+	}
+}
+
+func TestDeletionProgressEvent_EventType(t *testing.T) {
+	evt := events.DeletionProgressEvent{
+		CurrentItem: "Serenity",
+		QueueDepth:  3,
+		Processed:   2,
+		Succeeded:   1,
+		Failed:      1,
+		BatchTotal:  5,
+	}
+
+	if got := evt.EventType(); got != "deletion_progress" {
+		t.Errorf("expected EventType() = %q, got %q", "deletion_progress", got)
+	}
+}
+
+func TestDeletionProgressEvent_EventMessage(t *testing.T) {
+	evt := events.DeletionProgressEvent{
+		CurrentItem: "Serenity",
+		QueueDepth:  3,
+		Processed:   2,
+		Succeeded:   1,
+		Failed:      1,
+		BatchTotal:  5,
+	}
+
+	expected := "Deletion progress: 2/5 completed (1 succeeded, 1 failed)"
+	if got := evt.EventMessage(); got != expected {
+		t.Errorf("expected EventMessage() = %q, got %q", expected, got)
+	}
+}
+
+func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	job := DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		Reason: "test-progress",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	pe := drainProgressEvent(t, ch, 15*time.Second)
+	if pe.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1, got %d", pe.Succeeded)
+	}
+	if pe.Failed != 0 {
+		t.Errorf("expected Failed=0, got %d", pe.Failed)
+	}
+	if pe.Processed != 1 {
+		t.Errorf("expected Processed=1, got %d", pe.Processed)
+	}
+	if pe.BatchTotal != 1 {
+		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
+	}
+}
+
+func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: true},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	job := DeleteJob{
+		Client: &mockIntegration{deleteErr: nil},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 50,
+		},
+		Reason: "test-progress",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	pe := drainProgressEvent(t, ch, 15*time.Second)
+	if pe.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1, got %d", pe.Succeeded)
+	}
+	if pe.Failed != 0 {
+		t.Errorf("expected Failed=0, got %d", pe.Failed)
+	}
+	if pe.Processed != 1 {
+		t.Errorf("expected Processed=1, got %d", pe.Processed)
+	}
+	if pe.BatchTotal != 1 {
+		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
+	}
+}
+
+func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: true},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	job := DeleteJob{
+		Client: &mockIntegration{deleteErr: errMockDelete},
+		Item: integrations.MediaItem{
+			Title:     "Firefly",
+			Type:      "show",
+			SizeBytes: 1024 * 1024 * 200,
+		},
+		Reason: "test-progress",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	pe := drainProgressEvent(t, ch, 15*time.Second)
+	if pe.Succeeded != 0 {
+		t.Errorf("expected Succeeded=0, got %d", pe.Succeeded)
+	}
+	if pe.Failed != 1 {
+		t.Errorf("expected Failed=1, got %d", pe.Failed)
+	}
+	if pe.Processed != 1 {
+		t.Errorf("expected Processed=1, got %d", pe.Processed)
+	}
+	if pe.BatchTotal != 1 {
+		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
 	}
 }
