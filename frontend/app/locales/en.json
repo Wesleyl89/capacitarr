@@ -471,5 +471,23 @@
   "update.upToDate": "Up to Date",
   "update.upToDateDesc": "You're running the latest version of Capacitarr.",
   "update.checkNow": "Check Now",
-  "update.checking": "Checking…"
+  "update.checking": "Checking…",
+
+  "settings.customScoringWeights": "Custom scoring weights",
+  "settings.customScoringWeightsDesc": "Override global scoring weights for this integration",
+  "settings.customWeightsBadge": "Custom Weights",
+  "settings.customWeightsPreview": "Preview — coming soon",
+  "settings.customWeightsPreviewDesc": "Per-integration weight overrides are not yet saved. This is a UX preview.",
+  "settings.weightWatchHistory": "Watch History",
+  "settings.weightWatchHistoryDesc": "Unwatched items score higher for removal.",
+  "settings.weightLastWatched": "Last Watched",
+  "settings.weightLastWatchedDesc": "Media not watched recently scores higher.",
+  "settings.weightFileSize": "File Size",
+  "settings.weightFileSizeDesc": "Larger files score higher to free more space.",
+  "settings.weightRating": "Rating",
+  "settings.weightRatingDesc": "Low-rated content scores higher for removal.",
+  "settings.weightTimeInLibrary": "Time in Library",
+  "settings.weightTimeInLibraryDesc": "Older content may be less valuable.",
+  "settings.weightSeriesStatus": "Series Status",
+  "settings.weightSeriesStatusDesc": "Ended or canceled shows score higher."
 }

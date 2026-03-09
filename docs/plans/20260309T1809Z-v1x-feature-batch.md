@@ -519,31 +519,43 @@ Full CI pipeline passed: Go lint (0 issues), frontend ESLint + Prettier, Go test
 
 ## Phase 7: Per-Integration Scoring Overrides (Frontend Mockup Only)
 
+**Status:** ✅ Complete
+
 ### Context
 
 This is a **frontend-only mockup** to evaluate the UX before committing to backend changes. The sliders will be visually present but non-functional — they don't save to any backend endpoint.
 
 ### Steps
 
-#### Step 7.1: Add toggle to integration card
+#### Step 7.1: Add toggle to integration card ✅
 
 On each integration card in the Settings > Integrations page, add a small toggle/switch labeled "Custom scoring weights" (or similar). Default: off.
 
-#### Step 7.2: Add collapsible weight sliders panel
+**Done:** Added `UiSwitch` toggle with i18n label `settings.customScoringWeights` in a new border-separated section between card content and footer. Toggle state is stored in local reactive `customWeightsState` map keyed by integration ID.
+
+#### Step 7.2: Add collapsible weight sliders panel ✅
 
 When the toggle is enabled, show a collapsible panel inline on the integration card with the 6 weight sliders (Watch History, Last Watched, File Size, Rating, Time in Library, Series Status). Pre-populate with the current global weight values.
 
-#### Step 7.3: Add visual indicator
+**Done:** Added a `<Transition>` animated panel that expands when the toggle is enabled. Contains 6 `UiSlider` components (0-10, step 1) for each weight factor. Pre-populated with default value of 5 for all weights. Used i18n strings for labels and descriptions. Used a `getWeightValue()` helper instead of template-level type casts to avoid Vue template parser issues with TypeScript angle brackets.
+
+#### Step 7.3: Add visual indicator ✅
 
 When custom weights are enabled for an integration, show a small badge or icon on the integration card to indicate it has custom scoring.
 
-#### Step 7.4: Ensure sliders are non-functional
+**Done:** Added a `UiBadge` with `SlidersHorizontalIcon` (from lucide-vue-next) and "Custom Weights" text in the card header, conditionally shown when the integration's custom weights toggle is enabled. Placed next to the existing active/disabled badge.
+
+#### Step 7.4: Ensure sliders are non-functional ✅
 
 The sliders should be interactive (draggable) but should NOT make any API calls. They exist purely for UX evaluation. Add a subtle "Preview — not yet functional" indicator or tooltip.
+
+**Done:** Sliders update local component state only — no API calls. Added a "Preview — coming soon" badge with a `UiTooltip` that shows "Per-integration weight overrides are not yet saved. This is a UX preview." on hover.
 
 #### Step 7.5: Evaluate and gather feedback
 
 After implementation, use the app and evaluate whether the UX feels cluttered or intuitive. This step is manual — no code changes.
+
+**Note:** Added 16 new i18n strings to `en.json` under the `settings.` namespace covering toggle label, badge text, preview text, and all 6 weight slider labels + descriptions.
 
 ---
 

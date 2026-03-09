@@ -69,9 +69,15 @@
               </span>
             </div>
           </div>
-          <UiBadge :variant="integration.enabled ? 'default' : 'secondary'">
-            {{ integration.enabled ? $t('common.active') : $t('common.disabled') }}
-          </UiBadge>
+          <div class="flex items-center gap-2">
+            <UiBadge v-if="getWeightState(integration.id).enabled" variant="outline" class="gap-1">
+              <component :is="SlidersHorizontalIcon" class="w-3 h-3" />
+              {{ $t('settings.customWeightsBadge') }}
+            </UiBadge>
+            <UiBadge :variant="integration.enabled ? 'default' : 'secondary'">
+              {{ integration.enabled ? $t('common.active') : $t('common.disabled') }}
+            </UiBadge>
+          </div>
         </div>
       </UiCardHeader>
 
@@ -102,6 +108,69 @@
           <span class="text-xs">{{ integration.lastError }}</span>
         </div>
       </UiCardContent>
+
+      <!-- Custom Scoring Weights Toggle & Panel -->
+      <div class="border-t border-border px-6 py-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <UiSwitch
+              :model-value="getWeightState(integration.id).enabled"
+              @update:model-value="(val: boolean) => toggleCustomWeights(integration.id, val)"
+            />
+            <UiLabel class="text-sm font-medium cursor-pointer">
+              {{ $t('settings.customScoringWeights') }}
+            </UiLabel>
+          </div>
+          <UiTooltipProvider>
+            <UiTooltip>
+              <UiTooltipTrigger as-child>
+                <UiBadge variant="outline" class="text-xs text-muted-foreground">
+                  {{ $t('settings.customWeightsPreview') }}
+                </UiBadge>
+              </UiTooltipTrigger>
+              <UiTooltipContent>
+                <p>{{ $t('settings.customWeightsPreviewDesc') }}</p>
+              </UiTooltipContent>
+            </UiTooltip>
+          </UiTooltipProvider>
+        </div>
+
+        <!-- Collapsible Weight Sliders -->
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          leave-active-class="transition-all duration-200 ease-in"
+          enter-from-class="opacity-0 max-h-0"
+          enter-to-class="opacity-100 max-h-[500px]"
+          leave-from-class="opacity-100 max-h-[500px]"
+          leave-to-class="opacity-0 max-h-0"
+        >
+          <div v-if="getWeightState(integration.id).enabled" class="mt-4 space-y-3 overflow-hidden">
+            <div v-for="slider in weightSliders" :key="slider.key" class="space-y-1">
+              <div class="flex justify-between text-sm">
+                <span class="font-medium text-foreground">{{ slider.label }}</span>
+                <span class="text-muted-foreground font-mono tabular-nums">
+                  {{ getWeightValue(integration.id, slider.key) }} / 10
+                </span>
+              </div>
+              <UiSlider
+                :model-value="[getWeightValue(integration.id, slider.key)]"
+                :min="0"
+                :max="10"
+                :step="1"
+                class="w-full"
+                @update:model-value="
+                  (v: number[] | undefined) => {
+                    if (v) updateWeight(integration.id, slider.key, v[0]);
+                  }
+                "
+              />
+              <p class="text-xs text-muted-foreground">
+                {{ slider.description }}
+              </p>
+            </div>
+          </div>
+        </Transition>
+      </div>
 
       <UiCardFooter class="border-t border-border flex items-center justify-between">
         <div class="flex gap-2">
@@ -237,6 +306,7 @@ import {
   ClockIcon,
   AlertTriangleIcon,
   LogInIcon,
+  SlidersHorizontalIcon,
 } from 'lucide-vue-next';
 import type { IntegrationConfig, ConnectionTestResult, ApiError } from '~/types/api';
 import { PlexOAuth } from '~/utils/plexOAuth';
@@ -251,6 +321,7 @@ import {
 
 const api = useApi();
 const { addToast } = useToast();
+const { t } = useI18n();
 
 const loading = ref(true);
 const integrations = ref<IntegrationConfig[]>([]);
@@ -258,6 +329,86 @@ const showModal = ref(false);
 const editingIntegration = ref<IntegrationConfig | null>(null);
 const saving = ref(false);
 const formError = ref('');
+
+// ─── Per-integration custom weight overrides (local state only) ──────────────
+interface WeightOverrides {
+  enabled: boolean;
+  watchHistoryWeight: number;
+  lastWatchedWeight: number;
+  fileSizeWeight: number;
+  ratingWeight: number;
+  timeInLibraryWeight: number;
+  seriesStatusWeight: number;
+}
+
+const defaultWeights: Omit<WeightOverrides, 'enabled'> = {
+  watchHistoryWeight: 5,
+  lastWatchedWeight: 5,
+  fileSizeWeight: 5,
+  ratingWeight: 5,
+  timeInLibraryWeight: 5,
+  seriesStatusWeight: 5,
+};
+
+const customWeightsState = reactive<Record<number, WeightOverrides>>({});
+
+function getWeightState(integrationId: number): WeightOverrides {
+  if (!customWeightsState[integrationId]) {
+    customWeightsState[integrationId] = {
+      enabled: false,
+      ...defaultWeights,
+    };
+  }
+  return customWeightsState[integrationId];
+}
+
+function toggleCustomWeights(integrationId: number, enabled: boolean) {
+  const state = getWeightState(integrationId);
+  state.enabled = enabled;
+}
+
+function updateWeight(integrationId: number, key: string, value: number) {
+  const state = getWeightState(integrationId);
+  (state as Record<string, unknown>)[key] = value;
+}
+
+function getWeightValue(integrationId: number, key: string): number {
+  const state = getWeightState(integrationId);
+  return Number((state as Record<string, unknown>)[key] ?? 5);
+}
+
+const weightSliders = computed(() => [
+  {
+    key: 'watchHistoryWeight',
+    label: t('settings.weightWatchHistory'),
+    description: t('settings.weightWatchHistoryDesc'),
+  },
+  {
+    key: 'lastWatchedWeight',
+    label: t('settings.weightLastWatched'),
+    description: t('settings.weightLastWatchedDesc'),
+  },
+  {
+    key: 'fileSizeWeight',
+    label: t('settings.weightFileSize'),
+    description: t('settings.weightFileSizeDesc'),
+  },
+  {
+    key: 'ratingWeight',
+    label: t('settings.weightRating'),
+    description: t('settings.weightRatingDesc'),
+  },
+  {
+    key: 'timeInLibraryWeight',
+    label: t('settings.weightTimeInLibrary'),
+    description: t('settings.weightTimeInLibraryDesc'),
+  },
+  {
+    key: 'seriesStatusWeight',
+    label: t('settings.weightSeriesStatus'),
+    description: t('settings.weightSeriesStatusDesc'),
+  },
+]);
 
 const formState = reactive({ type: 'sonarr', name: '', url: '', apiKey: '' });
 
