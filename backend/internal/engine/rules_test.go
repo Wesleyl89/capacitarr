@@ -604,6 +604,31 @@ func TestMatchesRule_InCollection(t *testing.T) {
 	}
 }
 
+func TestMatchesRule_Watchlist(t *testing.T) {
+	tests := []struct {
+		name        string
+		onWatchlist bool
+		value       string
+		matched     bool
+	}{
+		{"true match", true, "true", true},
+		{"true no match", false, "true", false},
+		{"false match", false, "false", true},
+		{"false no match", true, "false", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := integrations.MediaItem{OnWatchlist: tc.onWatchlist}
+			rule := db.CustomRule{Enabled: true, Field: "watchlist", Operator: "==", Value: tc.value}
+			result, _ := matchesRuleWithValue(item, rule)
+			if result != tc.matched {
+				t.Errorf("watchlist == %s = %v, want %v", tc.value, result, tc.matched)
+			}
+		})
+	}
+}
+
 func TestMatchesRule_WatchedByReq(t *testing.T) {
 	tests := []struct {
 		name               string

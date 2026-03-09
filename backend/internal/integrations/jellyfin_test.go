@@ -360,3 +360,105 @@ func TestJellyfinClient_URLTrailingSlash(t *testing.T) {
 		t.Fatalf("TestConnection should handle trailing slash: %v", err)
 	}
 }
+
+func TestJellyfinClient_GetFavoritedItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == testJellyfinPathItems {
+			// Verify the IsFavorite=true query param is present
+			if r.URL.Query().Get("IsFavorite") != "true" {
+				t.Errorf("Expected IsFavorite=true query param, got %q", r.URL.Query().Get("IsFavorite"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"Items": [
+					{"Id":"item-1","Name":"Serenity","Type":"Movie"},
+					{"Id":"item-2","Name":"Firefly","Type":"Series"}
+				],
+				"TotalRecordCount": 2
+			}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
+	favs, err := client.GetFavoritedItems("admin-1")
+	if err != nil {
+		t.Fatalf("GetFavoritedItems should succeed: %v", err)
+	}
+	if len(favs) != 2 {
+		t.Fatalf("Expected 2 favorited items, got %d", len(favs))
+	}
+	if !favs["serenity"] {
+		t.Error("Expected 'serenity' in favorites map")
+	}
+	if !favs["firefly"] {
+		t.Error("Expected 'firefly' in favorites map")
+	}
+}
+
+func TestJellyfinClient_GetFavoritedItems_Empty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == testJellyfinPathItems {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"Items":[],"TotalRecordCount":0}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
+	favs, err := client.GetFavoritedItems("admin-1")
+	if err != nil {
+		t.Fatalf("GetFavoritedItems should succeed with empty: %v", err)
+	}
+	if len(favs) != 0 {
+		t.Errorf("Expected 0 favorites, got %d", len(favs))
+	}
+}
+
+func TestJellyfinClient_GetFavoritedItems_SkipsEmptyNames(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == testJellyfinPathItems {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"Items": [
+					{"Id":"1","Name":"","Type":"Movie"},
+					{"Id":"2","Name":"  ","Type":"Movie"},
+					{"Id":"3","Name":"Serenity","Type":"Movie"}
+				],
+				"TotalRecordCount": 3
+			}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
+	favs, err := client.GetFavoritedItems("admin-1")
+	if err != nil {
+		t.Fatalf("GetFavoritedItems should succeed: %v", err)
+	}
+	if len(favs) != 1 {
+		t.Fatalf("Expected 1 favorite (empty names skipped), got %d", len(favs))
+	}
+	if !favs["serenity"] {
+		t.Error("Expected 'serenity' in favorites map")
+	}
+}
+
+func TestJellyfinClient_GetFavoritedItems_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, testTautulliAPIKey)
+	_, err := client.GetFavoritedItems("admin-1")
+	if err == nil {
+		t.Fatal("Expected error for API failure")
+	}
+}

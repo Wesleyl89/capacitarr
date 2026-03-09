@@ -72,6 +72,16 @@ func newPlexMockServer(t *testing.T, movies []plexMockItem, shows []plexMockItem
 			if err := json.NewEncoder(w).Encode(resp); err != nil {
 				t.Fatalf("Failed to encode shows: %v", err)
 			}
+		case "/library/onDeck":
+			// Return empty on-deck for existing watch-data tests
+			resp := map[string]any{
+				"MediaContainer": map[string]any{
+					"Metadata": []any{},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode on-deck: %v", err)
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -198,6 +208,170 @@ func TestEnrichItems_TautulliTakesPriorityOverPlex(t *testing.T) {
 	}
 	if !items[0].LastPlayed.Equal(tautulliTime) {
 		t.Errorf("Expected Tautulli LastPlayed to be preserved, got %v", items[0].LastPlayed)
+	}
+}
+
+func TestEnrichItems_PlexWatchlistEnrichment(t *testing.T) {
+	// Mock Plex server: onDeck returns Serenity and Firefly episodes
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/identity":
+			_, _ = w.Write([]byte(`{"MediaContainer":{"machineIdentifier":"test","version":"1.0"}}`))
+		case "/library/onDeck":
+			resp := map[string]any{
+				"MediaContainer": map[string]any{
+					"Metadata": []map[string]any{
+						{"ratingKey": "101", "title": "Serenity", "type": "movie"},
+						{"ratingKey": "301", "title": "The Train Job", "type": "episode", "grandparentTitle": "Firefly"},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode on-deck: %v", err)
+			}
+		case "/library/sections":
+			_, _ = w.Write([]byte(`{"MediaContainer":{"Directory":[]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	plexClient := NewPlexClient(srv.URL, "test-token")
+
+	items := []MediaItem{
+		{Title: "Serenity", Type: MediaTypeMovie, ExternalID: "1"},
+		{Title: "Firefly", Type: MediaTypeShow, ExternalID: "2"},
+		{Title: "Firefly 2", Type: MediaTypeShow, ExternalID: "3"}, // not on deck
+	}
+
+	ec := EnrichmentClients{Plex: plexClient}
+	EnrichItems(items, ec)
+
+	if !items[0].OnWatchlist {
+		t.Error("Serenity: expected OnWatchlist=true (on Plex on-deck)")
+	}
+	if !items[1].OnWatchlist {
+		t.Error("Firefly: expected OnWatchlist=true (episode on Plex on-deck)")
+	}
+	if items[2].OnWatchlist {
+		t.Error("Firefly 2: expected OnWatchlist=false (not on deck)")
+	}
+}
+
+func TestEnrichItems_JellyfinFavoritesEnrichment(t *testing.T) {
+	// Mock Jellyfin server: admin user + favorites
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/Users":
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		case "/Users/admin-1/Items":
+			if r.URL.Query().Get("IsFavorite") == "true" {
+				_, _ = w.Write([]byte(`{
+					"Items": [{"Id":"1","Name":"Serenity","Type":"Movie"},{"Id":"2","Name":"Firefly","Type":"Series"}],
+					"TotalRecordCount": 2
+				}`))
+			} else {
+				_, _ = w.Write([]byte(`{"Items":[],"TotalRecordCount":0}`))
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	jellyfinClient := NewJellyfinClient(srv.URL, "test-key")
+
+	items := []MediaItem{
+		{Title: "Serenity", Type: MediaTypeMovie, ExternalID: "1"},
+		{Title: "Firefly", Type: MediaTypeShow, ExternalID: "2"},
+		{Title: "Firefly 2", Type: MediaTypeShow, ExternalID: "3"}, // not favorited
+	}
+
+	ec := EnrichmentClients{Jellyfin: jellyfinClient}
+	EnrichItems(items, ec)
+
+	if !items[0].OnWatchlist {
+		t.Error("Serenity: expected OnWatchlist=true (Jellyfin favorite)")
+	}
+	if !items[1].OnWatchlist {
+		t.Error("Firefly: expected OnWatchlist=true (Jellyfin favorite)")
+	}
+	if items[2].OnWatchlist {
+		t.Error("Firefly 2: expected OnWatchlist=false (not favorited)")
+	}
+}
+
+func TestEnrichItems_WatchlistPriorityPlexOverJellyfin(t *testing.T) {
+	// Mock Plex: only Serenity on deck
+	plexSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/library/onDeck":
+			resp := map[string]any{
+				"MediaContainer": map[string]any{
+					"Metadata": []map[string]any{
+						{"ratingKey": "101", "title": "Serenity", "type": "movie"},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case "/library/sections":
+			_, _ = w.Write([]byte(`{"MediaContainer":{"Directory":[]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer plexSrv.Close()
+
+	// Mock Jellyfin: Serenity AND Firefly favorited
+	jellyfinSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/Users":
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		case "/Users/admin-1/Items":
+			if r.URL.Query().Get("IsFavorite") == "true" {
+				_, _ = w.Write([]byte(`{
+					"Items": [{"Id":"1","Name":"Serenity","Type":"Movie"},{"Id":"2","Name":"Firefly","Type":"Series"}],
+					"TotalRecordCount": 2
+				}`))
+			} else {
+				_, _ = w.Write([]byte(`{"Items":[],"TotalRecordCount":0}`))
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer jellyfinSrv.Close()
+
+	plexClient := NewPlexClient(plexSrv.URL, "test-token")
+	jellyfinClient := NewJellyfinClient(jellyfinSrv.URL, "test-key")
+
+	items := []MediaItem{
+		{Title: "Serenity", Type: MediaTypeMovie, ExternalID: "1"},
+		{Title: "Firefly", Type: MediaTypeShow, ExternalID: "2"},
+		{Title: "Firefly 2", Type: MediaTypeShow, ExternalID: "3"}, // neither source
+	}
+
+	ec := EnrichmentClients{Plex: plexClient, Jellyfin: jellyfinClient}
+	EnrichItems(items, ec)
+
+	// Serenity: on Plex deck AND Jellyfin favorite — should be true
+	if !items[0].OnWatchlist {
+		t.Error("Serenity: expected OnWatchlist=true")
+	}
+	// Firefly: only Jellyfin favorite — should still be true (merged sources)
+	if !items[1].OnWatchlist {
+		t.Error("Firefly: expected OnWatchlist=true (from Jellyfin)")
+	}
+	// Firefly 2: neither source
+	if items[2].OnWatchlist {
+		t.Error("Firefly 2: expected OnWatchlist=false")
 	}
 }
 

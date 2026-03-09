@@ -282,6 +282,36 @@ func (p *PlexClient) GetBulkWatchData() (map[string]*MediaServerWatchData, error
 	return result, nil
 }
 
+// GetOnDeckItems returns a set of normalized title keys for items on the Plex
+// "On Deck" list. On-deck items are those a user has started watching or that
+// are next in a series they are watching — a strong signal of active interest.
+// The returned map is keyed by lowercase title for matching against *arr items.
+func (p *PlexClient) GetOnDeckItems() (map[string]bool, error) {
+	body, err := p.doRequest("/library/onDeck")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Plex on-deck items: %w", err)
+	}
+
+	var resp plexMediaResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse Plex on-deck response: %w", err)
+	}
+
+	result := make(map[string]bool)
+	for _, m := range resp.MediaContainer.Metadata {
+		// For episodes, use the show title (grandparentTitle) so the show-level
+		// item from *arr will match. For movies, use the title directly.
+		key := strings.ToLower(strings.TrimSpace(m.Title))
+		if m.GrandparentTitle != "" {
+			key = strings.ToLower(strings.TrimSpace(m.GrandparentTitle))
+		}
+		if key != "" {
+			result[key] = true
+		}
+	}
+	return result, nil
+}
+
 // Ensure PlexClient implements Integration
 var _ Integration = (*PlexClient)(nil)
 

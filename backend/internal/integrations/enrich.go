@@ -161,6 +161,74 @@ func EnrichItems(items []MediaItem, ec EnrichmentClients) {
 		}
 	}
 
+	// ─── Enrichment: Watchlist / Favorites ──────────────────────────────────
+	// Priority: Plex on-deck > Jellyfin favorites > Emby favorites.
+	// First source that identifies an item as on-watchlist wins (no overwrite).
+	watchlistSet := make(map[string]bool)
+	if ec.Plex != nil && len(items) > 0 {
+		slog.Info("Enriching items with Plex on-deck (watchlist) data", "component", "enrichment", "itemCount", len(items))
+		onDeck, err := ec.Plex.GetOnDeckItems()
+		if err != nil {
+			slog.Warn("Failed to fetch Plex on-deck items", "component", "enrichment", "operation", "fetch_plex_ondeck", "error", err)
+		} else {
+			for k, v := range onDeck {
+				watchlistSet[k] = v
+			}
+			slog.Info("Plex on-deck enrichment fetched", "component", "enrichment", "onDeckItems", len(onDeck))
+		}
+	}
+	if ec.Jellyfin != nil && len(items) > 0 {
+		slog.Info("Enriching items with Jellyfin favorites (watchlist) data", "component", "enrichment", "itemCount", len(items))
+		userID, err := ec.Jellyfin.GetAdminUserID()
+		if err != nil {
+			slog.Warn("Failed to get Jellyfin admin user for favorites", "component", "enrichment", "operation", "jellyfin_admin_user_favs", "error", err)
+		} else {
+			favs, err := ec.Jellyfin.GetFavoritedItems(userID)
+			if err != nil {
+				slog.Warn("Failed to fetch Jellyfin favorites", "component", "enrichment", "operation", "fetch_jellyfin_favs", "error", err)
+			} else {
+				for k, v := range favs {
+					if !watchlistSet[k] {
+						watchlistSet[k] = v
+					}
+				}
+				slog.Info("Jellyfin favorites enrichment fetched", "component", "enrichment", "favoriteItems", len(favs))
+			}
+		}
+	}
+	if ec.Emby != nil && len(items) > 0 {
+		slog.Info("Enriching items with Emby favorites (watchlist) data", "component", "enrichment", "itemCount", len(items))
+		userID, err := ec.Emby.GetAdminUserID()
+		if err != nil {
+			slog.Warn("Failed to get Emby admin user for favorites", "component", "enrichment", "operation", "emby_admin_user_favs", "error", err)
+		} else {
+			favs, err := ec.Emby.GetFavoritedItems(userID)
+			if err != nil {
+				slog.Warn("Failed to fetch Emby favorites", "component", "enrichment", "operation", "fetch_emby_favs", "error", err)
+			} else {
+				for k, v := range favs {
+					if !watchlistSet[k] {
+						watchlistSet[k] = v
+					}
+				}
+				slog.Info("Emby favorites enrichment fetched", "component", "enrichment", "favoriteItems", len(favs))
+			}
+		}
+	}
+	// Apply watchlist flags to items
+	if len(watchlistSet) > 0 {
+		matched := 0
+		for i := range items {
+			item := &items[i]
+			titleKey := normalizedTitleKey(item)
+			if watchlistSet[titleKey] {
+				item.OnWatchlist = true
+				matched++
+			}
+		}
+		slog.Info("Watchlist enrichment complete", "component", "enrichment", "watchlistItems", len(watchlistSet), "matched", matched)
+	}
+
 	// ─── Cross-reference: did the requestor watch it? ───────────────────────
 	for i := range items {
 		item := &items[i]

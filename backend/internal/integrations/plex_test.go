@@ -728,3 +728,119 @@ func TestPlexClient_MultiPartMedia(t *testing.T) {
 		t.Errorf("Expected path from first part, got %q", item.Path)
 	}
 }
+
+func TestPlexClient_GetOnDeckItems_Movies(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/library/onDeck" {
+			resp := map[string]any{
+				"MediaContainer": map[string]any{
+					"Metadata": []map[string]any{
+						{"ratingKey": "101", "title": "Serenity", "type": "movie"},
+						{"ratingKey": "102", "title": "Serenity 2", "type": "movie"},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	onDeck, err := client.GetOnDeckItems()
+	if err != nil {
+		t.Fatalf("GetOnDeckItems should succeed: %v", err)
+	}
+	if len(onDeck) != 2 {
+		t.Fatalf("Expected 2 on-deck items, got %d", len(onDeck))
+	}
+	if !onDeck["serenity"] {
+		t.Error("Expected 'serenity' in on-deck map")
+	}
+	if !onDeck["serenity 2"] {
+		t.Error("Expected 'serenity 2' in on-deck map")
+	}
+}
+
+func TestPlexClient_GetOnDeckItems_EpisodesUseShowTitle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/library/onDeck" {
+			resp := map[string]any{
+				"MediaContainer": map[string]any{
+					"Metadata": []map[string]any{
+						{
+							"ratingKey":        "301",
+							"title":            "The Train Job",
+							"type":             "episode",
+							"grandparentTitle": "Firefly",
+						},
+						{
+							"ratingKey":        "302",
+							"title":            "Bushwhacked",
+							"type":             "episode",
+							"grandparentTitle": "Firefly",
+						},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	onDeck, err := client.GetOnDeckItems()
+	if err != nil {
+		t.Fatalf("GetOnDeckItems should succeed: %v", err)
+	}
+	// Both episodes from the same show should produce a single "firefly" key
+	if len(onDeck) != 1 {
+		t.Fatalf("Expected 1 show key (deduplicated), got %d", len(onDeck))
+	}
+	if !onDeck["firefly"] {
+		t.Error("Expected 'firefly' in on-deck map (from grandparentTitle)")
+	}
+}
+
+func TestPlexClient_GetOnDeckItems_Empty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/library/onDeck" {
+			_, _ = w.Write([]byte(`{"MediaContainer":{"Metadata":[]}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	onDeck, err := client.GetOnDeckItems()
+	if err != nil {
+		t.Fatalf("GetOnDeckItems should succeed with empty deck: %v", err)
+	}
+	if len(onDeck) != 0 {
+		t.Errorf("Expected empty on-deck map, got %d entries", len(onDeck))
+	}
+}
+
+func TestPlexClient_GetOnDeckItems_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	_, err := client.GetOnDeckItems()
+	if err == nil {
+		t.Fatal("Expected error for API failure")
+	}
+}

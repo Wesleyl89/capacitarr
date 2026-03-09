@@ -366,103 +366,61 @@ Add `SettingsExportedEvent` and `SettingsImportedEvent` to `events/types.go` for
 
 ## Phase 4: Watchlist Enrichment
 
+**Status:** ✅ Complete
+
 ### Context
 
 The enrichment pipeline in `integrations/enrich.go` already follows a priority chain: Tautulli > Plex > Jellyfin > Emby for watch data, plus Overseerr for request data. This phase adds watchlist data from Plex, Jellyfin, and Emby as a new enrichment dimension, and wires it into the custom rules engine.
 
 ### Steps
 
-#### Step 4.1: Add `OnWatchlist` field to `MediaItem`
+#### Step 4.1: Add `OnWatchlist` field to `MediaItem` ✅
 
-In `integrations/types.go`, add to the `MediaItem` struct:
+In `integrations/types.go`, added `OnWatchlist bool` to the `MediaItem` struct in the enrichment data section.
 
-```go
-OnWatchlist bool `json:"onWatchlist,omitempty"` // Item is on a user's watchlist or favorited
-```
+#### Step 4.2: Implement Plex watchlist fetching ✅
 
-No database migration needed — `MediaItem` is an in-memory struct, not a DB model.
+In `integrations/plex.go`, added `GetOnDeckItems()` method. Uses the `/library/onDeck` endpoint which returns items users are actively interested in watching (partially watched or next in a series). For episodes, uses `grandparentTitle` (show name) for matching against *arr items. Added 4 tests covering movies, episodes (show title dedup), empty deck, and API error.
 
-#### Step 4.2: Implement Plex watchlist fetching
+**Approach chosen:** The Plex Discover API (true user watchlist) requires a different auth flow (Plex account token, not server token). Since Capacitarr uses server tokens, we use `/library/onDeck` as a proxy for watchlist intent — items on deck signal active interest.
 
-In `integrations/plex.go`, add a method:
+#### Step 4.3: Implement Jellyfin favorites fetching ✅
 
-```go
-func (p *PlexClient) GetWatchlistItems() (map[string]bool, error)
-```
+In `integrations/jellyfin.go`, added `GetFavoritedItems(userID)` method. Uses the Items API with `IsFavorite=true&IncludeItemTypes=Movie,Series&Recursive=true` filter. Follows the same paginated pattern as `GetBulkWatchData`. Added 4 tests.
 
-This calls the Plex watchlist API endpoint and returns a map of title keys (using the same `normalizedTitleKey` pattern from `enrich.go`) to boolean.
+#### Step 4.4: Implement Emby favorites fetching ✅
 
-**Research required:** Determine the correct Plex API endpoint for watchlist data. Options include:
-- `/library/sections/{id}/unwatched` — items not yet watched
-- Plex Discover watchlist API — user-curated "want to watch" list
-- Per-user watchlist via managed user tokens
+In `integrations/emby.go`, added `GetFavoritedItems(userID)` method. Same API pattern as Jellyfin (Emby and Jellyfin share the same API surface for favorites). Added 4 tests.
 
-Document the approach chosen and any limitations.
+#### Step 4.5: Add watchlist enrichment pass to `EnrichItems()` ✅
 
-#### Step 4.3: Implement Jellyfin favorites fetching
+In `integrations/enrich.go`, added a new enrichment section after Emby watch history and before the cross-reference section. Builds a merged `watchlistSet` map from Plex on-deck > Jellyfin favorites > Emby favorites (first source wins for each key), then applies `OnWatchlist=true` to matching items. Added 3 enrichment tests (Plex-only, Jellyfin-only, combined priority).
 
-In `integrations/jellyfin.go`, add a method:
+**Note:** Also updated the existing `newPlexMockServer` helper to handle the `/library/onDeck` endpoint (returns empty), so existing Plex enrichment tests continue to work.
 
-```go
-func (j *JellyfinClient) GetFavoritedItems(userID string) (map[string]bool, error)
-```
+#### Step 4.6: Add `watchlist` as a rule field in the engine ✅
 
-Jellyfin exposes favorites via the Items API with `IsFavorite=true` filter. This serves as the Jellyfin equivalent of a watchlist.
+In `engine/rules.go`, added `case "watchlist"` to the rule evaluation switch. Follows the same boolean pattern as `incollection` and `requested`. Added `TestMatchesRule_Watchlist` with 4 subtests (true/false × match/no-match).
 
-#### Step 4.4: Implement Emby favorites fetching
+#### Step 4.7: Add `watchlist` to the rule fields API ✅
 
-In `integrations/emby.go`, add a method:
+In `routes/rulefields.go`, updated `appendEnrichmentFields()` to include `watchlist` alongside `incollection` when `p.hasMedia` is true.
 
-```go
-func (e *EmbyClient) GetFavoritedItems(userID string) (map[string]bool, error)
-```
+#### Step 4.8: Update frontend rule builder ✅
 
-Same pattern as Jellyfin — Emby's API is nearly identical for favorites.
+In `frontend/app/utils/ruleFieldMaps.ts`:
+- Added `watchlist: 'On Watchlist'` to `fieldLabelMap`
+- Added `'watchlist'` to `booleanFields` set for conflict detection
 
-#### Step 4.5: Add watchlist enrichment pass to `EnrichItems()`
+The `RuleBuilder.vue` component fetches fields dynamically from the `/rule-fields` API, so no template changes were needed.
 
-In `integrations/enrich.go`, add a new enrichment section after the existing watch data and request data enrichment. Follow the same pattern:
+#### Step 4.9: Write tests ✅
 
-```go
-// ─── Enrichment: Watchlist / Favorites ──────────────────────────────────
-```
+Tests were written inline with each step above. All tests pass.
 
-Priority: Plex watchlist > Jellyfin favorites > Emby favorites (first source wins, same as watch data).
+#### Step 4.10: Run `make ci` and fix any issues ✅
 
-For each item, if the title key matches a watchlist entry, set `item.OnWatchlist = true`.
-
-#### Step 4.6: Add `watchlist` as a rule field in the engine
-
-In `engine/rules.go`, add support for a `watchlist` field in the rule evaluation switch statement. This reads `item.OnWatchlist` and supports the `==` operator with boolean values (`true`/`false`), following the same pattern as the existing `requested` and `incollection` fields.
-
-#### Step 4.7: Add `watchlist` to the rule fields API
-
-In `routes/rulefields.go`, update `appendEnrichmentFields()` to include the watchlist field when a media server integration is enabled:
-
-```go
-if p.hasMedia {
-    fields = append(fields,
-        map[string]any{"field": "incollection", "label": "In Collection", "type": "boolean", "operators": []string{"=="}},
-        map[string]any{"field": "watchlist", "label": "On Watchlist", "type": "boolean", "operators": []string{"=="}},
-    )
-}
-```
-
-#### Step 4.8: Update frontend rule builder
-
-Add `watchlist` to the field dropdown in the rule builder UI. When selected, show a true/false value selector (same UX as the existing "Is Requested" and "In Collection" boolean fields).
-
-**Example rule:** "On Watchlist == true → always_keep" — protects any item on a user's watchlist from deletion.
-
-#### Step 4.9: Write tests
-
-- `integrations/plex_test.go` — Test `GetWatchlistItems()` with mock HTTP responses
-- `integrations/jellyfin_test.go` — Test `GetFavoritedItems()` with mock HTTP responses
-- `integrations/emby_test.go` — Test `GetFavoritedItems()` with mock HTTP responses
-- `integrations/enrich_test.go` — Test watchlist enrichment pass (verify `OnWatchlist` is set correctly, verify priority chain)
-- `engine/rules_test.go` — Test `watchlist` field evaluation in rules (both `true` and `false` values, with `always_keep` and `prefer_remove` effects)
-
-#### Step 4.10: Run `make ci` and fix any issues
+`make ci` passed. Fixed a pre-existing `goconst` lint warning in `services/integration.go` by extracting rule action string literals (`"quality"`, `"tag"`, `"genre"`, `"language"`) into package-level constants.
 
 ---
 

@@ -65,6 +65,7 @@ export const fieldLabelMap: Record<string, string> = {
   requestcount: 'Request Count',
   requestedby: 'Requested By',
   incollection: 'In Collection',
+  watchlist: 'On Watchlist',
   watchedbyreq: 'Watched by Requestor',
   type: 'Media Type',
 };
@@ -136,7 +137,7 @@ const numericFields = new Set([
 ]);
 
 /** Fields that use boolean values */
-const booleanFields = new Set(['monitored', 'requested']);
+const booleanFields = new Set(['monitored', 'requested', 'watchlist']);
 
 function ruleEffectDirection(rule: CustomRule): 'keep' | 'remove' | 'unknown' {
   const eff = rule.effect || legacyEffect(rule.type ?? '', rule.intensity ?? '');

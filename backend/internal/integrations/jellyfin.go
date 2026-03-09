@@ -129,6 +129,49 @@ func (j *JellyfinClient) GetBulkWatchData(userID string) (map[string]*MediaServe
 	return result, nil
 }
 
+// GetFavoritedItems returns a set of normalized title keys for items marked as
+// favorites by the user. Jellyfin's Items API supports IsFavorite=true as a
+// filter. The returned map is keyed by lowercase title for matching against
+// *arr items.
+func (j *JellyfinClient) GetFavoritedItems(userID string) (map[string]bool, error) {
+	result := make(map[string]bool)
+	startIndex := 0
+	pageSize := 500
+
+	for {
+		endpoint := fmt.Sprintf(
+			"/Users/%s/Items?IsFavorite=true&IncludeItemTypes=Movie,Series&Recursive=true&StartIndex=%d&Limit=%d",
+			userID, startIndex, pageSize,
+		)
+		body, err := j.doRequest(endpoint)
+		if err != nil {
+			return result, fmt.Errorf("failed to fetch Jellyfin favorites: %w", err)
+		}
+
+		var resp struct {
+			Items            []jellyfinItem `json:"Items"`
+			TotalRecordCount int            `json:"TotalRecordCount"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return result, fmt.Errorf("failed to parse Jellyfin favorites: %w", err)
+		}
+
+		for _, item := range resp.Items {
+			key := strings.ToLower(strings.TrimSpace(item.Name))
+			if key != "" {
+				result[key] = true
+			}
+		}
+
+		startIndex += len(resp.Items)
+		if startIndex >= resp.TotalRecordCount || len(resp.Items) == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
 // GetAdminUserID returns the first admin user's ID for making user-specific queries.
 func (j *JellyfinClient) GetAdminUserID() (string, error) {
 	body, err := j.doRequest("/Users")

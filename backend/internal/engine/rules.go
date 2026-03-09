@@ -290,6 +290,9 @@ func matchesRuleWithValue(item integrations.MediaItem, rule db.CustomRule) (bool
 		inCollection := len(item.Collections) > 0
 		ruleBool := val == boolTrue
 		return inCollection == ruleBool, fmt.Sprintf("%d collections", len(item.Collections))
+	case "watchlist":
+		ruleBool := val == boolTrue
+		return item.OnWatchlist == ruleBool, fmt.Sprintf("on watchlist: %v", item.OnWatchlist)
 	case "watchedbyreq":
 		ruleBool := val == boolTrue
 		return item.WatchedByRequestor == ruleBool, fmt.Sprintf("watched by requestor: %v", item.WatchedByRequestor)

@@ -22,6 +22,14 @@ var (
 	ErrUnknownAction              = errors.New("unknown action")
 )
 
+// Rule value action identifiers used in FetchRuleValues switch.
+const (
+	ruleActionQuality  = "quality"
+	ruleActionTag      = "tag"
+	ruleActionGenre    = "genre"
+	ruleActionLanguage = "language"
+)
+
 // DiskGroupUpserter provides write access to disk groups.
 // Defined here to avoid import cycles between IntegrationService and SettingsService.
 type DiskGroupUpserter interface {
@@ -246,21 +254,21 @@ func (s *IntegrationService) FetchRuleValues(integrationID uint, action string) 
 	var result map[string]any
 
 	switch action {
-	case "quality":
+	case ruleActionQuality:
 		profiles, fetchErr := fetcher.GetQualityProfiles()
 		if fetchErr != nil {
 			return nil, fmt.Errorf("failed to fetch quality profiles: %w", fetchErr)
 		}
 		result = map[string]any{"type": "closed", "options": profiles}
 
-	case "tag":
+	case ruleActionTag:
 		tags, fetchErr := fetcher.GetTags()
 		if fetchErr != nil {
 			return nil, fmt.Errorf("failed to fetch tags: %w", fetchErr)
 		}
 		result = map[string]any{"type": "combobox", "suggestions": tags}
 
-	case "genre":
+	case ruleActionGenre:
 		result = map[string]any{
 			"type": "combobox",
 			"suggestions": []integrations.NameValue{
@@ -280,7 +288,7 @@ func (s *IntegrationService) FetchRuleValues(integrationID uint, action string) 
 			},
 		}
 
-	case "language":
+	case ruleActionLanguage:
 		langs, fetchErr := fetcher.GetLanguages()
 		if fetchErr != nil {
 			return nil, fmt.Errorf("failed to fetch languages: %w", fetchErr)

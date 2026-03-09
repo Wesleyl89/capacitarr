@@ -82,6 +82,7 @@ type MediaItem struct {
 	Collections        []string `json:"collections,omitempty"`    // Plex collection membership
 	WatchedByUsers     []string `json:"watchedByUsers,omitempty"` // Users who watched (from Tautulli)
 	WatchedByRequestor bool     `json:"watchedByRequestor"`       // Cross-ref: requestor watched it
+	OnWatchlist        bool     `json:"onWatchlist,omitempty"`    // Item is on a user's watchlist or favorited
 }
 
 // MediaType represents different forms of media content
