@@ -6,7 +6,7 @@
  * engine_error) instead of polling. fetchStats() is kept for initial hydration
  * on mount and after explicit user actions (mode change).
  */
-import type { WorkerStats, PreferenceSet } from '~/types/api';
+import type { WorkerStats, PreferenceSet, DeletionProgress } from '~/types/api';
 
 // Module-level flag: SSE handlers are registered once globally.
 let _sseRegistered = false;
@@ -28,6 +28,15 @@ export function useEngineControl() {
   const workerStats = useState<WorkerStats | null>('engineWorkerStats', () => null);
   const runNowLoading = ref(false);
   const changingMode = ref(false);
+
+  // Deletion progress — updated by SSE deletion_progress events
+  const deletionProgress = useState<DeletionProgress | null>('engineDeletionProgress', () => null);
+  const isDeletionActive = computed(
+    () =>
+      deletionProgress.value !== null &&
+      deletionProgress.value.batchTotal > 0 &&
+      deletionProgress.value.processed < deletionProgress.value.batchTotal,
+  );
 
   // Track previous isRunning state for run-completion detection
   const prevIsRunning = useState<boolean>('enginePrevIsRunning', () => false);
@@ -136,6 +145,33 @@ export function useEngineControl() {
         };
       }
     });
+
+    on('deletion_progress', (data: unknown) => {
+      const event = data as DeletionProgress;
+      deletionProgress.value = event;
+      // Sync relevant fields into workerStats for the existing dashboard cards
+      if (workerStats.value) {
+        workerStats.value = {
+          ...workerStats.value,
+          currentlyDeleting: event.currentItem,
+          queueDepth: event.queueDepth,
+          processed: event.processed,
+          failed: event.failed,
+        };
+      }
+    });
+
+    on('deletion_batch_complete', () => {
+      // Clear the progress indicator — batch is done
+      deletionProgress.value = null;
+      if (workerStats.value) {
+        workerStats.value = {
+          ...workerStats.value,
+          currentlyDeleting: '',
+          queueDepth: 0,
+        };
+      }
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -197,6 +233,8 @@ export function useEngineControl() {
     queueDepth,
     isRunning,
     pollIntervalSeconds,
+    deletionProgress: readonly(deletionProgress),
+    isDeletionActive,
     runNowLoading: readonly(runNowLoading),
     changingMode: readonly(changingMode),
     runCompletionCounter: readonly(runCompletionCounter),

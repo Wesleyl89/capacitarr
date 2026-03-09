@@ -151,6 +151,19 @@ export interface WorkerStats {
 }
 
 // ---------------------------------------------------------------------------
+// Deletion Progress (SSE: deletion_progress event)
+// ---------------------------------------------------------------------------
+
+export interface DeletionProgress {
+  currentItem: string;
+  queueDepth: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  batchTotal: number;
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard Stats
 // ---------------------------------------------------------------------------
 

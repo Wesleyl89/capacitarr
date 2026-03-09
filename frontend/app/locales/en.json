@@ -141,6 +141,10 @@
   "dashboard.showDetails": "Show details",
   "dashboard.hideDetails": "Hide details",
   "dashboard.engineActivityTitle": "Engine Activity",
+  "dashboard.deletionProgress": "Deletion Progress",
+  "dashboard.deletionProgressDetail": "Deleting {current}",
+  "dashboard.deletionProgressCount": "{processed} of {total}",
+  "dashboard.deletionProgressFailed": "{failed} failed",
   "dashboard.last7Days": "Last 7 days",
 
   "audit.title": "Audit History",

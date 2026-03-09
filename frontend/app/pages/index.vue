@@ -319,6 +319,54 @@
       </UiCardContent>
     </UiCard>
 
+    <!-- Deletion Progress Indicator (visible when a deletion batch is active) -->
+    <div
+      v-if="engineIsDeletionActive && engineDeletionProgress"
+      v-motion
+      :initial="{ opacity: 0, y: -8 }"
+      :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }"
+      class="mb-6 -mt-3"
+    >
+      <UiCard>
+        <UiCardContent class="pt-4 pb-4">
+          <div class="flex items-center gap-2 mb-2">
+            <Trash2Icon class="w-4 h-4 text-destructive shrink-0" />
+            <span class="text-sm font-medium text-destructive">
+              {{ t('dashboard.deletionProgress') }}
+            </span>
+            <span class="ml-auto text-xs tabular-nums text-muted-foreground">
+              {{
+                t('dashboard.deletionProgressCount', {
+                  processed: engineDeletionProgress.processed,
+                  total: engineDeletionProgress.batchTotal,
+                })
+              }}
+              <template v-if="engineDeletionProgress.failed > 0">
+                ·
+                <span class="text-destructive">
+                  {{
+                    t('dashboard.deletionProgressFailed', {
+                      failed: engineDeletionProgress.failed,
+                    })
+                  }}
+                </span>
+              </template>
+            </span>
+          </div>
+          <UiProgress :model-value="deletionProgressPct" class="h-1.5 mb-2" />
+          <div
+            v-if="engineDeletionProgress.currentItem"
+            class="text-xs text-muted-foreground truncate"
+            :title="engineDeletionProgress.currentItem"
+          >
+            {{
+              t('dashboard.deletionProgressDetail', { current: engineDeletionProgress.currentItem })
+            }}
+          </div>
+        </UiCardContent>
+      </UiCard>
+    </div>
+
     <!-- Approval Queue (only in approval mode) -->
     <ApprovalQueueCard v-if="approvalQueueVisible" />
 
@@ -587,6 +635,7 @@ import {
 import { formatBytes } from '~/utils/format';
 import type {
   ActivityEvent,
+  DeletionProgress,
   DiskGroup,
   IntegrationConfig,
   DashboardStats,
@@ -606,6 +655,8 @@ const {
   lastRunFlagged: engineLastRunFlagged,
   isRunning: engineIsRunning,
   pollIntervalSeconds: enginePollInterval,
+  deletionProgress: engineDeletionProgress,
+  isDeletionActive: engineIsDeletionActive,
   runNowLoading: engineRunNowLoading,
   runCompletionCounter: engineRunCompletionCounter,
   modeLabel: engineModeLabel,
@@ -738,6 +789,8 @@ function eventIcon(eventType: string) {
       return AlertCircleIcon;
     case 'deletion_batch_complete':
       return CheckCircle2Icon;
+    case 'deletion_progress':
+      return Trash2Icon;
     // Disk
     case 'threshold_breached':
       return AlertCircleIcon;
@@ -805,6 +858,7 @@ function eventIconClass(eventType: string): string {
     case 'notification_delivery_failed':
       return 'text-destructive';
     case 'deletion_dry_run':
+    case 'deletion_progress':
     case 'approval_orphans_recovered':
       return 'text-warning';
     case 'rule_updated':
@@ -842,6 +896,14 @@ const formattedGrowthRate = computed(() => {
   const bytes = dashboardStats.value.growthBytesPerWeek;
   const prefix = bytes >= 0 ? '+' : '';
   return `${prefix}${formatBytes(Math.abs(bytes))} / week`;
+});
+
+// --- Deletion progress percentage ---
+const deletionProgressPct = computed(() => {
+  if (!engineDeletionProgress.value || engineDeletionProgress.value.batchTotal === 0) return 0;
+  return Math.round(
+    (engineDeletionProgress.value.processed / engineDeletionProgress.value.batchTotal) * 100,
+  );
 });
 
 // --- Status banner ---
@@ -887,7 +949,11 @@ const countdownText = computed(() => {
   return t('dashboard.nextRunHourMin', { hour: hours, min: mins });
 });
 
-// --- Auto refresh (non-event data only: disk groups, integrations, dashboard stats) ---
+// --- Auto refresh (non-event data: disk groups, integrations, dashboard stats) ---
+// Engine stats (workerStats) are updated in real-time via SSE events:
+//   engine_start, engine_complete, engine_error, engine_mode_changed, deletion_progress.
+// The periodic fetchDashboardData() still calls engineFetchStats() as a reconciliation
+// fallback for fields not covered by SSE (e.g. lastRunFreedBytes, protectedCount).
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function startAutoRefresh() {
@@ -968,6 +1034,7 @@ const activityEventTypes = [
   'deletion_failed',
   'deletion_dry_run',
   'deletion_batch_complete',
+  'deletion_progress',
   'threshold_breached',
   'update_available',
   'rule_created',
@@ -984,6 +1051,24 @@ const activityEventTypes = [
 
 // Keep handler refs so we can unsubscribe on unmount
 const _activityHandlers = new Map<string, (data: unknown) => void>();
+
+// Handler: deletion_progress SSE event — patch last sparkline data point in real-time
+function handleDeletionProgressSparkline(data: unknown) {
+  const event = data as DeletionProgress;
+  const history = engineHistoryData.value;
+  if (history.length > 0) {
+    const last = history[history.length - 1];
+    // Mutate + reassign to trigger Vue reactivity on the sparkline computed properties
+    engineHistoryData.value = [...history.slice(0, -1), { ...last, deleted: event.succeeded }];
+  }
+}
+
+// Handler: deletion_batch_complete SSE event — re-fetch engine history for authoritative data
+function handleDeletionBatchCompleteRefresh() {
+  fetchDashboardData(true);
+  fetchEngineHistory();
+  refreshKey.value++;
+}
 
 // Handler: approval queue changes — refresh the queue
 function handleApprovalChange() {
@@ -1009,12 +1094,11 @@ onMounted(async () => {
   sseOn('approval_orphans_recovered', handleApprovalChange);
   sseOn('deletion_success', handleApprovalChange);
 
+  // When a deletion completes, patch the most recent sparkline data point in real-time
+  sseOn('deletion_progress', handleDeletionProgressSparkline);
+
   // When all deletions for a cycle finish, refresh dashboard stats — the numbers are now final
-  sseOn('deletion_batch_complete', () => {
-    fetchDashboardData(true);
-    fetchEngineHistory();
-    refreshKey.value++;
-  });
+  sseOn('deletion_batch_complete', handleDeletionBatchCompleteRefresh);
 });
 
 onUnmounted(() => {
@@ -1025,6 +1109,10 @@ onUnmounted(() => {
     sseOff(eventType, handler);
   }
   _activityHandlers.clear();
+
+  // Unsubscribe deletion progress handlers
+  sseOff('deletion_progress', handleDeletionProgressSparkline);
+  sseOff('deletion_batch_complete', handleDeletionBatchCompleteRefresh);
 
   // Unsubscribe approval handlers
   sseOff('approval_approved', handleApprovalChange);
