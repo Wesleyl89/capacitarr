@@ -10,27 +10,24 @@ Higher score = more likely to be deleted.
 flowchart TD
     ITEMS["Media Items<br/>from Sonarr, Radarr, etc."]
     RULES["Protection Rules<br/>always_keep, prefer_keep, etc."]
-    PREFS["Preference Weights<br/>0–10 sliders per factor"]
+    PREFS["Preference Weights<br/>0-10 sliders per factor"]
 
     EVAL["EvaluateMedia<br/>Score each item"]
-    RULE_CHECK{"Rule matched?"}
-    ABS_KEEP{"always_keep?"}
+    RULE_CHECK{"Rule matched?<br/>always_keep = immune"}
     CALC["calculateScore<br/>Weighted factor sum"]
-    MODIFY["Apply rule modifier<br/>score × modifier"]
+    MODIFY["Apply rule modifier<br/>score x modifier"]
     SORT["SortEvaluated<br/>Highest score first"]
     OUTPUT["Ranked Deletion Queue"]
 
-    ITEMS --> EVAL
-    PREFS --> EVAL
-    RULES --> EVAL
-    EVAL --> RULE_CHECK
-    RULE_CHECK -->|"Yes"| ABS_KEEP
-    RULE_CHECK -->|"No"| CALC
-    ABS_KEEP -->|"Yes"| OUTPUT
-    ABS_KEEP -->|"No"| CALC
-    CALC --> MODIFY
-    MODIFY --> SORT
-    SORT --> OUTPUT
+    ITEMS ==> EVAL
+    PREFS ==> EVAL
+    RULES -.->|"override"| EVAL
+    EVAL ==> RULE_CHECK
+    RULE_CHECK -.->|"always_keep"| OUTPUT
+    RULE_CHECK ==>|"score"| CALC
+    CALC ==> MODIFY
+    MODIFY ==> SORT
+    SORT ==> OUTPUT
 ```
 
 ## Scoring Factors
@@ -216,7 +213,7 @@ When two items have the same score (within a tolerance of 0.0001), a tiebreaker 
 flowchart TD
     POLL["Poller fetches media<br/>from all integrations"]
     GROUP["Items grouped<br/>by disk group"]
-    THRESHOLD{"Disk usage<br/>≥ threshold?"}
+    THRESHOLD{"Disk usage<br/>above threshold?"}
     EVALUATE["EvaluateMedia<br/>Score + rules for each item"]
     RANK["SortEvaluated<br/>Rank by score, apply tiebreaker"]
     PREVIEW["Preview queue<br/>shown on dashboard"]
@@ -232,7 +229,7 @@ flowchart TD
     EVALUATE --> RANK
     RANK --> PREVIEW
     PREVIEW --> MODE
-    MODE -->|"Dry Run"| NOTIFY
+    MODE -.->|"Dry Run"| NOTIFY
     MODE -->|"Approval"| APPROVE
-    MODE -->|"Auto"| AUTO
+    MODE ==>|"Auto"| AUTO
 ```

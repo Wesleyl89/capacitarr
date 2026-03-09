@@ -5,8 +5,8 @@
  * Rewrites relative markdown links (e.g. `(deployment.md)`) to absolute
  * Nuxt Content paths (e.g. `(/docs/deployment)`) so prerender crawling works.
  */
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const ROOT = join(import.meta.dirname, '..')
 const DOCS_SRC = join(ROOT, '..', 'docs')
@@ -62,22 +62,8 @@ const changelogContent = readFileSync(changelogSrc, 'utf-8')
 const changelogMd = `---\ntitle: Changelog\n---\n\n${changelogContent}`
 writeFileSync(join(CONTENT_DOCS, 'changelog.md'), changelogMd)
 
-// Sync screenshots from ../screenshots/ to public/screenshots/
-const SCREENSHOTS_SRC = join(ROOT, '..', 'screenshots')
-const SCREENSHOTS_DEST = join(ROOT, 'public', 'screenshots')
-mkdirSync(SCREENSHOTS_DEST, { recursive: true })
+// Screenshots are managed as lossless WebP files in public/screenshots/.
+// They are converted once from ../screenshots/*.png using sharp.
+// The sync script does not manage them — see docs/plans/ for the conversion process.
 
-import { readdirSync } from 'node:fs'
-const screenshotFiles = readdirSync(SCREENSHOTS_SRC).filter(f => /\.(png|jpe?g|webp|gif|svg)$/i.test(f))
-for (const file of screenshotFiles) {
-  cpSync(join(SCREENSHOTS_SRC, file), join(SCREENSHOTS_DEST, file))
-  // Also create a clean-name alias (e.g. 01_dashboard_20260303.png → dashboard.png)
-  const match = file.match(/^\d+_(.+?)_\d{8}\.(.+)$/)
-  if (match) {
-    const cleanName = `${match[1].replace(/_/g, '-')}.${match[2]}`
-    cpSync(join(SCREENSHOTS_SRC, file), join(SCREENSHOTS_DEST, cleanName))
-  }
-}
-
-console.log(`✓ ${screenshotFiles.length} screenshots synced to public/screenshots/`)
 console.log('✓ Docs synced to content/docs/')

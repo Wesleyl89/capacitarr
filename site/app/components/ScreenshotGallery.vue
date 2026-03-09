@@ -10,37 +10,42 @@ const base = config.app.baseURL?.replace(/\/$/, '') || ''
 
 const screenshots: Screenshot[] = [
   {
-    src: `${base}/screenshots/dashboard.png`,
+    src: `${base}/screenshots/dashboard.webp`,
     title: 'Dashboard',
     description: 'Real-time overview of your media library capacity across all disk groups',
   },
   {
-    src: `${base}/screenshots/weights.png`,
+    src: `${base}/screenshots/weights.webp`,
     title: 'Scoring Weights',
     description: 'Fine-tune scoring dimensions with intuitive weight sliders',
   },
   {
-    src: `${base}/screenshots/deletion-priority.png`,
+    src: `${base}/screenshots/custom-rules.webp`,
+    title: 'Custom Rules',
+    description: 'Build sophisticated cascading rules with conditions, weights, and overrides',
+  },
+  {
+    src: `${base}/screenshots/deletion-priority.webp`,
     title: 'Deletion Priority',
     description: 'Transparent priority rankings with full score breakdowns',
   },
   {
-    src: `${base}/screenshots/audit-log.png`,
+    src: `${base}/screenshots/audit-log.webp`,
     title: 'Audit Log',
     description: 'Complete history of every action taken, fully searchable',
   },
   {
-    src: `${base}/screenshots/settings.png`,
+    src: `${base}/screenshots/settings.webp`,
     title: 'Settings',
     description: 'Connect and configure all your integrations in one place',
   },
   {
-    src: `${base}/screenshots/scorecard-keep.png`,
+    src: `${base}/screenshots/scorecard-keep.webp`,
     title: 'Score Detail — Protected',
     description: 'See exactly why an item is protected, with matched rule and override explanation',
   },
   {
-    src: `${base}/screenshots/scorecard-rules.png`,
+    src: `${base}/screenshots/scorecard-rules.webp`,
     title: 'Score Detail — Breakdown',
     description: 'Full weighted score breakdown with every factor, custom rule modifiers, and final calculation',
   },
@@ -121,6 +126,8 @@ onMounted(() => {
             :src="screenshots[activeIndex].src"
             :alt="screenshots[activeIndex].title"
             class="screenshot-image"
+            width="2880"
+            height="1800"
             loading="lazy"
           >
         </div>
@@ -266,12 +273,15 @@ onMounted(() => {
 
 .screenshot-image-wrapper {
   background: var(--color-neutral-950);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
 }
 
 .screenshot-image {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
+  object-fit: cover;
 }
 
 .featured-description {

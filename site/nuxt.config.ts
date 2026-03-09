@@ -27,6 +27,9 @@ export default defineNuxtConfig({
         },
       },
     },
+    search: {
+      enabled: true,
+    },
   },
 
   nitro: {

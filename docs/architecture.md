@@ -7,6 +7,7 @@ Capacitarr is a single-container application that bundles a Go backend, a Nuxt 4
 ```mermaid
 flowchart TD
     subgraph CONTAINER["Docker Container"]
+        direction LR
         FRONTEND["Nuxt 4 Frontend<br/>Vue 3 + Tailwind CSS 4 + shadcn-vue"]
         BACKEND["Go Backend<br/>Echo + GORM + Service Layer"]
         DB["SQLite Database<br/>/config/capacitarr.db"]
@@ -15,13 +16,13 @@ flowchart TD
         EVENT_BUS["Event Bus<br/>Typed pub/sub fan-out"]
         SSE["SSE Broadcaster<br/>Real-time event stream"]
 
-        FRONTEND -->|"REST API + SSE"| BACKEND
+        FRONTEND -->|"REST API"| BACKEND
         BACKEND --> DB
         BACKEND --> ENGINE
         BACKEND --> POLLER
-        BACKEND --> EVENT_BUS
-        EVENT_BUS --> SSE
-        SSE -->|"Server-Sent Events"| FRONTEND
+        BACKEND -.->|"publish"| EVENT_BUS
+        EVENT_BUS -.-> SSE
+        SSE -.->|"Server-Sent Events"| FRONTEND
     end
 
     subgraph ARR_APPS["*arr Apps"]
@@ -30,8 +31,6 @@ flowchart TD
         LIDARR["Lidarr"]
         READARR["Readarr"]
     end
-
-
 
     subgraph MEDIA_SERVERS["Media Servers"]
         PLEX["Plex"]
@@ -48,6 +47,12 @@ flowchart TD
     POLLER -->|"Fetch watch data"| MEDIA_SERVERS
     POLLER -->|"Fetch requests + history"| ENRICHMENT
     ENGINE -->|"Delete lowest-scored items"| ARR_APPS
+
+    subgraph LEGEND["Edge Legend"]
+        L_SOLID["Solid = data flow"]
+        L_DASHED["Dashed = event / async"]
+        L_THICK["Thick = critical path"]
+    end
 ```
 
 ## Technology Stack
@@ -69,43 +74,54 @@ All business logic lives in the service layer (`backend/internal/services/`). Ro
 
 ```mermaid
 flowchart TD
-    subgraph HTTP_LAYER["HTTP Layer (thin handlers)"]
-        ROUTES["Route Handlers<br/>Parse request → call service → return response"]
+    subgraph HTTP_LAYER["HTTP Layer — thin handlers"]
+        ROUTES["Route Handlers<br/>Parse request, call service, return response"]
     end
 
     subgraph SERVICE_LAYER["Service Layer"]
-        APPROVAL_SVC["ApprovalService<br/>Approve / Reject / Unsnooze<br/>BulkUnsnooze / CleanExpired"]
-        DELETION_SVC["DeletionService<br/>Execute / DryRun / HandleFailure"]
-        ENGINE_SVC["EngineService<br/>TriggerRun / GetStats"]
-        SETTINGS_SVC["SettingsService<br/>UpdatePreferences / UpdateThresholds"]
-        INTEGRATION_SVC["IntegrationService<br/>CRUD / Test / Sync"]
-        AUTH_SVC["AuthService<br/>Login / ChangePassword / ChangeUsername / GenerateAPIKey"]
-        AUDIT_SVC["AuditLogService<br/>Create / Upsert / Dedup"]
-        NOTIF_CHANNEL_SVC["NotificationChannelService<br/>CRUD for notification channels"]
-        NOTIF_DISPATCH_SVC["NotificationDispatchService<br/>Two-gate flush / digest + alerts"]
-        DATA_SVC["DataService<br/>Data reset operations"]
-        RULES_SVC["RulesService<br/>Custom rule CRUD + validation"]
-        METRICS_SVC["MetricsService<br/>History / rollup / lifetime stats"]
-        VERSION_SVC["VersionService<br/>Update check via GitLab releases"]
+        subgraph CORE["Core"]
+            direction LR
+            APPROVAL_SVC["ApprovalService<br/>Approve / Reject / Unsnooze"]
+            DELETION_SVC["DeletionService<br/>Execute / DryRun / HandleFailure"]
+            ENGINE_SVC["EngineService<br/>TriggerRun / GetStats"]
+            SETTINGS_SVC["SettingsService<br/>UpdatePreferences / UpdateThresholds"]
+        end
+
+        subgraph DATA_SVCS["Data"]
+            direction LR
+            AUDIT_SVC["AuditLogService<br/>Create / Upsert / Dedup"]
+            DATA_SVC["DataService<br/>Data reset operations"]
+            METRICS_SVC["MetricsService<br/>History / rollup / lifetime stats"]
+            RULES_SVC["RulesService<br/>Custom rule CRUD + validation"]
+        end
+
+        subgraph EXTERNAL["External"]
+            direction LR
+            INTEGRATION_SVC["IntegrationService<br/>CRUD / Test / Sync"]
+            AUTH_SVC["AuthService<br/>Login / ChangePassword / GenerateAPIKey"]
+            NOTIF_CHANNEL_SVC["NotificationChannelService<br/>CRUD for notification channels"]
+            NOTIF_DISPATCH_SVC["NotificationDispatchService<br/>Two-gate flush / digest + alerts"]
+            VERSION_SVC["VersionService<br/>Update check via GitLab releases"]
+        end
     end
 
     subgraph EVENT_SYSTEM["Event System"]
         BUS["EventBus<br/>Typed pub/sub"]
-        ACTIVITY_SUB["ActivityPersister<br/>(subscriber → activity_events table)"]
-        NOTIF_SUB["NotificationDispatcher<br/>(subscriber → Discord/Slack/InApp)"]
-        SSE_SUB["SSEBroadcaster<br/>(subscriber → browser tabs)"]
+        ACTIVITY_SUB["ActivityPersister<br/>subscriber, activity_events table"]
+        NOTIF_SUB["NotificationDispatcher<br/>subscriber, Discord / Slack"]
+        SSE_SUB["SSEBroadcaster<br/>subscriber, browser tabs"]
     end
 
     subgraph DATA_LAYER["Data Layer"]
-        DB["*gorm.DB<br/>(injected, not global)"]
+        DB["*gorm.DB<br/>injected, not global"]
     end
 
     ROUTES --> SERVICE_LAYER
-    SERVICE_LAYER --> BUS
+    SERVICE_LAYER -.->|"publish"| BUS
     SERVICE_LAYER --> DB
-    BUS --> ACTIVITY_SUB
-    BUS --> NOTIF_SUB
-    BUS --> SSE_SUB
+    BUS -.-> ACTIVITY_SUB
+    BUS -.-> NOTIF_SUB
+    BUS -.-> SSE_SUB
     ACTIVITY_SUB --> DB
 ```
 
@@ -176,8 +192,8 @@ flowchart LR
     CHANNELS["Discord / Slack"]
     INAPP["In-App<br/>always-on"]
 
-    ENGINE_COMPLETE --> FLUSH
-    DELETION_BATCH --> FLUSH
+    ENGINE_COMPLETE -.->|"waits"| FLUSH
+    DELETION_BATCH -.->|"waits"| FLUSH
     FLUSH --> CHANNELS
     FLUSH --> INAPP
 ```
