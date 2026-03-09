@@ -1,3 +1,13 @@
+## [1.4.0] - 2026-03-09
+
+### 🚀 Features
+
+- *(site)* Add mermaid rendering, search, and screenshot refresh ([eb9c5d6](https://gitlab.com/starshadow/software/capacitarr/-/commit/eb9c5d6e40c6bcddff64eaacf64cd700e8f1cdc4))
+
+### 🐛 Bug Fixes
+
+- *(auth)* Align cookie path with BASE_URL for subdirectory deployments ([29a9a9a](https://gitlab.com/starshadow/software/capacitarr/-/commit/29a9a9aaf0229899060761ca24b79246a5867f77))
+- *(ui)* Sort seasons by number instead of lexicographically ([9085445](https://gitlab.com/starshadow/software/capacitarr/-/commit/9085445f9a258643ac25678016eee51775274f93))
 ## [1.3.0] - 2026-03-08
 
 ### 🚀 Features
