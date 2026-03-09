@@ -47,6 +47,7 @@ const links = computed(() => {
 <template>
   <UPage v-if="page">
     <UPageHeader
+      v-if="!page.hideTitle"
       :title="page.title"
       :description="page.description"
       :headline="headline"

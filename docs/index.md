@@ -1,5 +1,6 @@
 ---
 title: Capacitarr
+hideTitle: true
 ---
 
 [![Pipeline](https://img.shields.io/gitlab/pipeline-status/starshadow%2Fsoftware%2Fcapacitarr?branch=main&logo=gitlab&label=pipeline)](https://gitlab.com/starshadow/software/capacitarr/-/pipelines)

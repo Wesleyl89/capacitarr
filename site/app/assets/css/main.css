@@ -64,8 +64,11 @@ header[data-slot="header"] {
    BADGE CENTERING
    ═══════════════════════════════════════════ */
 
-/* Center paragraphs that contain inline shields.io badges */
-.prose p:has(.badge-inline) {
+/* Center paragraphs that contain inline shields.io badges.
+   Nuxt UI v3 does not use the .prose wrapper class — content
+   paragraphs get utility classes directly (my-5, leading-7, etc.)
+   so we target any <p> containing a badge image. */
+p:has(.badge-inline) {
   text-align: center;
 }
 
