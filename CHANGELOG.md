@@ -1,3 +1,8 @@
+## [1.5.2] - 2026-03-10
+
+### 🐛 Bug Fixes
+
+- *(docs)* Remove breakout layout, fix edge label pills, split large diagrams ([d7719cf](https://gitlab.com/starshadow/software/capacitarr/-/commit/d7719cfac6c00b4e478a5fefc7814b5054c65075))
 ## [1.5.1] - 2026-03-10
 
 ### 🐛 Bug Fixes
