@@ -54,7 +54,7 @@ if (isMermaid.value) {
     watch(() => colorMode.value, async () => {
       await nextTick()
       const isDark = colorMode.value === 'dark'
-      await reinitialize(isDark)
+      reinitialize(isDark)
       await renderDiagram()
     })
   })

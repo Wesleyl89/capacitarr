@@ -1,25 +1,15 @@
 /**
  * useMermaid — singleton composable for rendering Mermaid diagrams.
  *
- * Solves the "mermaid is a global singleton" problem by:
- *   1. Initialising mermaid exactly once (module-level singleton).
- *   2. Serialising render() calls through a promise queue so only one
- *      mermaid.render() is in-flight at a time.
- *   3. Exposing a reinitialise path for colour-mode changes that
- *      doesn't race with in-progress renders.
- *
- * Uses dagre (mermaid's default layout engine) instead of ELK. ELK was
- * removed because its async layout engine produced overlapping SVGs on
- * pages with multiple diagrams — even with serialised rendering.
+ * Initialises mermaid exactly once (module-level singleton) and provides
+ * render/reinitialize methods. Uses dagre (mermaid's default, mature
+ * layout engine) with a custom violet theme for dark/light modes.
  */
 
 // ─── Module-level singletons (shared across all component instances) ─
 let mermaidInstance: typeof import('mermaid').default | null = null
 let initPromise: Promise<void> | null = null
 let renderCounter = 0
-
-// Promise-based serial queue: each render waits for the previous one.
-let renderChain: Promise<void> = Promise.resolve()
 
 // ─── Theme palettes ──────────────────────────────────────────────────
 const darkTheme = {
@@ -57,11 +47,10 @@ const lightTheme = {
 // ─── Internal helpers ────────────────────────────────────────────────
 
 function buildConfig(isDark: boolean) {
-  const theme = isDark ? darkTheme : lightTheme
   return {
     startOnLoad: false,
     theme: 'base' as const,
-    themeVariables: theme,
+    themeVariables: isDark ? darkTheme : lightTheme,
     flowchart: {
       nodeSpacing: 60,
       rankSpacing: 70,
@@ -82,7 +71,7 @@ function buildConfig(isDark: boolean) {
 
 /**
  * Ensures mermaid is loaded and initialised exactly once.
- * Subsequent calls return the same promise.
+ * Subsequent calls return the cached promise.
  */
 async function ensureInit(isDark: boolean): Promise<void> {
   if (initPromise) return initPromise
@@ -111,44 +100,25 @@ function stripSvgDimensions(svg: string): string {
 
 export function useMermaid() {
   /**
-   * Render a mermaid diagram. Calls are serialised so only one
-   * mermaid.render() runs at a time, preventing ELK layout interleaving.
+   * Render a mermaid diagram.
    *
    * @returns The rendered SVG string with responsive dimensions.
    * @throws  Re-throws mermaid render errors for the caller to display.
    */
   async function render(code: string, isDark: boolean): Promise<string> {
-    // Wait for initialisation (no-ops after the first call)
     await ensureInit(isDark)
 
-    // Enqueue this render after all previously queued renders.
-    // We capture the current chain tail and extend it.
-    return new Promise<string>((resolve, reject) => {
-      renderChain = renderChain.then(async () => {
-        try {
-          renderCounter++
-          const id = `mermaid-${renderCounter}-${Date.now()}`
-          const { svg } = await mermaidInstance!.render(id, code)
-          resolve(stripSvgDimensions(svg))
-        }
-        catch (err) {
-          reject(err)
-        }
-      })
-    })
+    renderCounter++
+    const id = `mermaid-${renderCounter}-${Date.now()}`
+    const { svg } = await mermaidInstance!.render(id, code)
+    return stripSvgDimensions(svg)
   }
 
   /**
-   * Re-initialise mermaid with the opposite colour-mode theme and
-   * return. Callers should re-render all active diagrams after this.
-   *
-   * Waits for any in-flight renders to finish before reinitialising
-   * so we never mutate global state mid-render.
+   * Re-initialise mermaid with the updated colour-mode theme.
+   * Callers should re-render all active diagrams after this.
    */
-  async function reinitialize(isDark: boolean): Promise<void> {
-    // Drain the render queue first
-    await renderChain
-
+  function reinitialize(isDark: boolean): void {
     if (mermaidInstance) {
       mermaidInstance.initialize(buildConfig(isDark))
     }
