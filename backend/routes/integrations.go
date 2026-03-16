@@ -120,6 +120,11 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 		existing.Enabled = update.Enabled
 
+		// Clear stale sync status — configuration has changed, so the
+		// previous error and sync time are no longer valid.
+		existing.LastError = ""
+		existing.LastSync = nil
+
 		updated, updateErr := reg.Integration.Update(existing.ID, *existing)
 		if updateErr != nil {
 			return apiError(c, http.StatusInternalServerError, "Failed to update integration")

@@ -47,7 +47,21 @@ if (import.meta.client) {
 
 // Initialize SSE event stream when authenticated (client-only).
 // The connection persists for the app lifetime and reconnects automatically.
-const { connect: connectSSE, disconnect: disconnectSSE } = useEventStream();
+const { connect: connectSSE, disconnect: disconnectSSE, on: sseOn, off: sseOff } = useEventStream();
+
+// Re-fetch integrations when any integration is added, updated, or removed
+// so the error banner and integration cards reflect the current state.
+const integrationEventTypes = ['integration_added', 'integration_updated', 'integration_removed'];
+onMounted(() => {
+  for (const evt of integrationEventTypes) {
+    sseOn(evt, fetchAppIntegrations);
+  }
+});
+onUnmounted(() => {
+  for (const evt of integrationEventTypes) {
+    sseOff(evt, fetchAppIntegrations);
+  }
+});
 
 watch(isAuthenticated, (authed) => {
   if (import.meta.client) {
