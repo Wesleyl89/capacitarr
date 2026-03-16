@@ -529,6 +529,10 @@ function thresholdValidation(dgId: number, dg: DiskGroup): string {
   return '';
 }
 
+function findDgIndex(dg: DiskGroup): number {
+  return props.diskGroups.findIndex((g) => g.id === dg.id);
+}
+
 async function saveThresholds(dg: DiskGroup) {
   ensureThresholdEdit(dg.id, dg);
   const edit = thresholdEdits[dg.id]!;
@@ -546,14 +550,37 @@ async function saveThresholds(dg: DiskGroup) {
       },
     })) as DiskGroup;
 
-    // Emit updated disk group to parent for sync
+    // Emit updated disk group to parent for sync.
+    // Explicitly handle totalBytesOverride: when the API omits it (omitempty),
+    // the spread would keep the old value. Set it to undefined to clear it.
     if (updated) {
-      const idx = props.diskGroups.findIndex((g) => g.id === dg.id);
-      if (idx !== -1) {
-        emit('update:diskGroup', { ...props.diskGroups[idx], ...updated });
+      const merged = { ...props.diskGroups[findDgIndex(dg)], ...updated };
+      if (!('totalBytesOverride' in updated)) {
+        merged.totalBytesOverride = undefined;
       }
+      emit('update:diskGroup', merged);
     } else {
-      emit('update:diskGroup', { ...dg, thresholdPct: edit.threshold, targetPct: edit.target });
+      emit('update:diskGroup', {
+        ...dg,
+        thresholdPct: edit.threshold,
+        targetPct: edit.target,
+        totalBytesOverride: edit.overrideBytes ?? undefined,
+      });
+    }
+
+    // Reset local edit state so it picks up the new prop values on next access
+    const dgId = dg.id;
+    if (thresholdEdits[dgId]) {
+      const updatedDg = updated ?? dg;
+      const { value, unit } = bytesToDisplayUnit(updatedDg.totalBytesOverride);
+      thresholdEdits[dgId] = {
+        threshold: updatedDg.thresholdPct,
+        target: updatedDg.targetPct,
+        overrideDisplay: value,
+        overrideUnit: unit,
+        overrideBytes: updatedDg.totalBytesOverride ?? null,
+        saving: false,
+      };
     }
 
     addToast(`Thresholds saved for ${dg.mountPath}`, 'success');
