@@ -68,12 +68,22 @@ func (s *SettingsService) UpdateThresholds(groupID uint, threshold, target float
 		return nil, fmt.Errorf("disk group not found: %w", err)
 	}
 
-	if err := s.db.Model(&group).Updates(map[string]any{
-		"threshold_pct":        threshold,
-		"target_pct":           target,
-		"total_bytes_override": totalOverride, // nil clears the override
-	}).Error; err != nil {
+	updates := map[string]any{
+		"threshold_pct": threshold,
+		"target_pct":    target,
+	}
+	if totalOverride != nil && *totalOverride > 0 {
+		updates["total_bytes_override"] = *totalOverride
+	}
+	if err := s.db.Model(&group).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("failed to update thresholds: %w", err)
+	}
+	// GORM's Updates() skips nil/zero values in maps, so clearing the override
+	// requires a separate Update call to explicitly set the column to NULL.
+	if totalOverride == nil || *totalOverride == 0 {
+		if err := s.db.Model(&group).Update("total_bytes_override", gorm.Expr("NULL")).Error; err != nil {
+			return nil, fmt.Errorf("failed to clear override: %w", err)
+		}
 	}
 
 	s.bus.Publish(events.ThresholdChangedEvent{
