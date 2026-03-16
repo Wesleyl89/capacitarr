@@ -65,6 +65,16 @@
       </div>
     </div>
 
+    <!-- Integration error banner (independent, above all content) -->
+    <IntegrationErrorBanner :integrations="allIntegrations" />
+
+    <!-- Empty state (when no disk groups and not loading) -->
+    <DashboardEmptyState
+      v-if="diskGroups.length === 0 && !loading"
+      :integrations="allIntegrations"
+      :poll-interval-seconds="engineStats?.pollIntervalSeconds ?? 300"
+    />
+
     <!-- Engine Activity (prominent, first card) -->
     <UiCard
       v-if="engineStats"
@@ -562,23 +572,6 @@
           </p>
         </UiCardContent>
       </UiCard>
-    </div>
-
-    <!-- Empty State -->
-    <div
-      v-if="!engineStats && !loading"
-      v-motion
-      :initial="{ opacity: 0, y: 8 }"
-      :enter="{ opacity: 1, y: 0 }"
-      class="rounded-xl border-2 border-dashed border-border p-12 text-center mb-6"
-    >
-      <component :is="HardDriveIcon" class="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-      <h3 class="text-muted-foreground font-medium mb-1.5">
-        {{ $t('dashboard.noDiskGroups') }}
-      </h3>
-      <p class="text-sm text-muted-foreground/70 mb-4 max-w-md mx-auto">
-        {{ $t('dashboard.noDiskGroupsHelp') }}
-      </p>
     </div>
 
     <!-- Skeleton Loading State -->

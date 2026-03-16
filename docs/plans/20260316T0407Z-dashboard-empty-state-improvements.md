@@ -1,9 +1,9 @@
 # Dashboard Empty State Improvements
 
 **Date:** 2026-03-16
-**Status:** 📋 Planned
+**Status:** ✅ Complete
 **Scope:** `capacitarr` (single repo)
-**Branch:** `feature/dashboard-empty-states`
+**Branch:** `feature/disk-size-override` (committed on existing branch instead of separate branch)
 **Depends on:** `feature/disk-size-override` (contextually related but not a hard dependency)
 
 ## Motivation

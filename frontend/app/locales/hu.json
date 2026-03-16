@@ -398,5 +398,15 @@
   "update.upToDateDesc": "You're running the latest version of Capacitarr.",
   "update.checkNow": "Check Now",
   "update.checking": "Checking…",
-  "rules.backupRestore": "Backup & Restore"
+  "rules.backupRestore": "Backup & Restore",
+  "dashboard.emptySetup.title": "Get started by adding an integration",
+  "dashboard.emptySetup.description": "Connect Sonarr, Radarr, or another *arr service to begin monitoring disk usage.",
+  "dashboard.emptySetup.action": "Go to Settings",
+  "dashboard.emptyWait.title": "Waiting for first poll…",
+  "dashboard.emptyWait.description": "Disk groups appear automatically when your *arr services are polled. This usually takes up to {minutes} minutes.",
+  "dashboard.emptyWait.runNow": "Run Now",
+  "dashboard.errorBanner.title": "{count} integration(s) have errors",
+  "dashboard.errorBanner.description": "Some integrations failed to connect. Disk data from these sources may be missing.",
+  "dashboard.errorBanner.action": "View in Settings",
+  "rules.diskThresholdsEmpty": "Threshold settings will appear here once disk groups are detected from your *arr services."
 }

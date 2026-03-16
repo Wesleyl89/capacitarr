@@ -1,6 +1,5 @@
 <template>
   <UiCard
-    v-if="diskGroups.length > 0"
     v-motion
     :initial="{ opacity: 0, y: 12 }"
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
@@ -13,242 +12,256 @@
       </UiCardDescription>
     </UiCardHeader>
     <UiCardContent class="space-y-5">
+      <!-- Empty placeholder when no disk groups exist -->
       <div
-        v-for="dg in diskGroups"
-        :key="dg.id"
-        class="rounded-lg border border-border bg-muted/50 p-5 space-y-4"
+        v-if="diskGroups.length === 0"
+        class="rounded-lg border-2 border-dashed border-border p-8 text-center"
       >
-        <!-- Mount path & current usage -->
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div
-              class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-              :class="diskStatusBgClass(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
-            >
-              <component :is="HardDriveIcon" class="w-4.5 h-4.5 text-white" />
-            </div>
-            <div>
-              <div class="text-sm font-medium text-foreground truncate" :title="dg.mountPath">
-                {{ dg.mountPath }}
+        <HardDriveIcon class="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+        <p class="text-sm text-muted-foreground/70 max-w-sm mx-auto">
+          {{ $t('rules.diskThresholdsEmpty') }}
+        </p>
+      </div>
+
+      <!-- Per-disk-group threshold controls -->
+      <template v-else>
+        <div
+          v-for="dg in diskGroups"
+          :key="dg.id"
+          class="rounded-lg border border-border bg-muted/50 p-5 space-y-4"
+        >
+          <!-- Mount path & current usage -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                :class="diskStatusBgClass(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
+              >
+                <component :is="HardDriveIcon" class="w-4.5 h-4.5 text-white" />
               </div>
-              <span class="text-xs text-muted-foreground">
-                {{ formatBytes(dg.usedBytes) }} / {{ formatBytes(effectiveTotal(dg)) }}
-                <UiBadge
-                  v-if="hasActiveOverride(dg)"
-                  variant="outline"
-                  class="ml-1 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600"
-                  :title="`Detected: ${formatBytes(dg.totalBytes)}, Custom: ${formatBytes(effectiveTotal(dg))}`"
-                >
-                  📌 Custom
-                </UiBadge>
+              <div>
+                <div class="text-sm font-medium text-foreground truncate" :title="dg.mountPath">
+                  {{ dg.mountPath }}
+                </div>
+                <span class="text-xs text-muted-foreground">
+                  {{ formatBytes(dg.usedBytes) }} / {{ formatBytes(effectiveTotal(dg)) }}
+                  <UiBadge
+                    v-if="hasActiveOverride(dg)"
+                    variant="outline"
+                    class="ml-1 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600"
+                    :title="`Detected: ${formatBytes(dg.totalBytes)}, Custom: ${formatBytes(effectiveTotal(dg))}`"
+                  >
+                    📌 Custom
+                  </UiBadge>
+                </span>
+              </div>
+            </div>
+            <span
+              class="text-2xl font-bold tabular-nums"
+              :class="diskStatusTextClass(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
+            >
+              {{ Math.round(diskUsagePct(dg)) }}%
+            </span>
+          </div>
+
+          <!-- Progress bar with segmented zone background + triangle markers -->
+          <div class="relative w-full mt-8 mb-6">
+            <!-- Bar container -->
+            <div class="relative w-full h-3 rounded-full overflow-hidden">
+              <!-- Segmented background zones -->
+              <div class="absolute inset-0 flex">
+                <div
+                  class="h-full"
+                  :style="{
+                    width: editTarget(dg) + '%',
+                    backgroundColor: 'oklch(0.648 0.2 160 / 0.2)',
+                  }"
+                />
+                <div
+                  class="h-full"
+                  :style="{
+                    width: editThreshold(dg) - editTarget(dg) + '%',
+                    backgroundColor: 'oklch(0.75 0.183 55.934 / 0.2)',
+                  }"
+                />
+                <div
+                  class="h-full"
+                  :style="{
+                    width: 100 - editThreshold(dg) + '%',
+                    backgroundColor: 'oklch(0.577 0.245 27.325 / 0.2)',
+                  }"
+                />
+              </div>
+              <!-- Usage fill bar -->
+              <div
+                data-slot="progress-bar-fill"
+                role="progressbar"
+                :aria-valuenow="Math.round(diskUsagePct(dg))"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-label="`Disk usage: ${Math.round(diskUsagePct(dg))}%`"
+                :data-status="diskUsageStatus(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
+                class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
+                :style="{
+                  width: Math.min(diskUsagePct(dg), 100) + '%',
+                  backgroundColor: diskStatusFillColor(
+                    diskUsagePct(dg),
+                    editTarget(dg),
+                    editThreshold(dg),
+                  ),
+                }"
+              />
+            </div>
+
+            <!-- Target marker ABOVE the bar -->
+            <div
+              class="absolute bottom-3 flex flex-col items-center z-20"
+              :style="{ left: editTarget(dg) + '%', transform: 'translateX(-50%)' }"
+            >
+              <span
+                class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap mb-0.5"
+              >
+                Target {{ editTarget(dg) }}%
+              </span>
+              <span class="text-emerald-500 text-[10px] leading-none mb-0.5">▼</span>
+            </div>
+            <!-- Threshold marker BELOW the bar -->
+            <div
+              class="absolute top-3 flex flex-col items-center z-20"
+              :style="{ left: editThreshold(dg) + '%', transform: 'translateX(-50%)' }"
+            >
+              <span class="text-red-500 text-[10px] leading-none mt-0.5">▲</span>
+              <span
+                class="text-[10px] font-medium text-red-500 dark:text-red-400 whitespace-nowrap mt-0.5"
+              >
+                Threshold {{ editThreshold(dg) }}%
               </span>
             </div>
           </div>
-          <span
-            class="text-2xl font-bold tabular-nums"
-            :class="diskStatusTextClass(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
-          >
-            {{ Math.round(diskUsagePct(dg)) }}%
-          </span>
-        </div>
 
-        <!-- Progress bar with segmented zone background + triangle markers -->
-        <div class="relative w-full mt-8 mb-6">
-          <!-- Bar container -->
-          <div class="relative w-full h-3 rounded-full overflow-hidden">
-            <!-- Segmented background zones -->
-            <div class="absolute inset-0 flex">
+          <!-- Free space info -->
+          <div class="text-xs text-muted-foreground/70">
+            <span>{{ formatBytes(effectiveTotal(dg) - dg.usedBytes) }} free</span>
+            <span v-if="hasActiveOverride(dg)" class="ml-1 text-muted-foreground/50">
+              (detected: {{ formatBytes(dg.totalBytes) }})
+            </span>
+          </div>
+
+          <!-- Dual-thumb range slider -->
+          <div class="space-y-2">
+            <div data-slot="threshold-slider" class="relative">
+              <UiSlider
+                :model-value="[editTarget(dg), editThreshold(dg)]"
+                :min="1"
+                :max="99"
+                :step="1"
+                :min-steps-between-thumbs="1"
+                @update:model-value="
+                  (v: number[] | undefined) => {
+                    if (v) onSliderChange(dg, v);
+                  }
+                "
+              />
+              <!-- Zone color overlays on the slider track -->
               <div
-                class="h-full"
+                class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-l-full pointer-events-none z-1"
                 :style="{
+                  left: '0%',
                   width: editTarget(dg) + '%',
-                  backgroundColor: 'oklch(0.648 0.2 160 / 0.2)',
+                  background: 'oklch(0.648 0.2 160 / 0.5)',
                 }"
               />
               <div
-                class="h-full"
+                class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
                 :style="{
+                  left: editTarget(dg) + '%',
                   width: editThreshold(dg) - editTarget(dg) + '%',
-                  backgroundColor: 'oklch(0.75 0.183 55.934 / 0.2)',
+                  background: 'oklch(0.75 0.183 55.934 / 0.5)',
                 }"
               />
               <div
-                class="h-full"
+                class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-r-full pointer-events-none z-1"
                 :style="{
+                  left: editThreshold(dg) + '%',
                   width: 100 - editThreshold(dg) + '%',
-                  backgroundColor: 'oklch(0.577 0.245 27.325 / 0.2)',
+                  background: 'oklch(0.577 0.245 27.325 / 0.5)',
                 }"
               />
             </div>
-            <!-- Usage fill bar -->
-            <div
-              data-slot="progress-bar-fill"
-              role="progressbar"
-              :aria-valuenow="Math.round(diskUsagePct(dg))"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-label="`Disk usage: ${Math.round(diskUsagePct(dg))}%`"
-              :data-status="diskUsageStatus(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
-              class="relative h-full rounded-full transition-all duration-700 ease-out z-10"
-              :style="{
-                width: Math.min(diskUsagePct(dg), 100) + '%',
-                backgroundColor: diskStatusFillColor(
-                  diskUsagePct(dg),
-                  editTarget(dg),
-                  editThreshold(dg),
-                ),
-              }"
-            />
+
+            <!-- Labels below the slider -->
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="text-emerald-600 dark:text-emerald-400 font-medium">
+                ● Target {{ editTarget(dg) }}%
+              </span>
+              <span class="text-red-500 dark:text-red-400 font-medium">
+                ● Threshold {{ editThreshold(dg) }}%
+              </span>
+            </div>
           </div>
 
-          <!-- Target marker ABOVE the bar -->
-          <div
-            class="absolute bottom-3 flex flex-col items-center z-20"
-            :style="{ left: editTarget(dg) + '%', transform: 'translateX(-50%)' }"
-          >
-            <span
-              class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap mb-0.5"
-            >
-              Target {{ editTarget(dg) }}%
-            </span>
-            <span class="text-emerald-500 text-[10px] leading-none mb-0.5">▼</span>
-          </div>
-          <!-- Threshold marker BELOW the bar -->
-          <div
-            class="absolute top-3 flex flex-col items-center z-20"
-            :style="{ left: editThreshold(dg) + '%', transform: 'translateX(-50%)' }"
-          >
-            <span class="text-red-500 text-[10px] leading-none mt-0.5">▲</span>
-            <span
-              class="text-[10px] font-medium text-red-500 dark:text-red-400 whitespace-nowrap mt-0.5"
-            >
-              Threshold {{ editThreshold(dg) }}%
-            </span>
-          </div>
-        </div>
-
-        <!-- Free space info -->
-        <div class="text-xs text-muted-foreground/70">
-          <span>{{ formatBytes(effectiveTotal(dg) - dg.usedBytes) }} free</span>
-          <span v-if="hasActiveOverride(dg)" class="ml-1 text-muted-foreground/50">
-            (detected: {{ formatBytes(dg.totalBytes) }})
-          </span>
-        </div>
-
-        <!-- Dual-thumb range slider -->
-        <div class="space-y-2">
-          <div data-slot="threshold-slider" class="relative">
-            <UiSlider
-              :model-value="[editTarget(dg), editThreshold(dg)]"
-              :min="1"
-              :max="99"
-              :step="1"
-              :min-steps-between-thumbs="1"
-              @update:model-value="
-                (v: number[] | undefined) => {
-                  if (v) onSliderChange(dg, v);
-                }
-              "
-            />
-            <!-- Zone color overlays on the slider track -->
-            <div
-              class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-l-full pointer-events-none z-1"
-              :style="{
-                left: '0%',
-                width: editTarget(dg) + '%',
-                background: 'oklch(0.648 0.2 160 / 0.5)',
-              }"
-            />
-            <div
-              class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
-              :style="{
-                left: editTarget(dg) + '%',
-                width: editThreshold(dg) - editTarget(dg) + '%',
-                background: 'oklch(0.75 0.183 55.934 / 0.5)',
-              }"
-            />
-            <div
-              class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-r-full pointer-events-none z-1"
-              :style="{
-                left: editThreshold(dg) + '%',
-                width: 100 - editThreshold(dg) + '%',
-                background: 'oklch(0.577 0.245 27.325 / 0.5)',
-              }"
-            />
+          <!-- Custom disk size override -->
+          <div class="space-y-1.5">
+            <UiLabel class="text-xs text-muted-foreground"> Custom disk size </UiLabel>
+            <div class="flex items-center gap-2">
+              <UiInput
+                type="number"
+                :model-value="editOverrideDisplay(dg)"
+                :placeholder="`Use detected: ${formatBytes(dg.totalBytes)}`"
+                class="flex-1"
+                min="0"
+                step="any"
+                @update:model-value="(v: string | number) => onOverrideInput(dg, v)"
+              />
+              <UiSelect
+                :model-value="editOverrideUnit(dg)"
+                @update:model-value="(v) => onOverrideUnitChange(dg, String(v))"
+              >
+                <UiSelectTrigger class="w-20">
+                  <UiSelectValue />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="GB">GB</UiSelectItem>
+                  <UiSelectItem value="TB">TB</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
+              <UiButton
+                v-if="hasActiveOverride(dg) || editOverrideDisplay(dg)"
+                variant="ghost"
+                size="sm"
+                class="text-muted-foreground px-2"
+                title="Clear override"
+                @click="clearOverride(dg)"
+              >
+                <component :is="XIcon" class="w-4 h-4" />
+              </UiButton>
+            </div>
+            <p v-if="hasActiveOverride(dg)" class="text-[11px] text-amber-600 dark:text-amber-400">
+              📌 Using custom size instead of detected {{ formatBytes(dg.totalBytes) }}
+            </p>
           </div>
 
-          <!-- Labels below the slider -->
-          <div class="flex items-center justify-between text-[11px]">
-            <span class="text-emerald-600 dark:text-emerald-400 font-medium">
-              ● Target {{ editTarget(dg) }}%
-            </span>
-            <span class="text-red-500 dark:text-red-400 font-medium">
-              ● Threshold {{ editThreshold(dg) }}%
-            </span>
-          </div>
-        </div>
-
-        <!-- Custom disk size override -->
-        <div class="space-y-1.5">
-          <UiLabel class="text-xs text-muted-foreground"> Custom disk size </UiLabel>
-          <div class="flex items-center gap-2">
-            <UiInput
-              type="number"
-              :model-value="editOverrideDisplay(dg)"
-              :placeholder="`Use detected: ${formatBytes(dg.totalBytes)}`"
-              class="flex-1"
-              min="0"
-              step="any"
-              @update:model-value="(v: string | number) => onOverrideInput(dg, v)"
-            />
-            <UiSelect
-              :model-value="editOverrideUnit(dg)"
-              @update:model-value="(v) => onOverrideUnitChange(dg, String(v))"
-            >
-              <UiSelectTrigger class="w-20">
-                <UiSelectValue />
-              </UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem value="GB">GB</UiSelectItem>
-                <UiSelectItem value="TB">TB</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
+          <!-- Validation error + Save button row -->
+          <div class="flex items-center justify-between">
+            <p v-if="thresholdValidation(dg.id, dg)" class="text-xs text-red-500">
+              {{ thresholdValidation(dg.id, dg) }}
+            </p>
+            <span v-else />
             <UiButton
-              v-if="hasActiveOverride(dg) || editOverrideDisplay(dg)"
-              variant="ghost"
               size="sm"
-              class="text-muted-foreground px-2"
-              title="Clear override"
-              @click="clearOverride(dg)"
+              :disabled="!hasChanges(dg) || !!thresholdValidation(dg.id, dg) || isSaving(dg.id)"
+              @click="saveThresholds(dg)"
             >
-              <component :is="XIcon" class="w-4 h-4" />
+              <component
+                :is="isSaving(dg.id) ? LoaderCircleIcon : SaveIcon"
+                class="w-3.5 h-3.5 mr-1.5"
+                :class="{ 'animate-spin': isSaving(dg.id) }"
+              />
+              {{ isSaving(dg.id) ? $t('common.saving') : $t('common.save') }}
             </UiButton>
           </div>
-          <p v-if="hasActiveOverride(dg)" class="text-[11px] text-amber-600 dark:text-amber-400">
-            📌 Using custom size instead of detected {{ formatBytes(dg.totalBytes) }}
-          </p>
         </div>
-
-        <!-- Validation error + Save button row -->
-        <div class="flex items-center justify-between">
-          <p v-if="thresholdValidation(dg.id, dg)" class="text-xs text-red-500">
-            {{ thresholdValidation(dg.id, dg) }}
-          </p>
-          <span v-else />
-          <UiButton
-            size="sm"
-            :disabled="!hasChanges(dg) || !!thresholdValidation(dg.id, dg) || isSaving(dg.id)"
-            @click="saveThresholds(dg)"
-          >
-            <component
-              :is="isSaving(dg.id) ? LoaderCircleIcon : SaveIcon"
-              class="w-3.5 h-3.5 mr-1.5"
-              :class="{ 'animate-spin': isSaving(dg.id) }"
-            />
-            {{ isSaving(dg.id) ? $t('common.saving') : $t('common.save') }}
-          </UiButton>
-        </div>
-      </div>
+      </template>
     </UiCardContent>
   </UiCard>
 </template>

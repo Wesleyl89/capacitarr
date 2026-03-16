@@ -489,5 +489,16 @@
   "settings.weightTimeInLibrary": "Time in Library",
   "settings.weightTimeInLibraryDesc": "Older content may be less valuable.",
   "settings.weightSeriesStatus": "Series Status",
-  "settings.weightSeriesStatusDesc": "Ended or canceled shows score higher."
+  "settings.weightSeriesStatusDesc": "Ended or canceled shows score higher.",
+
+  "dashboard.emptySetup.title": "Get started by adding an integration",
+  "dashboard.emptySetup.description": "Connect Sonarr, Radarr, or another *arr service to begin monitoring disk usage.",
+  "dashboard.emptySetup.action": "Go to Settings",
+  "dashboard.emptyWait.title": "Waiting for first poll…",
+  "dashboard.emptyWait.description": "Disk groups appear automatically when your *arr services are polled. This usually takes up to {minutes} minutes.",
+  "dashboard.emptyWait.runNow": "Run Now",
+  "dashboard.errorBanner.title": "{count} integration(s) have errors",
+  "dashboard.errorBanner.description": "Some integrations failed to connect. Disk data from these sources may be missing.",
+  "dashboard.errorBanner.action": "View in Settings",
+  "rules.diskThresholdsEmpty": "Threshold settings will appear here once disk groups are detected from your *arr services."
 }
