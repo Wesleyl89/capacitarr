@@ -5,7 +5,7 @@
     :initial="{ opacity: 0, y: -8 }"
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }"
     data-slot="integration-error-banner"
-    class="border-amber-500/40 bg-amber-500/5"
+    class="mb-6 border-amber-500/40 bg-amber-500/5"
   >
     <UiCardContent class="pt-4 pb-3">
       <div class="flex items-start justify-between gap-3">

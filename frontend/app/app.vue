@@ -5,7 +5,6 @@
   >
     <Navbar v-if="isAuthenticated" />
     <main data-slot="page-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
-      <IntegrationErrorBanner v-if="isAuthenticated" :integrations="appIntegrations" />
       <NuxtPage />
     </main>
   </div>
@@ -21,9 +20,10 @@ import type { IntegrationConfig } from '~/types/api';
 const authenticated = useAuthCookie();
 const isAuthenticated = computed(() => !!authenticated.value);
 
-// Fetch integrations for the global error banner
+// Fetch integrations and provide to child pages for error banners
 const api = useApi();
 const appIntegrations = ref<IntegrationConfig[]>([]);
+provide('appIntegrations', appIntegrations);
 
 async function fetchAppIntegrations() {
   try {

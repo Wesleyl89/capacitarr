@@ -10,6 +10,9 @@
       </p>
     </div>
 
+    <!-- Integration error banner (below page title) -->
+    <IntegrationErrorBanner :integrations="allIntegrations" />
+
     <!-- Disk Thresholds -->
     <RulesRuleDiskThresholds :disk-groups="diskGroups" @update:disk-group="onDiskGroupUpdated" />
 

@@ -66,6 +66,9 @@ rs
       </div>
     </div>
 
+    <!-- Integration error banner (below page title) -->
+    <IntegrationErrorBanner :integrations="allIntegrations" />
+
     <!-- Empty state (when no disk groups and not loading) -->
     <DashboardEmptyState
       v-if="diskGroups.length === 0 && !loading"
