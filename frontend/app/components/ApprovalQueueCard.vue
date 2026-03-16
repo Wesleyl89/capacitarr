@@ -601,7 +601,7 @@ onUnmounted(() => {
                     <!-- Checkbox for batch selection (after snooze icon) -->
                     <UiCheckbox
                       v-if="group.auditIds.length > 0"
-                      :checked="
+                      :model-value="
                         isGroupPartiallySelected(group)
                           ? 'indeterminate'
                           : isGroupFullySelected(group)
@@ -680,7 +680,7 @@ onUnmounted(() => {
                       </UiButton>
                       <!-- Season-level checkbox -->
                       <UiCheckbox
-                        :checked="selectedKeys.has(seasonKey(group.key, season.title))"
+                        :model-value="selectedKeys.has(seasonKey(group.key, season.title))"
                         class="h-3.5 w-3.5 shrink-0 cursor-pointer"
                         @click.stop="toggleSelect(seasonKey(group.key, season.title))"
                       />

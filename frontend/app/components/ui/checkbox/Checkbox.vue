@@ -30,7 +30,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       data-slot="checkbox-indicator"
       class="flex items-center justify-center text-current transition-none"
     >
-      <CheckIcon v-if="forwarded.checked === true" class="size-3.5" />
+      <CheckIcon v-if="forwarded.modelValue === true" class="size-3.5" />
       <MinusIcon v-else class="size-3.5" />
     </CheckboxIndicator>
   </CheckboxRoot>

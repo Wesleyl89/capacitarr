@@ -10,11 +10,7 @@
         <UiLabel class="text-sm font-medium">{{ $t('settings.sectionsToExport') }}</UiLabel>
         <div class="space-y-3">
           <div class="flex items-start gap-3">
-            <UiCheckbox
-              id="export-preferences"
-              :checked="exportSections.preferences"
-              @update:checked="(v: boolean) => (exportSections.preferences = v)"
-            />
+            <UiCheckbox id="export-preferences" v-model="exportSections.preferences" />
             <div class="grid gap-0.5 leading-none">
               <UiLabel for="export-preferences" class="cursor-pointer">
                 {{ $t('settings.sectionPreferences') }}
@@ -25,21 +21,13 @@
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <UiCheckbox
-              id="export-rules"
-              :checked="exportSections.rules"
-              @update:checked="(v: boolean) => (exportSections.rules = v)"
-            />
+            <UiCheckbox id="export-rules" v-model="exportSections.rules" />
             <UiLabel for="export-rules" class="cursor-pointer">
               {{ $t('settings.sectionRules') }}
             </UiLabel>
           </div>
           <div class="flex items-start gap-3">
-            <UiCheckbox
-              id="export-integrations"
-              :checked="exportSections.integrations"
-              @update:checked="(v: boolean) => (exportSections.integrations = v)"
-            />
+            <UiCheckbox id="export-integrations" v-model="exportSections.integrations" />
             <div class="grid gap-0.5 leading-none">
               <UiLabel for="export-integrations" class="cursor-pointer">
                 {{ $t('settings.sectionIntegrations') }}
@@ -50,21 +38,13 @@
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <UiCheckbox
-              id="export-diskgroups"
-              :checked="exportSections.diskGroups"
-              @update:checked="(v: boolean) => (exportSections.diskGroups = v)"
-            />
+            <UiCheckbox id="export-diskgroups" v-model="exportSections.diskGroups" />
             <UiLabel for="export-diskgroups" class="cursor-pointer">
               {{ $t('settings.sectionDiskGroups') }}
             </UiLabel>
           </div>
           <div class="flex items-start gap-3">
-            <UiCheckbox
-              id="export-notifications"
-              :checked="exportSections.notificationChannels"
-              @update:checked="(v: boolean) => (exportSections.notificationChannels = v)"
-            />
+            <UiCheckbox id="export-notifications" v-model="exportSections.notificationChannels" />
             <div class="grid gap-0.5 leading-none">
               <UiLabel for="export-notifications" class="cursor-pointer">
                 {{ $t('settings.sectionNotifications') }}
@@ -166,51 +146,31 @@
           <UiLabel class="text-sm font-medium">{{ $t('settings.sectionsToImport') }}</UiLabel>
           <div class="space-y-3">
             <div v-if="parsedPayload.preferences" class="flex items-center gap-3">
-              <UiCheckbox
-                id="import-preferences"
-                :checked="importSections.preferences"
-                @update:checked="(v: boolean) => (importSections.preferences = v)"
-              />
+              <UiCheckbox id="import-preferences" v-model="importSections.preferences" />
               <UiLabel for="import-preferences" class="cursor-pointer">
                 {{ $t('settings.sectionPreferences') }}
               </UiLabel>
             </div>
             <div v-if="parsedPayload.rules?.length" class="flex items-center gap-3">
-              <UiCheckbox
-                id="import-rules"
-                :checked="importSections.rules"
-                @update:checked="(v: boolean) => (importSections.rules = v)"
-              />
+              <UiCheckbox id="import-rules" v-model="importSections.rules" />
               <UiLabel for="import-rules" class="cursor-pointer">
                 {{ $t('settings.sectionRules') }}
               </UiLabel>
             </div>
             <div v-if="parsedPayload.integrations?.length" class="flex items-center gap-3">
-              <UiCheckbox
-                id="import-integrations"
-                :checked="importSections.integrations"
-                @update:checked="(v: boolean) => (importSections.integrations = v)"
-              />
+              <UiCheckbox id="import-integrations" v-model="importSections.integrations" />
               <UiLabel for="import-integrations" class="cursor-pointer">
                 {{ $t('settings.sectionIntegrations') }}
               </UiLabel>
             </div>
             <div v-if="parsedPayload.diskGroups?.length" class="flex items-center gap-3">
-              <UiCheckbox
-                id="import-diskgroups"
-                :checked="importSections.diskGroups"
-                @update:checked="(v: boolean) => (importSections.diskGroups = v)"
-              />
+              <UiCheckbox id="import-diskgroups" v-model="importSections.diskGroups" />
               <UiLabel for="import-diskgroups" class="cursor-pointer">
                 {{ $t('settings.sectionDiskGroups') }}
               </UiLabel>
             </div>
             <div v-if="parsedPayload.notificationChannels?.length" class="flex items-center gap-3">
-              <UiCheckbox
-                id="import-notifications"
-                :checked="importSections.notificationChannels"
-                @update:checked="(v: boolean) => (importSections.notificationChannels = v)"
-              />
+              <UiCheckbox id="import-notifications" v-model="importSections.notificationChannels" />
               <UiLabel for="import-notifications" class="cursor-pointer">
                 {{ $t('settings.sectionNotifications') }}
               </UiLabel>
