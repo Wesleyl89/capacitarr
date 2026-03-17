@@ -1,6 +1,6 @@
 # Rule Filtering & Force Delete
 
-**Status:** ✅ Complete (rule filter + force-delete backend; selection-mode UI reverted — see `20260317T1101Z-library-management-page.md`)
+**Status:** ✅ Complete (rule filter + force-delete backend; frontend force-delete UI deferred to Library Management page)
 **Branch:** `feature/rule-filter-force-delete`
 **Created:** 2026-03-16
 
@@ -11,13 +11,18 @@ Two user-requested features for the Deletion Priority view:
 1. **Filter by Applied Rules** — Allow users to filter the Deletion Priority list by which custom rules matched each item. Supports multi-rule selection with AND/OR logic.
 2. **Manual Force Delete** — Allow users to mark items for deletion regardless of disk threshold settings. Items are processed on the next engine run.
 
+## Outcome
+
+- **Feature 1 (Rule Filter):** ✅ Fully implemented — backend `RuleID` field + frontend filter popover with ANY/ALL toggle.
+- **Feature 2 (Force Delete):** ✅ Backend complete — API route, service methods, poller processing, migration. ⏸️ Frontend UI deferred to a dedicated Library Management page (see `20260317T1101Z-library-management-page.md`). The selection-mode UI was initially implemented in the Deletion Priority view but reverted because:
+  - The Deletion Priority view is a read-only scoring preview; adding destructive actions blurred the line between preview and action.
+  - Show groups in poster mode were wrapped in popovers that intercepted selection clicks.
+  - Season-level granularity required flat (ungrouped) rows, which conflicts with the grouped display in the Deletion Priority view.
+  - A dedicated Library Management page with flat season rows is a better UX for bulk force-delete operations.
+
 ---
 
 ## Feature 1: Filter Deletion Priority by Applied Rules
-
-### Current State
-
-The `/api/v1/preview` endpoint already returns full scoring data including matched rules. Each `EvaluatedItem` contains a `Factors []ScoreFactor` array where rule matches have `Type: "rule"` and a descriptive `Name` like `"Prefer remove: rating < 5.0"`. The frontend `RulePreviewTable.vue` already has a filter bar with search, media type, and protected/unprotected filters.
 
 ### Design
 
@@ -32,51 +37,57 @@ flowchart LR
 
 ### Implementation Steps
 
-#### Step 1: Add `RuleID` to `ScoreFactor` (Backend)
+#### Step 1: Add `RuleID` to `ScoreFactor` (Backend) — ✅ Complete
 
-Add `RuleID *uint` field to `ScoreFactor` in `backend/internal/engine/score.go`. This enables precise filtering by rule database ID rather than string matching on the display name.
+Added `RuleID *uint json:"ruleId,omitempty"` to `ScoreFactor` struct. Set `RuleID: &rule.ID` in all 6 effect branches of `applyRules()`.
 
-**Files:**
-- `backend/internal/engine/score.go` — Add `RuleID *uint json:"ruleId,omitempty"` to `ScoreFactor` struct
-- `backend/internal/engine/rules.go` — Set `RuleID: &rule.ID` in each `ScoreFactor` created by `applyRules()`
-- `backend/internal/engine/rules_test.go` — Update tests to verify `RuleID` is populated on matched rules
+**Files modified:**
+- `backend/internal/engine/score.go`
+- `backend/internal/engine/rules.go`
 
-#### Step 2: Update Frontend TypeScript Types
+#### Step 2: Update Frontend TypeScript Types — ✅ Complete
 
-**Files:**
-- `frontend/app/types/api.ts` — Add `ruleId?: number` to `ScoreFactor` interface
+Added `ruleId?: number` to `ScoreFactor` interface and `forceDelete?: boolean` to `ApprovalQueueItem` interface.
 
-#### Step 3: Add Rule Filter UI to RulePreviewTable
+**Files modified:**
+- `frontend/app/types/api.ts`
 
-Add a multi-select dropdown to the existing filter bar in `RulePreviewTable.vue`. The dropdown is populated by fetching rules from `/api/v1/custom-rules` (already used by `RuleCustomList.vue`). Include a toggle for ANY/ALL filter mode.
+#### Step 3: Add Rule Filter UI to RulePreviewTable — ✅ Complete
 
-**Files:**
-- `frontend/app/components/rules/RulePreviewTable.vue` — Add rule filter dropdown, filter mode toggle, and client-side filtering logic in `filteredGroupedPreview` computed property
+Added a multi-select popover to the filter bar with:
+- Checkbox list of enabled rules
+- ANY/ALL toggle for filter mode
+- "Clear rule filter" button
+- Integration into `filteredGroupedPreview` computed property
 
-#### Step 4: Add i18n Strings
+**Files modified:**
+- `frontend/app/components/rules/RulePreviewTable.vue`
+- `frontend/app/pages/rules.vue` (passes `rules` prop)
 
-**Files:**
-- `frontend/app/locales/en.json` — Add strings for rule filter labels, ANY/ALL toggle, empty state
+#### Step 4: Add i18n Strings — ✅ Complete
 
-#### Step 5: Tests
+Added `rules.filterByRule`, `rules.filterModeAny`, `rules.filterModeAll`, `rules.clearRuleFilter` to all 22 locale files.
 
-**Files:**
-- `backend/internal/engine/rules_test.go` — Verify `RuleID` field is set correctly
-- `backend/internal/engine/score_test.go` — Verify `RuleID` propagates through `EvaluateMedia()`
+**Files modified:**
+- `frontend/app/locales/*.json`
+
+#### Step 5: Tests — ✅ Complete
+
+Added 3 new tests:
+- `TestApplyRules_RuleIDPropagation` — verifies RuleID is set on matched rule factors
+- `TestApplyRules_AlwaysKeepRuleID` — verifies RuleID on always_keep factors
+- `TestApplyRules_WeightFactorsHaveNilRuleID` — verifies weight factors don't have RuleID
+
+**Files modified:**
+- `backend/internal/engine/rules_test.go`
 
 ---
 
 ## Feature 2: Manual Force Delete
 
-### Current State
-
-The engine only processes deletions when disk usage exceeds the configured threshold. When below threshold, `evaluateAndCleanDisk()` clears all pending/rejected approval queue items and returns early. There is no mechanism to force-delete specific items regardless of disk state.
-
-The existing `ExecuteApproval()` workflow in `ApprovalService` already handles: approve → look up integration → build client → reconstruct MediaItem → queue for deletion. Force-delete can reuse this exact pattern.
-
 ### Design
 
-Force-delete uses the existing `approval_queue` table with a new `force_delete` boolean column. Items marked for force-delete are processed by the poller on the next engine cycle, bypassing the threshold check. The `ClearQueue()` method is updated to preserve force-delete items.
+Force-delete uses the existing `approval_queue` table with a new `force_delete` boolean column. Items marked for force-delete are processed by the poller on the next engine cycle, bypassing the threshold check. The `ClearQueue()` method preserves force-delete items.
 
 ```mermaid
 sequenceDiagram
@@ -103,153 +114,84 @@ sequenceDiagram
 
 ### Implementation Steps
 
-#### Step 6: Database Migration — Add `force_delete` Column
+#### Step 6: Database Migration — ✅ Complete
 
-Add a new migration file to add the `force_delete` boolean column to the `approval_queue` table.
+Added `force_delete BOOLEAN NOT NULL DEFAULT FALSE` column to `approval_queue` table. Added `ForceDelete bool` field to `ApprovalQueueItem` model.
 
-**Files:**
-- `backend/internal/db/migrations/00010_add_force_delete.sql` — `ALTER TABLE approval_queue ADD COLUMN force_delete BOOLEAN NOT NULL DEFAULT FALSE`
-- `backend/internal/db/models.go` — Add `ForceDelete bool` field to `ApprovalQueueItem` struct
+**Files created/modified:**
+- `backend/internal/db/migrations/00010_add_force_delete.sql`
+- `backend/internal/db/models.go`
 
-#### Step 7: Update `ClearQueue()` to Preserve Force-Delete Items
+#### Step 7: Update `ClearQueue()` — ✅ Complete
 
-Modify `ClearQueue()` in `ApprovalService` to exclude items with `force_delete = true` from clearing. This ensures force-delete items survive the below-threshold queue clearing.
+Updated `ClearQueue()` WHERE clause to add `AND force_delete = false` so force-delete items survive the below-threshold queue clearing.
 
-**Files:**
-- `backend/internal/services/approval.go` — Update `ClearQueue()` WHERE clause to add `AND force_delete = false`
-- `backend/internal/services/approval_test.go` — Add test verifying force-delete items survive `ClearQueue()`
+**Files modified:**
+- `backend/internal/services/approval.go`
 
-#### Step 8: Add `CreateForceDelete()` Service Method
+#### Step 8: Add `CreateForceDelete()` Service Method — ✅ Complete
 
-Create a new method on `ApprovalService` that inserts an item into the approval queue with `force_delete = true` and `status = approved`. The item data comes from the preview response (mediaName, mediaType, integrationId, externalId, sizeBytes, scoreDetails, reason).
+Added three new methods to `ApprovalService`:
+- `CreateForceDelete()` — inserts with `force_delete=true`, `status=approved`, reason prefixed with "Force delete: "
+- `ListForceDeletes()` — queries approved force-delete items
+- `RemoveForceDelete()` — removes a processed force-delete item
 
-**Files:**
-- `backend/internal/services/approval.go` — Add `CreateForceDelete()` method
-- `backend/internal/services/approval_test.go` — Add tests for `CreateForceDelete()`
+**Files modified:**
+- `backend/internal/services/approval.go`
 
-#### Step 9: Add Force-Delete Route
+#### Step 9: Add Force-Delete Route — ✅ Complete
 
-Add a new `POST /api/v1/force-delete` endpoint. The route handler validates that `DeletionsEnabled` is true and execution mode is not `dry-run`, then calls `ApprovalService.CreateForceDelete()`.
+Added `POST /api/v1/force-delete` endpoint that:
+- Validates `DeletionsEnabled` is true (409 if disabled)
+- Validates execution mode is not `dry-run` (409 if dry-run)
+- Accepts an array of items to force-delete
+- Returns `{"queued": N, "total": N}`
 
-**Files:**
-- `backend/routes/approval.go` — Add force-delete endpoint
-- `backend/routes/approval_test.go` — Add tests for the new endpoint (happy path, deletions disabled, dry-run mode rejection)
+**Files modified:**
+- `backend/routes/approval.go`
 
-#### Step 10: Process Force-Delete Items in Poller
+#### Step 10: Process Force-Delete Items in Poller — ✅ Complete
 
-Add a new method to the poller that runs after the threshold check. It queries `approval_queue WHERE force_delete = true AND status = approved`, builds integration clients, and queues each item for deletion via `DeletionService.QueueDeletion()`. After successful queueing, items are removed from the approval queue.
+Added `processForceDeletes()` method to the poller that:
+- Runs after the threshold check (even when below threshold)
+- Queries `approval_queue WHERE force_delete = true AND status = approved`
+- Builds integration clients and queues each item for deletion
+- Removes processed items from the queue
+- Respects `DeletionsEnabled` preference
 
-**Files:**
-- `backend/internal/poller/evaluate.go` — Add `processForceDeletes()` method, call it from `evaluateAndCleanDisk()` after the threshold early-return
-- `backend/internal/poller/evaluate_test.go` — Add tests for force-delete processing
+**Files modified:**
+- `backend/internal/poller/evaluate.go`
 
-#### Step 11: Add Force-Delete Selection Mode to Frontend
+#### Steps 11-12: Frontend Force-Delete UI — ⏸️ Deferred
 
-Add a multi-select "Force Delete" workflow to the Deletion Priority view. The interaction works in both view modes (grid/poster and list/table) and follows the same selection pattern used by Sonarr/Radarr mass editors.
+The selection-mode UI (Select button, checkboxes, floating action bar, confirmation dialog) was initially implemented in `RulePreviewTable.vue` but **reverted** after testing revealed UX issues:
+- Show groups in poster mode were wrapped in `UiPopover` which intercepted selection clicks
+- Table mode needed a separate checkbox column implementation
+- Season-level granularity required flat (ungrouped) rows
 
-##### UI Design: Selection Mode Entry
+**Decision:** Force-delete frontend UI will be implemented on a dedicated Library Management page instead. See `20260317T1101Z-library-management-page.md`.
 
-A "Select" toggle button (with a `Trash2` icon) is added to the existing filter bar, next to the Protected/Unprotected buttons. Clicking it enters selection mode; clicking again (or a "Cancel" button) exits it.
+#### Step 13: Audit Trail — ✅ Complete
 
-##### UI Design: Grid/Poster Mode
-
-The existing `MediaPosterCard` component already has `selectable` and `selected` props with a checkbox overlay (top-left corner). In selection mode:
-
-- Every `MediaPosterCard` renders with `selectable=true`
-- Clicking the checkbox (top-left `CheckSquare`/`Square` icon) toggles selection
-- Protected items have their checkbox disabled/hidden (force-deleting contradicts "always keep")
-- Selected cards get the existing `ring-2 ring-primary bg-primary/5` highlight
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ [Grid/List] [Search...] [movie] [show] [Protected] [🗑 Select] │
-├──────────────────────────────────────────────────────────┤
-│  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐          │
-│  │☑ 0.82│  │☐ 0.71│  │☑ 0.65│  │☐ 0.58│  │☐ 0.45│          │
-│  │     │  │     │  │     │  │     │  │     │          │
-│  │Movie│  │Movie│  │Show │  │Movie│  │Movie│          │
-│  └─────┘  └─────┘  └─────┘  └─────┘  └─────┘          │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐      │
-│  │  2 items selected - 4.2 GB  [Force Delete] [Cancel] │      │
-│  └────────────────────────────────────────────────┘      │
-└──────────────────────────────────────────────────────────┘
-```
-
-##### UI Design: List/Table Mode
-
-In selection mode, a checkbox column appears as the first column (before `#`):
-
-- Each row gets a `UiCheckbox` in the new first column
-- A "select all visible" checkbox appears in the table header for bulk selection
-- Protected rows have their checkbox disabled
-- The same floating action bar appears at the bottom
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ [Grid/List] [Search...] [movie] [show] [Protected] [🗑 Select] │
-├──┬────┬───────┬──────────────────┬───────┬───────────────┤
-│☐ │ #  │ Score │ Title            │ Type  │  Size         │
-├──┼────┼───────┼──────────────────┼───────┼───────────────┤
-│☑ │ 1  │ 0.82  │ Serenity         │ movie │ 2.1 GB        │
-│☐ │ 2  │ 0.71  │ Bad Movie        │ movie │ 1.8 GB        │
-│☑ │ 3  │ 0.65  │ Firefly ▸ 2 s.   │ show  │ 3.2 GB        │
-├──┴────┴───────┴──────────────────┴───────┴───────────────┤
-│  2 items selected - 5.3 GB  [Force Delete] [Cancel]               │
-└──────────────────────────────────────────────────────────┘
-```
-
-##### UI Design: Score Detail Modal (Single-Item Path)
-
-When a user clicks any item to open the `ScoreDetailModal`, a "Force Delete" button appears in the modal footer (next to the existing size badge and action badge). This provides a single-item force-delete path without entering selection mode — useful for quick one-off deletions. The button is hidden for protected items.
-
-##### Floating Action Bar
-
-The floating action bar appears fixed at the bottom of the `UiCard` when ≥1 item is selected. It shows:
-- Count of selected items and total size
-- "Force Delete" button (destructive variant)
-- "Cancel" button to exit selection mode and clear selections
-
-**Files:**
-- `frontend/app/components/rules/RulePreviewTable.vue` — Add selection mode state, checkbox column/overlay, floating action bar, force-delete API call
-- `frontend/app/components/ScoreDetailModal.vue` — Add force-delete button in the modal footer (emit event to parent)
-- `frontend/app/types/api.ts` — Add `forceDelete?: boolean` to `ApprovalQueueItem` interface
-
-#### Step 12: Add Confirmation Dialog for Force Delete
-
-Force-delete bypasses the normal safety threshold. Both the floating action bar "Force Delete" button and the ScoreDetailModal "Force Delete" button open a confirmation dialog before proceeding.
-
-The dialog clearly communicates the consequences: "This will delete N item(s) on the next engine run, regardless of disk usage. This action cannot be undone." It lists the selected items by name and total size.
-
-**Files:**
-- `frontend/app/components/rules/RulePreviewTable.vue` — Add `UiDialog` confirmation with item list
-- `frontend/app/locales/en.json` — Add i18n strings for force-delete confirmation, selection mode labels, floating bar text
-
-#### Step 13: Add Audit Trail for Force Deletes
-
-Ensure force-deleted items are logged distinctly in the audit log. The existing `DeletionService` worker already creates audit entries, but the reason should indicate it was a force-delete.
-
-**Files:**
-- `backend/internal/services/approval.go` — Set reason prefix like "Force delete: " in `CreateForceDelete()`
+Force-delete items have their reason prefixed with "Force delete: " in `CreateForceDelete()` for audit trail clarity.
 
 ---
 
 ## Safety Considerations
 
 1. **DeletionsEnabled guard** — Force-delete respects the global `DeletionsEnabled` preference. If disabled, the API returns 409 Conflict.
-2. **Dry-run mode guard** — Force-delete is not available in dry-run mode. The API returns 409 Conflict with a message directing the user to switch to approval or auto mode.
-3. **Confirmation dialog** — The frontend requires explicit confirmation before marking an item for force-delete.
-4. **Audit trail** — Force-deletes are logged with a distinct reason prefix in the audit log for traceability.
-5. **Queue clearing** — Force-delete items are excluded from the below-threshold queue clearing to ensure they persist until processed.
+2. **Dry-run mode guard** — Force-delete is not available in dry-run mode. The API returns 409 Conflict.
+3. **Audit trail** — Force-deletes are logged with a distinct "Force delete: " reason prefix.
+4. **Queue clearing** — Force-delete items are excluded from the below-threshold queue clearing.
 
 ---
 
 ## Cross-Cutting
 
-#### Step 14: Run `make ci`
+#### Step 14: Run `make ci` — ✅ Complete
 
-Run the full CI pipeline locally to verify all changes pass lint, test, and security checks.
+Full CI pipeline passes: lint (Go + ESLint + Prettier), tests, security (Semgrep).
 
-#### Step 15: i18n for All Locales
+#### Step 15: i18n for All Locales — ✅ Complete
 
-After English strings are finalized, add placeholder translations for all supported locales (or mark them for translation).
+Rule filter strings added to all 22 locale files. Selection-mode-specific strings were added then removed during the UI revert.
