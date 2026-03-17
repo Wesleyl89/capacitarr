@@ -164,17 +164,6 @@
                 </UiPopoverContent>
               </UiPopover>
             </template>
-            <!-- Force-delete selection mode toggle -->
-            <UiSeparator orientation="vertical" class="h-5 mx-1" />
-            <UiButton
-              :variant="selectionMode ? 'default' : 'outline'"
-              size="sm"
-              class="rounded-full h-7 px-3 text-xs"
-              @click="toggleSelectionMode"
-            >
-              <Trash2Icon class="w-3 h-3 mr-1" />
-              {{ selectionMode ? t('rules.cancelSelection') : t('rules.selectMode') }}
-            </UiButton>
           </div>
         </div>
 
@@ -218,25 +207,8 @@
                 >
                 <div class="flex-1 h-px bg-destructive/40" />
               </div>
-              <!-- In selection mode: all items render as plain selectable cards -->
-              <MediaPosterCard
-                v-if="selectionMode"
-                :title="group.entry.item.title"
-                :poster-url="group.entry.item.posterUrl"
-                :year="group.entry.item.year"
-                :media-type="group.entry.item.type"
-                :score="group.entry.isProtected ? undefined : group.entry.score"
-                :size-bytes="group.entry.item.sizeBytes"
-                :is-protected="group.entry.isProtected"
-                :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
-                :season-count="group.seasons.length > 0 ? group.seasons.length : undefined"
-                :selectable="!group.entry.isProtected"
-                :selected="isItemSelected(group.entry)"
-                @click="toggleItemSelection(group.entry)"
-                @select="toggleItemSelection(group.entry)"
-              />
-              <!-- Show groups: popover with individual seasons (normal mode) -->
-              <UiPopover v-else-if="group.seasons.length > 0">
+              <!-- Show groups: popover with individual seasons -->
+              <UiPopover v-if="group.seasons.length > 0">
                 <UiPopoverTrigger as-child>
                   <MediaPosterCard
                     :title="group.entry.item.title"
@@ -287,7 +259,7 @@
                   </div>
                 </UiPopoverContent>
               </UiPopover>
-              <!-- Non-show items: direct click to detail (normal mode) -->
+              <!-- Non-show items: direct click to detail -->
               <MediaPosterCard
                 v-else
                 :title="group.entry.item.title"
@@ -322,7 +294,6 @@
           <UiTable>
             <UiTableHeader class="sticky top-0 z-10 bg-background">
               <UiTableRow>
-                <UiTableHead v-if="selectionMode" class="w-10" />
                 <UiTableHead
                   v-for="col in tableColumns"
                   :key="col.key"
@@ -359,7 +330,7 @@
                   v-if="deletionLineIndex !== null && deletionLineIndex === groupIdx"
                   class="pointer-events-none"
                 >
-                  <UiTableCell :colspan="selectionMode ? 6 : 5" class="!p-0">
+                  <UiTableCell :colspan="5" class="!p-0">
                     <div
                       class="flex items-center gap-2 px-4 py-1.5 bg-destructive/10 border-y border-destructive/30"
                     >
@@ -373,24 +344,14 @@
                 </UiTableRow>
                 <UiTableRow
                   class="cursor-pointer"
-                  :class="[
-                    deletionLineIndex !== null && groupIdx >= deletionLineIndex ? 'opacity-40' : '',
-                    selectionMode && isItemSelected(group.entry) ? 'bg-primary/5' : '',
-                  ]"
+                  :class="
+                    deletionLineIndex !== null && groupIdx >= deletionLineIndex ? 'opacity-40' : ''
+                  "
                   @click="
-                    selectionMode
-                      ? toggleItemSelection(group.entry)
-                      : (selectPreviewItem(group.entry),
-                        group.seasons.length > 0 && togglePreviewGroup(group.key))
+                    selectPreviewItem(group.entry);
+                    group.seasons.length > 0 && togglePreviewGroup(group.key);
                   "
                 >
-                  <UiTableCell v-if="selectionMode" class="w-10 text-center" @click.stop>
-                    <UiCheckbox
-                      :model-value="isItemSelected(group.entry)"
-                      :disabled="group.entry.isProtected"
-                      @update:model-value="toggleItemSelection(group.entry)"
-                    />
-                  </UiTableCell>
                   <UiTableCell class="w-12 text-center">
                     <span class="text-xs font-mono tabular-nums text-muted-foreground">{{
                       groupIdx + 1
@@ -486,26 +447,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Floating action bar for force-delete selection -->
-      <div
-        v-if="selectionMode && selectedItems.size > 0"
-        class="sticky bottom-0 mt-4 rounded-lg border bg-card p-3 flex items-center justify-between gap-3 shadow-lg"
-      >
-        <span class="text-sm text-muted-foreground">
-          {{ t('rules.itemsSelected', { count: selectedItems.size }) }}
-          — {{ formatBytes(selectedTotalBytes) }}
-        </span>
-        <div class="flex items-center gap-2">
-          <UiButton variant="outline" size="sm" @click="toggleSelectionMode">
-            {{ t('rules.cancelSelection') }}
-          </UiButton>
-          <UiButton variant="destructive" size="sm" @click="forceDeleteConfirmOpen = true">
-            <Trash2Icon class="w-3.5 h-3.5 mr-1" />
-            {{ t('rules.forceDelete') }}
-          </UiButton>
-        </div>
-      </div>
     </UiCardContent>
   </UiCard>
 
@@ -521,47 +462,6 @@
     :created-at="selectedPreviewItem.createdAt"
     @close="selectedPreviewItem = null"
   />
-
-  <!-- Force-delete confirmation dialog -->
-  <UiDialog v-model:open="forceDeleteConfirmOpen">
-    <UiDialogContent class="max-w-md">
-      <UiDialogHeader>
-        <UiDialogTitle>{{ t('rules.forceDeleteConfirmTitle') }}</UiDialogTitle>
-      </UiDialogHeader>
-      <div class="space-y-3 py-2">
-        <p class="text-sm text-muted-foreground">
-          {{
-            t('rules.forceDeleteConfirmMessage', {
-              count: selectedItems.size,
-              size: formatBytes(selectedTotalBytes),
-            })
-          }}
-        </p>
-        <div class="max-h-40 overflow-y-auto rounded border p-2 space-y-1">
-          <div
-            v-for="entry in selectedEntries"
-            :key="itemKey(entry)"
-            class="flex items-center justify-between text-xs"
-          >
-            <span class="truncate flex-1">{{ entry.item.title }}</span>
-            <span class="text-muted-foreground tabular-nums shrink-0 ml-2">
-              {{ formatBytes(entry.item.sizeBytes) }}
-            </span>
-          </div>
-        </div>
-      </div>
-      <UiDialogFooter>
-        <UiButton variant="outline" @click="forceDeleteConfirmOpen = false">
-          {{ t('rules.cancelSelection') }}
-        </UiButton>
-        <UiButton variant="destructive" :disabled="forceDeleteLoading" @click="executeForceDelete">
-          <Trash2Icon v-if="!forceDeleteLoading" class="w-3.5 h-3.5 mr-1" />
-          <LoaderCircleIcon v-else class="w-3.5 h-3.5 mr-1 animate-spin" />
-          {{ t('rules.forceDelete') }}
-        </UiButton>
-      </UiDialogFooter>
-    </UiDialogContent>
-  </UiDialog>
 </template>
 
 <script setup lang="ts">
@@ -578,7 +478,6 @@ import {
   ArrowUpDownIcon,
   FilterIcon,
   XIcon,
-  Trash2Icon,
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 import { groupEvaluatedItems } from '~/utils/groupPreview';
@@ -653,84 +552,6 @@ function itemMatchesRuleFilter(entry: EvaluatedItem): boolean {
   }
   return selectedRuleIds.value.every((id) => matchedRuleIds.includes(id));
 }
-
-// Force-delete selection mode
-const api = useApi();
-const { addToast } = useToast();
-const selectionMode = ref(false);
-const selectedItems = ref<Set<string>>(new Set());
-const forceDeleteConfirmOpen = ref(false);
-const forceDeleteLoading = ref(false);
-
-function toggleSelectionMode() {
-  selectionMode.value = !selectionMode.value;
-  if (!selectionMode.value) {
-    selectedItems.value = new Set();
-  }
-}
-
-/** Unique key for an EvaluatedItem (integrationId:externalId) */
-function itemKey(entry: EvaluatedItem): string {
-  return `${entry.item.integrationId}:${entry.item.externalId}`;
-}
-
-function toggleItemSelection(entry: EvaluatedItem) {
-  if (entry.isProtected) return;
-  const key = itemKey(entry);
-  const next = new Set(selectedItems.value);
-  if (next.has(key)) {
-    next.delete(key);
-  } else {
-    next.add(key);
-  }
-  selectedItems.value = next;
-}
-
-function isItemSelected(entry: EvaluatedItem): boolean {
-  return selectedItems.value.has(itemKey(entry));
-}
-
-/** Get the EvaluatedItem objects for all selected items */
-const selectedEntries = computed(() => {
-  return props.preview.filter((e) => selectedItems.value.has(itemKey(e)));
-});
-
-const selectedTotalBytes = computed(() => {
-  return selectedEntries.value.reduce((sum, e) => sum + (e.item?.sizeBytes ?? 0), 0);
-});
-
-async function executeForceDelete() {
-  forceDeleteLoading.value = true;
-  try {
-    const items = selectedEntries.value.map((e) => ({
-      mediaName: e.item.title,
-      mediaType: e.item.type,
-      integrationId: e.item.integrationId,
-      externalId: e.item.externalId,
-      sizeBytes: e.item.sizeBytes,
-      reason: e.reason || 'Manual force delete',
-      scoreDetails: e.factors ? JSON.stringify(e.factors) : '[]',
-      posterUrl: e.item.posterUrl || '',
-    }));
-
-    const result = (await api('/api/v1/force-delete', {
-      method: 'POST',
-      body: items,
-    })) as { queued: number; total: number };
-
-    addToast(t('rules.forceDeleteSuccess', { count: result.queued }), 'success');
-    forceDeleteConfirmOpen.value = false;
-    selectionMode.value = false;
-    selectedItems.value = new Set();
-  } catch (err: unknown) {
-    const apiErr = err as { data?: { error?: string } };
-    const msg = apiErr?.data?.error || t('rules.forceDeleteError');
-    addToast(msg, 'error');
-  } finally {
-    forceDeleteLoading.value = false;
-  }
-}
-
 type PreviewSortColumn = 'rank' | 'score' | 'title' | 'type' | 'size';
 const previewSortBy = ref<PreviewSortColumn>('rank');
 const previewSortDir = ref<'asc' | 'desc'>('asc');

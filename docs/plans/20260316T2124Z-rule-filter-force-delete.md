@@ -1,6 +1,6 @@
 # Rule Filtering & Force Delete
 
-**Status:** ✅ Complete
+**Status:** ✅ Complete (rule filter + force-delete backend; selection-mode UI reverted — see `20260317T1101Z-library-management-page.md`)
 **Branch:** `feature/rule-filter-force-delete`
 **Created:** 2026-03-16
 
