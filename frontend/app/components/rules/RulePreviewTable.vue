@@ -218,8 +218,25 @@
                 >
                 <div class="flex-1 h-px bg-destructive/40" />
               </div>
-              <!-- Show groups: popover with individual seasons -->
-              <UiPopover v-if="group.seasons.length > 0">
+              <!-- In selection mode: all items render as plain selectable cards -->
+              <MediaPosterCard
+                v-if="selectionMode"
+                :title="group.entry.item.title"
+                :poster-url="group.entry.item.posterUrl"
+                :year="group.entry.item.year"
+                :media-type="group.entry.item.type"
+                :score="group.entry.isProtected ? undefined : group.entry.score"
+                :size-bytes="group.entry.item.sizeBytes"
+                :is-protected="group.entry.isProtected"
+                :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
+                :season-count="group.seasons.length > 0 ? group.seasons.length : undefined"
+                :selectable="!group.entry.isProtected"
+                :selected="isItemSelected(group.entry)"
+                @click="toggleItemSelection(group.entry)"
+                @select="toggleItemSelection(group.entry)"
+              />
+              <!-- Show groups: popover with individual seasons (normal mode) -->
+              <UiPopover v-else-if="group.seasons.length > 0">
                 <UiPopoverTrigger as-child>
                   <MediaPosterCard
                     :title="group.entry.item.title"
@@ -231,9 +248,6 @@
                     :is-protected="group.entry.isProtected"
                     :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
                     :season-count="group.seasons.length"
-                    :selectable="selectionMode && !group.entry.isProtected"
-                    :selected="isItemSelected(group.entry)"
-                    @select="toggleItemSelection(group.entry)"
                   />
                 </UiPopoverTrigger>
                 <UiPopoverContent class="w-72 p-0" side="bottom" align="start">
@@ -273,7 +287,7 @@
                   </div>
                 </UiPopoverContent>
               </UiPopover>
-              <!-- Non-show items: direct click to detail -->
+              <!-- Non-show items: direct click to detail (normal mode) -->
               <MediaPosterCard
                 v-else
                 :title="group.entry.item.title"
@@ -284,12 +298,7 @@
                 :size-bytes="group.entry.item.sizeBytes"
                 :is-protected="group.entry.isProtected"
                 :is-flagged="deletionLineIndex !== null && groupIdx >= deletionLineIndex"
-                :selectable="selectionMode && !group.entry.isProtected"
-                :selected="isItemSelected(group.entry)"
-                @click="
-                  selectionMode ? toggleItemSelection(group.entry) : selectPreviewItem(group.entry)
-                "
-                @select="toggleItemSelection(group.entry)"
+                @click="selectPreviewItem(group.entry)"
               />
             </template>
           </div>
@@ -313,6 +322,7 @@
           <UiTable>
             <UiTableHeader class="sticky top-0 z-10 bg-background">
               <UiTableRow>
+                <UiTableHead v-if="selectionMode" class="w-10" />
                 <UiTableHead
                   v-for="col in tableColumns"
                   :key="col.key"
@@ -349,7 +359,7 @@
                   v-if="deletionLineIndex !== null && deletionLineIndex === groupIdx"
                   class="pointer-events-none"
                 >
-                  <UiTableCell :colspan="5" class="!p-0">
+                  <UiTableCell :colspan="selectionMode ? 6 : 5" class="!p-0">
                     <div
                       class="flex items-center gap-2 px-4 py-1.5 bg-destructive/10 border-y border-destructive/30"
                     >
@@ -363,14 +373,24 @@
                 </UiTableRow>
                 <UiTableRow
                   class="cursor-pointer"
-                  :class="
-                    deletionLineIndex !== null && groupIdx >= deletionLineIndex ? 'opacity-40' : ''
-                  "
+                  :class="[
+                    deletionLineIndex !== null && groupIdx >= deletionLineIndex ? 'opacity-40' : '',
+                    selectionMode && isItemSelected(group.entry) ? 'bg-primary/5' : '',
+                  ]"
                   @click="
-                    selectPreviewItem(group.entry);
-                    group.seasons.length > 0 && togglePreviewGroup(group.key);
+                    selectionMode
+                      ? toggleItemSelection(group.entry)
+                      : (selectPreviewItem(group.entry),
+                        group.seasons.length > 0 && togglePreviewGroup(group.key))
                   "
                 >
+                  <UiTableCell v-if="selectionMode" class="w-10 text-center" @click.stop>
+                    <UiCheckbox
+                      :model-value="isItemSelected(group.entry)"
+                      :disabled="group.entry.isProtected"
+                      @update:model-value="toggleItemSelection(group.entry)"
+                    />
+                  </UiTableCell>
                   <UiTableCell class="w-12 text-center">
                     <span class="text-xs font-mono tabular-nums text-muted-foreground">{{
                       groupIdx + 1
