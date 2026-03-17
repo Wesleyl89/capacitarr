@@ -44,6 +44,13 @@ type arrImage struct {
 	URL       string `json:"url"`
 }
 
+// arrLanguage represents the nested originalLanguage object in *arr API responses.
+// Both Sonarr and Radarr return language as {"id": 1, "name": "English"}.
+type arrLanguage struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 // arrExtractPosterURL finds the poster URL from an *arr images array.
 // Prefers remoteUrl (external CDN) over url (local *arr path).
 // Checks for coverType "poster" first, then "cover" (used by Readarr for book covers).

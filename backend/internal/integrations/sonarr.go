@@ -46,17 +46,19 @@ func (s *SonarrClient) GetRootFolders() ([]string, error) {
 
 // sonarrSeries maps the Sonarr series API response
 type sonarrSeries struct {
-	ID               int        `json:"id"`
-	Title            string     `json:"title"`
-	Year             int        `json:"year"`
-	Path             string     `json:"path"`
-	Monitored        bool       `json:"monitored"`
-	Status           string     `json:"status"` // continuing, ended
-	Genres           []string   `json:"genres"`
-	Tags             []int      `json:"tags"`
-	QualityProfileID int        `json:"qualityProfileId"`
-	Added            string     `json:"added"`
-	Images           []arrImage `json:"images"`
+	ID               int         `json:"id"`
+	Title            string      `json:"title"`
+	Year             int         `json:"year"`
+	TmdbID           int         `json:"tmdbId"`
+	Path             string      `json:"path"`
+	Monitored        bool        `json:"monitored"`
+	Status           string      `json:"status"` // continuing, ended
+	Genres           []string    `json:"genres"`
+	Tags             []int       `json:"tags"`
+	QualityProfileID int         `json:"qualityProfileId"`
+	Added            string      `json:"added"`
+	Images           []arrImage  `json:"images"`
+	OriginalLanguage arrLanguage `json:"originalLanguage"`
 	Ratings          struct {
 		Value float64 `json:"value"`
 	} `json:"ratings"`
@@ -132,6 +134,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 				Title:          fmt.Sprintf("%s - Season %d", show.Title, season.SeasonNumber),
 				ShowTitle:      show.Title,
 				Year:           show.Year,
+				TMDbID:         show.TmdbID,
 				SeasonNumber:   season.SeasonNumber,
 				EpisodeCount:   season.Statistics.EpisodeFileCount,
 				SizeBytes:      season.Statistics.SizeOnDisk,
@@ -142,6 +145,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 				Rating:         show.Ratings.Value,
 				Genre:          strings.Join(show.Genres, ", "),
 				Monitored:      show.Monitored && season.Monitored,
+				Language:       show.OriginalLanguage.Name,
 				Tags:           tagNames,
 				AddedAt:        addedAt,
 			})
@@ -153,6 +157,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			Type:           MediaTypeShow,
 			Title:          show.Title,
 			Year:           show.Year,
+			TMDbID:         show.TmdbID,
 			SizeBytes:      show.Statistics.SizeOnDisk,
 			Path:           show.Path,
 			PosterURL:      posterURL,
@@ -162,6 +167,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			Rating:         show.Ratings.Value,
 			Genre:          strings.Join(show.Genres, ", "),
 			Monitored:      show.Monitored,
+			Language:       show.OriginalLanguage.Name,
 			Tags:           tagNames,
 			AddedAt:        addedAt,
 		})

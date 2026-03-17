@@ -116,10 +116,12 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 					ID:               1,
 					Title:            "Serenity",
 					Year:             2010,
+					TmdbID:           16320,
 					Path:             "/media/movies/Serenity (2010)",
 					Monitored:        true,
 					HasFile:          true,
 					SizeOnDisk:       8000000000,
+					OriginalLanguage: arrLanguage{ID: 1, Name: "English"},
 					Genres:           []string{"action", "sci-fi"},
 					Tags:             []int{2},
 					QualityProfileID: 1,
@@ -139,10 +141,12 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 				},
 				{
 					// Movie with TMDB rating only (IMDB = 0)
-					ID:         2,
-					Title:      "Serenity 2",
-					HasFile:    true,
-					SizeOnDisk: 5000000000,
+					ID:               2,
+					Title:            "Serenity 2",
+					TmdbID:           16321,
+					HasFile:          true,
+					SizeOnDisk:       5000000000,
+					OriginalLanguage: arrLanguage{ID: 2, Name: "Japanese"},
 					Ratings: struct {
 						IMDB struct {
 							Value float64 `json:"value"`
@@ -203,11 +207,23 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 	if movie.Year != 2010 {
 		t.Errorf("Expected year 2010, got %d", movie.Year)
 	}
+	if movie.TMDbID != 16320 {
+		t.Errorf("Expected TMDbID 16320, got %d", movie.TMDbID)
+	}
+	if movie.Language != "English" {
+		t.Errorf("Expected Language 'English', got %q", movie.Language)
+	}
 
 	// Second movie — TMDB fallback rating
 	tmdbOnly := items[1]
 	if tmdbOnly.Rating != 7.2 {
 		t.Errorf("Expected TMDB fallback rating 7.2, got %v", tmdbOnly.Rating)
+	}
+	if tmdbOnly.TMDbID != 16321 {
+		t.Errorf("Expected TMDbID 16321, got %d", tmdbOnly.TMDbID)
+	}
+	if tmdbOnly.Language != "Japanese" {
+		t.Errorf("Expected Language 'Japanese', got %q", tmdbOnly.Language)
 	}
 }
 

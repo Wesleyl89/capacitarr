@@ -50,12 +50,13 @@ type readarrBook struct {
 	Author   struct {
 		AuthorName string `json:"authorName"`
 	} `json:"author"`
-	SizeOnDisk int64      `json:"sizeOnDisk"`
-	Added      string     `json:"added"`
-	Monitored  bool       `json:"monitored"`
-	Path       string     `json:"path"`
-	Images     []arrImage `json:"images"`
-	Ratings    struct {
+	SizeOnDisk  int64      `json:"sizeOnDisk"`
+	ReleaseDate string     `json:"releaseDate"`
+	Added       string     `json:"added"`
+	Monitored   bool       `json:"monitored"`
+	Path        string     `json:"path"`
+	Images      []arrImage `json:"images"`
+	Ratings     struct {
 		Value float64 `json:"value"`
 	} `json:"ratings"`
 	Genres           []string `json:"genres"`
@@ -101,6 +102,14 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 			}
 		}
 
+		// Extract publication year from releaseDate
+		var year int
+		if b.ReleaseDate != "" {
+			if t, err := time.Parse(time.RFC3339, b.ReleaseDate); err == nil {
+				year = t.Year()
+			}
+		}
+
 		tagNames := arrResolveTagNames(b.Tags, tagMap)
 
 		// Pick genre string from first genre if available
@@ -113,6 +122,7 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 			ExternalID:     fmt.Sprintf("%d", b.ID),
 			Title:          b.Title,
 			Type:           MediaTypeBook,
+			Year:           year,
 			SizeBytes:      b.SizeOnDisk,
 			AddedAt:        addedAt,
 			Monitored:      b.Monitored,

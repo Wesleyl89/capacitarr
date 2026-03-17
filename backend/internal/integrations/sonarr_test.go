@@ -134,6 +134,7 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 					ID:               1,
 					Title:            "Firefly",
 					Year:             2008,
+					TmdbID:           1437,
 					Path:             "/media/tv/Firefly",
 					Monitored:        true,
 					Status:           "ended",
@@ -141,6 +142,7 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 					Tags:             []int{1},
 					QualityProfileID: 1,
 					Added:            "2023-01-15T00:00:00Z",
+					OriginalLanguage: arrLanguage{ID: 1, Name: "English"},
 					Ratings: struct {
 						Value float64 `json:"value"`
 					}{Value: 9.5},
@@ -219,6 +221,12 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 	if season.SizeBytes != 10000000000 {
 		t.Errorf("Expected SizeBytes 10000000000, got %d", season.SizeBytes)
 	}
+	if season.TMDbID != 1437 {
+		t.Errorf("Expected TMDbID 1437, got %d", season.TMDbID)
+	}
+	if season.Language != "English" {
+		t.Errorf("Expected Language 'English', got %q", season.Language)
+	}
 
 	// Second item: Show-level
 	show := items[1]
@@ -230,6 +238,12 @@ func TestSonarrClient_GetMediaItems(t *testing.T) {
 	}
 	if show.Rating != 9.5 {
 		t.Errorf("Expected rating 9.5, got %v", show.Rating)
+	}
+	if show.TMDbID != 1437 {
+		t.Errorf("Expected TMDbID 1437, got %d", show.TMDbID)
+	}
+	if show.Language != "English" {
+		t.Errorf("Expected Language 'English', got %q", show.Language)
 	}
 }
 

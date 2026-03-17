@@ -409,3 +409,156 @@ func TestEnrichItems_PlexDoesNotOverwriteExistingData(t *testing.T) {
 		t.Errorf("Expected existing LastPlayed to be preserved, got %v", items[0].LastPlayed)
 	}
 }
+
+func TestEnrichItems_OverseerrEnrichment(t *testing.T) {
+	// Mock Overseerr server: returns two requests keyed by TMDb ID
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/request":
+			resp := map[string]any{
+				"pageInfo": map[string]any{"pages": 1, "page": 1, "results": 2},
+				"results": []map[string]any{
+					{
+						"id":     1,
+						"status": 2,
+						"type":   "movie",
+						"media": map[string]any{
+							"tmdbId":    16320,
+							"mediaType": "movie",
+						},
+						"requestedBy": map[string]any{
+							"displayName": "RJ",
+							"username":    "rj",
+						},
+					},
+					{
+						"id":     2,
+						"status": 4,
+						"type":   "tv",
+						"media": map[string]any{
+							"tmdbId":    1437,
+							"mediaType": "tv",
+						},
+						"requestedBy": map[string]any{
+							"displayName": "Mal",
+							"username":    "mal",
+						},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode overseerr response: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	overseerrClient := NewOverseerrClient(srv.URL, "test-key")
+
+	// Items with TMDb IDs set (as would happen after the fix)
+	items := []MediaItem{
+		{Title: "Serenity", Type: MediaTypeMovie, ExternalID: "1", TMDbID: 16320},
+		{Title: "Firefly - Season 1", ShowTitle: "Firefly", Type: MediaTypeSeason, ExternalID: "2-s1", TMDbID: 1437},
+		{Title: "Firefly", Type: MediaTypeShow, ExternalID: "2", TMDbID: 1437},
+		{Title: "Firefly 2", Type: MediaTypeShow, ExternalID: "3", TMDbID: 0}, // No TMDb ID — should NOT be enriched
+	}
+
+	ec := EnrichmentClients{Overseerr: overseerrClient}
+	EnrichItems(items, ec)
+
+	// Serenity: TMDb 16320 matches → IsRequested=true, RequestedBy="RJ"
+	if !items[0].IsRequested {
+		t.Error("Serenity: expected IsRequested=true")
+	}
+	if items[0].RequestedBy != "RJ" {
+		t.Errorf("Serenity: expected RequestedBy 'RJ', got %q", items[0].RequestedBy)
+	}
+	if items[0].RequestCount != 1 {
+		t.Errorf("Serenity: expected RequestCount 1, got %d", items[0].RequestCount)
+	}
+
+	// Firefly Season 1: TMDb 1437 matches → IsRequested=true, RequestedBy="Mal"
+	if !items[1].IsRequested {
+		t.Error("Firefly Season 1: expected IsRequested=true")
+	}
+	if items[1].RequestedBy != "Mal" {
+		t.Errorf("Firefly Season 1: expected RequestedBy 'Mal', got %q", items[1].RequestedBy)
+	}
+
+	// Firefly show-level: same TMDb 1437 → also matched
+	if !items[2].IsRequested {
+		t.Error("Firefly: expected IsRequested=true")
+	}
+	if items[2].RequestedBy != "Mal" {
+		t.Errorf("Firefly: expected RequestedBy 'Mal', got %q", items[2].RequestedBy)
+	}
+
+	// Firefly 2: TMDb 0 → should NOT be enriched
+	if items[3].IsRequested {
+		t.Error("Firefly 2: expected IsRequested=false (TMDbID is 0)")
+	}
+	if items[3].RequestedBy != "" {
+		t.Errorf("Firefly 2: expected empty RequestedBy, got %q", items[3].RequestedBy)
+	}
+}
+
+func TestEnrichItems_OverseerrWithWatchedByRequestor(t *testing.T) {
+	// Mock Overseerr: "RJ" requested Serenity (TMDb 16320)
+	overseerrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/request" {
+			resp := map[string]any{
+				"pageInfo": map[string]any{"pages": 1, "page": 1, "results": 1},
+				"results": []map[string]any{
+					{
+						"id":     1,
+						"status": 4,
+						"type":   "movie",
+						"media": map[string]any{
+							"tmdbId":    16320,
+							"mediaType": "movie",
+						},
+						"requestedBy": map[string]any{
+							"displayName": "RJ",
+							"username":    "rj",
+						},
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer overseerrSrv.Close()
+
+	overseerrClient := NewOverseerrClient(overseerrSrv.URL, "test-key")
+
+	// Item has TMDbID AND watch data from Tautulli where "RJ" watched it
+	items := []MediaItem{
+		{
+			Title:          "Serenity",
+			Type:           MediaTypeMovie,
+			ExternalID:     "1",
+			TMDbID:         16320,
+			WatchedByUsers: []string{"RJ"},
+		},
+	}
+
+	ec := EnrichmentClients{Overseerr: overseerrClient}
+	EnrichItems(items, ec)
+
+	// RequestedBy should be "RJ"
+	if items[0].RequestedBy != "RJ" {
+		t.Errorf("Expected RequestedBy 'RJ', got %q", items[0].RequestedBy)
+	}
+	// WatchedByRequestor cross-ref should fire because "RJ" is in WatchedByUsers
+	if !items[0].WatchedByRequestor {
+		t.Error("Expected WatchedByRequestor=true (RJ requested and watched)")
+	}
+}

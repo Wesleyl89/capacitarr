@@ -44,14 +44,16 @@ func (r *RadarrClient) GetRootFolders() ([]string, error) {
 
 // radarrMovie maps the Radarr movie API response (relevant fields)
 type radarrMovie struct {
-	ID         int    `json:"id"`
-	Title      string `json:"title"`
-	Year       int    `json:"year"`
-	Path       string `json:"path"`
-	Monitored  bool   `json:"monitored"`
-	HasFile    bool   `json:"hasFile"`
-	SizeOnDisk int64  `json:"sizeOnDisk"`
-	Ratings    struct {
+	ID               int         `json:"id"`
+	Title            string      `json:"title"`
+	Year             int         `json:"year"`
+	TmdbID           int         `json:"tmdbId"`
+	Path             string      `json:"path"`
+	Monitored        bool        `json:"monitored"`
+	HasFile          bool        `json:"hasFile"`
+	SizeOnDisk       int64       `json:"sizeOnDisk"`
+	OriginalLanguage arrLanguage `json:"originalLanguage"`
+	Ratings          struct {
 		IMDB struct {
 			Value float64 `json:"value"`
 		} `json:"imdb"`
@@ -117,6 +119,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 			Type:           MediaTypeMovie,
 			Title:          m.Title,
 			Year:           m.Year,
+			TMDbID:         m.TmdbID,
 			SizeBytes:      m.SizeOnDisk,
 			Path:           m.Path,
 			PosterURL:      arrExtractPosterURL(m.Images),
@@ -124,6 +127,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 			Rating:         rating,
 			Genre:          strings.Join(m.Genres, ", "),
 			Monitored:      m.Monitored,
+			Language:       m.OriginalLanguage.Name,
 			Tags:           tagNames,
 			AddedAt:        addedAt,
 		})

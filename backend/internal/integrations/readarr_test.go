@@ -103,6 +103,7 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 					Title:            "Serenity",
 					AuthorID:         10,
 					SizeOnDisk:       2000000,
+					ReleaseDate:      "1965-08-01T00:00:00Z",
 					Added:            "2024-03-01T10:30:00Z",
 					Monitored:        true,
 					Path:             "/media/books/Serenity",
@@ -127,6 +128,7 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 					Title:            "Firefly",
 					AuthorID:         20,
 					SizeOnDisk:       1500000,
+					ReleaseDate:      "1984-07-01T00:00:00Z",
 					Added:            "2024-04-15T08:00:00Z",
 					Monitored:        false,
 					Path:             "/media/books/Firefly",
@@ -196,6 +198,9 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 	if book1.Genre != "Science Fiction" {
 		t.Errorf("Expected genre 'Science Fiction', got %q", book1.Genre)
 	}
+	if book1.Year != 1965 {
+		t.Errorf("Expected Year 1965 from releaseDate, got %d", book1.Year)
+	}
 
 	// Second book
 	book2 := items[1]
@@ -210,6 +215,9 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 	}
 	if len(book2.Tags) != 1 || book2.Tags[0] != "sci-fi" {
 		t.Errorf("Expected tags [sci-fi], got %v", book2.Tags)
+	}
+	if book2.Year != 1984 {
+		t.Errorf("Expected Year 1984 from releaseDate, got %d", book2.Year)
 	}
 }
 
