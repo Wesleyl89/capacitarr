@@ -303,31 +303,12 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /metrics/worker:
-    get:
-      operationId: getWorkerMetrics
-      tags: [Metrics]
-      summary: Get worker metrics
-      description: Returns the current state of the backend polling/deletion worker, including per-run and cumulative statistics.
-      responses:
-        "200":
-          description: Worker metrics
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WorkerStats"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  # ===========================================================================
-  # Worker Stats (alias)
-  # ===========================================================================
   /worker/stats:
     get:
       operationId: getWorkerStats
       tags: [Metrics]
-      summary: Get worker stats (alias)
-      description: Alias for `GET /metrics/worker`. Returns identical data. Provided for dashboard consumption convenience.
+      summary: Get worker stats
+      description: Returns the current state of the backend polling/deletion worker, including per-run and cumulative statistics.
       responses:
         "200":
           description: Worker metrics
@@ -880,6 +861,34 @@ paths:
           $ref: "#/components/responses/InternalServerError"
 
   /custom-rules/{id}:
+    put:
+      operationId: updateCustomRule
+      tags: [Rules]
+      summary: Update a protection/targeting rule
+      description: Updates an existing rule's field, operator, value, effect, enabled status, or integration assignment.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomRuleCreate"
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       operationId: deleteCustomRule
       tags: [Rules]
@@ -892,6 +901,8 @@ paths:
           description: Rule deleted (no content)
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -1482,7 +1493,7 @@ paths:
       description: |
         Opens a long-lived Server-Sent Events (SSE) connection that streams
         typed events in real-time. Events include engine runs, deletions,
-        config changes, approval actions, and more (40 event types total).
+        config changes, approval actions, and more (44 event types total).
 
         Supports reconnection replay via the `Last-Event-ID` header.
         A keepalive comment is sent every 30 seconds to prevent proxy timeouts.
