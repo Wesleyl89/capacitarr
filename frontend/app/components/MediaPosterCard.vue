@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Film, Tv, Music, BookOpen, CheckSquare, Square } from 'lucide-vue-next';
+import { Film, Tv, Music, BookOpen, CheckSquare, Square, ShieldCheck } from 'lucide-vue-next';
 
 const props = defineProps<{
   title: string;
@@ -144,9 +144,15 @@ const showFallback = computed(() => !props.posterUrl || imageError.value || !ima
       </p>
     </div>
 
-    <!-- Score badge (top-right) -->
+    <!-- Score badge or Protected shield (top-right) -->
     <div
-      v-if="score != null"
+      v-if="isProtected"
+      class="absolute top-1.5 right-1.5 rounded-full bg-emerald-500/90 px-1.5 py-0.5"
+    >
+      <ShieldCheck class="w-3 h-3 text-white" />
+    </div>
+    <div
+      v-else-if="score != null"
       class="absolute top-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
       :class="scoreBadgeClass"
     >
@@ -169,30 +175,12 @@ const showFallback = computed(() => !props.posterUrl || imageError.value || !ima
       {{ mediaType }}
     </div>
 
-    <!-- Bottom-right: Seasons badge or Protected indicator -->
+    <!-- Bottom-right: Seasons badge -->
     <div
       v-if="seasonCount && seasonCount > 0"
       class="absolute bottom-1.5 right-1.5 rounded-full bg-black/50 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-medium text-white/80"
     >
       ×{{ seasonCount }}
-    </div>
-    <div
-      v-else-if="isProtected"
-      class="absolute bottom-1.5 right-1.5 rounded-full bg-emerald-500/80 p-1"
-    >
-      <svg
-        class="w-3 h-3 text-white"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2.5"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
-        />
-      </svg>
     </div>
   </div>
 </template>

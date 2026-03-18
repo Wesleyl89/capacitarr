@@ -594,13 +594,7 @@ const tableColumns = computed(() => [
                     />
                   </UiTableCell>
                   <UiTableCell class="font-medium">
-                    <div class="flex items-center gap-2">
-                      <ShieldCheckIcon
-                        v-if="getEntry(vRow.index).isProtected"
-                        class="w-3.5 h-3.5 text-emerald-500 shrink-0"
-                      />
-                      <span class="truncate">{{ getEntry(vRow.index).item.title }}</span>
-                    </div>
+                    <span class="truncate">{{ getEntry(vRow.index).item.title }}</span>
                   </UiTableCell>
                   <UiTableCell>
                     <UiBadge variant="secondary" class="text-[10px] capitalize">
