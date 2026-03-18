@@ -1,6 +1,6 @@
 # Card Split, Deletion Queue Cancel, and Poster Banner Indicators
 
-**Status:** 🟡 In Progress (Phase 2 Complete)  
+**Status:** ✅ Complete
 **Created:** 2026-03-18T15:54Z  
 **Branch:** `feature/queue-management-fixes` (continuation)  
 **Depends on:** `20260318T1351Z-queue-management-fixes.md` (✅ Complete)
@@ -225,7 +225,17 @@ Add keys for the deletion queue card:
 
 ---
 
-## Phase 3: Poster Banner Indicators
+## Phase 3: Poster Banner Indicators ✅
+
+**Status:** ✅ Complete
+**Completed:** 2026-03-18T16:42Z
+
+**Deviations from plan:**
+- Used `bottom-10` (Tailwind utility, 40px) instead of the `bottom-[calc(theme(spacing.8)+theme(spacing.2))]` shown in the plan template — both resolve to 40px but `bottom-10` is simpler and more readable.
+- Used ellipsis character `…` in "Deleting…" label instead of `...` — matches existing project conventions for Unicode punctuation.
+- Prettier required multi-line `case`/`return` formatting in the computed; plan showed single-line style.
+- Step 3.3 confirmed `LibraryTable.vue` already passes `:queue-status` — no changes needed (as anticipated by the plan).
+- `security:ci` fails due to pre-existing `h3` vulnerability in `@nuxt/eslint` → `@eslint/config-inspector` transitive dependency — unrelated to Phase 3 changes. All lint, test, and Go security stages pass.
 
 Replace the tiny corner pill queue status indicator with a full-width banner overlay.
 
@@ -279,6 +289,8 @@ The banner should sit above the title area (which uses the bottom gradient). The
 Ensure the `queueStatus` prop is passed through to `MediaPosterCard` in the grid view. The list view already has inline badges — those can stay as-is since list rows have more horizontal space.
 
 ### Step 3.4: Run `make ci`
+
+All lint (Go + ESLint + Prettier + typecheck), test (Go + Vitest), and Go security stages pass. The `security:ci` stage fails due to a pre-existing `h3` vulnerability unrelated to this change.
 
 ---
 

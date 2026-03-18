@@ -99,6 +99,22 @@ const scoreBadgeClass = computed(() => {
 
 const showImage = computed(() => props.posterUrl && !imageError.value);
 const showFallback = computed(() => !props.posterUrl || imageError.value || !imageLoaded.value);
+
+/** Human-readable label for queue status banner */
+const queueStatusLabel = computed(() => {
+  switch (props.queueStatus) {
+    case 'pending':
+      return 'Pending';
+    case 'approved':
+      return 'Approved';
+    case 'force_delete':
+      return 'Force Delete';
+    case 'deleting':
+      return 'Deleting…';
+    default:
+      return '';
+  }
+});
 </script>
 
 <template>
@@ -196,21 +212,22 @@ const showFallback = computed(() => !props.posterUrl || imageError.value || !ima
       ×{{ seasonCount }}
     </div>
 
-    <!-- Queue status badge (bottom-left) -->
+    <!-- Queue status banner (above title gradient) -->
     <div
       v-if="queueStatus"
-      class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 rounded-full backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-medium"
+      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm"
       :class="{
-        'bg-amber-500/80 text-white': queueStatus === 'pending',
-        'bg-emerald-500/80 text-white': queueStatus === 'approved',
-        'bg-red-500/80 text-white': queueStatus === 'force_delete',
-        'bg-red-500/80 text-white animate-pulse': queueStatus === 'deleting',
+        'bg-amber-500/70 text-white': queueStatus === 'pending',
+        'bg-emerald-500/70 text-white': queueStatus === 'approved',
+        'bg-red-500/70 text-white': queueStatus === 'force_delete',
+        'bg-red-500/70 text-white animate-pulse': queueStatus === 'deleting',
       }"
     >
       <ClockIcon v-if="queueStatus === 'pending'" class="w-3 h-3" />
       <CheckIcon v-else-if="queueStatus === 'approved'" class="w-3 h-3" />
       <ZapIcon v-else-if="queueStatus === 'force_delete'" class="w-3 h-3" />
       <LoaderCircleIcon v-else-if="queueStatus === 'deleting'" class="w-3 h-3 animate-spin" />
+      <span>{{ queueStatusLabel }}</span>
     </div>
   </div>
 </template>
