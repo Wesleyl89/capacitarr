@@ -1,3 +1,18 @@
+## [1.10.0] - 2026-03-18
+
+### 🚀 Features
+
+- *(approval)* Add dismiss and clear queue endpoints ([2eae821](https://gitlab.com/starshadow/software/capacitarr/-/commit/2eae821920c126a1ee854519de0997e4dc606eab))
+- *(approval)* Allow force-delete in dry-run mode ([29a54b2](https://gitlab.com/starshadow/software/capacitarr/-/commit/29a54b20f61c5f12cf239c8b6b9c5e3366b6c00a))
+- *(preview)* Remove deleted items from library in real-time via SSE ([0c94fcf](https://gitlab.com/starshadow/software/capacitarr/-/commit/0c94fcf4d2eda9f4443b1e3590566daf498f24a5))
+- *(preview)* Add queue status indicators to library and deletion priority views ([8982f0d](https://gitlab.com/starshadow/software/capacitarr/-/commit/8982f0d6d39587fd34fe676da73ad83c828d218e))
+- *(deletion)* Add queue cancellation and listing API ([f1a1bbe](https://gitlab.com/starshadow/software/capacitarr/-/commit/f1a1bbe95d9bdc11d180cefed56a4801304cbc60))
+- *(ui)* Split approval queue into separate approval and deletion cards ([1894f92](https://gitlab.com/starshadow/software/capacitarr/-/commit/1894f9236007ef680f396342ee6fccabce65ce41))
+- *(ui)* Replace poster queue status pill with full-width banner ([01103f1](https://gitlab.com/starshadow/software/capacitarr/-/commit/01103f1032144b2d9eaa05f98af05c1bced8a8c5))
+
+### 🐛 Bug Fixes
+
+- *(security)* Override h3 to >=1.15.6 for SSE injection and path traversal CVEs ([218da0e](https://gitlab.com/starshadow/software/capacitarr/-/commit/218da0e6129b8a63d1bc1ec2b09219eb43aa2836))
 ## [1.9.0] - 2026-03-17
 
 ### 🚀 Features
