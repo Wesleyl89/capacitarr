@@ -539,6 +539,223 @@ func TestDeletionService_NoDryRun_WhenDeletionsDisabled(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Cancellation tests
+// ---------------------------------------------------------------------------
+
+func TestDeletionService_CancelDeletion_ReturnsTrue_WhenItemInQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: true},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	// Queue an item (service NOT started — item stays in channel and tracking slice)
+	job := DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:         "Firefly",
+			Type:          "show",
+			SizeBytes:     1024 * 1024 * 200,
+			IntegrationID: 1,
+		},
+		Reason: "test-cancel",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	if !svc.CancelDeletion("Firefly", "show") {
+		t.Error("CancelDeletion returned false; expected true when item is in queue")
+	}
+
+	if !svc.IsCancelled("Firefly", "show") {
+		t.Error("IsCancelled returned false after CancelDeletion")
+	}
+}
+
+func TestDeletionService_CancelDeletion_ReturnsFalse_WhenNotInQueue(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+
+	if svc.CancelDeletion("Serenity", "movie") {
+		t.Error("CancelDeletion returned true; expected false when item is not in queue")
+	}
+}
+
+func TestDeletionService_ProcessJob_SkipsCancelledItem(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: true},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	// Queue a job, then cancel before the worker processes it.
+	// We rely on the rate limiter (3s) giving us time to cancel.
+	job := DeleteJob{
+		Client: &mockIntegration{deleteErr: nil},
+		Item: integrations.MediaItem{
+			Title:         "Firefly",
+			Type:          "show",
+			SizeBytes:     1024 * 1024 * 200,
+			IntegrationID: 1,
+		},
+		Reason: "test-cancel-process",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Mark as cancelled
+	svc.cancelled.Store(cancelKey("Firefly", "show"), true)
+
+	// Wait for events — should get DeletionCancelledEvent, NOT DeletionSuccessEvent
+	deadline := time.After(15 * time.Second)
+	gotCancelled := false
+	for {
+		select {
+		case evt := <-ch:
+			switch evt.(type) {
+			case events.DeletionCancelledEvent:
+				gotCancelled = true
+			case events.DeletionSuccessEvent:
+				t.Fatal("Expected DeletionCancelledEvent but got DeletionSuccessEvent")
+			case events.DeletionBatchCompleteEvent:
+				if !gotCancelled {
+					t.Fatal("Batch completed without DeletionCancelledEvent")
+				}
+				// Verify audit log entry was created
+				var entry db.AuditLogEntry
+				if err := database.Where("action = ?", db.ActionCancelled).First(&entry).Error; err != nil {
+					t.Fatalf("Expected cancelled audit log entry: %v", err)
+				}
+				if entry.MediaName != "Firefly" {
+					t.Errorf("Expected media name 'Firefly', got %q", entry.MediaName)
+				}
+				return // test passed
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for events")
+		}
+	}
+}
+
+func TestDeletionService_ListQueuedItems_ReturnsSnapshot(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+
+	// Empty initially
+	items := svc.ListQueuedItems()
+	if len(items) != 0 {
+		t.Errorf("expected 0 queued items initially, got %d", len(items))
+	}
+
+	// Queue two items (service NOT started — items stay in tracking slice)
+	_ = svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item:   integrations.MediaItem{Title: "Firefly", Type: "show", SizeBytes: 100, IntegrationID: 1},
+		Reason: "reason-1",
+	})
+	_ = svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item:   integrations.MediaItem{Title: "Serenity", Type: "movie", SizeBytes: 200, IntegrationID: 2},
+		Reason: "reason-2",
+	})
+
+	items = svc.ListQueuedItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 queued items, got %d", len(items))
+	}
+	if items[0].MediaName != "Firefly" {
+		t.Errorf("expected first item 'Firefly', got %q", items[0].MediaName)
+	}
+	if items[1].MediaName != "Serenity" {
+		t.Errorf("expected second item 'Serenity', got %q", items[1].MediaName)
+	}
+
+	// Verify snapshot isolation — mutating returned slice doesn't affect internal state
+	items[0].MediaName = "modified"
+	fresh := svc.ListQueuedItems()
+	if fresh[0].MediaName != "Firefly" {
+		t.Error("ListQueuedItems did not return a copy; internal state was mutated")
+	}
+}
+
+func TestDeletionService_SignalBatchSize_ClearsCancelledSet(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+
+	// Add an item to queue and cancel it
+	_ = svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item:   integrations.MediaItem{Title: "Firefly", Type: "show", SizeBytes: 100},
+		Reason: "test",
+	})
+	svc.CancelDeletion("Firefly", "show")
+
+	if !svc.IsCancelled("Firefly", "show") {
+		t.Fatal("expected IsCancelled=true before SignalBatchSize")
+	}
+
+	// Drain the batch complete event from SignalBatchSize(0)
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.SignalBatchSize(0)
+
+	if svc.IsCancelled("Firefly", "show") {
+		t.Error("expected IsCancelled=false after SignalBatchSize cleared the set")
+	}
+}
+
+func TestDeletionCancelledEvent_EventType(t *testing.T) {
+	evt := events.DeletionCancelledEvent{
+		MediaName: "Firefly",
+		MediaType: "show",
+		SizeBytes: 1024,
+	}
+
+	if got := evt.EventType(); got != "deletion_cancelled" {
+		t.Errorf("expected EventType() = %q, got %q", "deletion_cancelled", got)
+	}
+}
+
+func TestDeletionCancelledEvent_EventMessage(t *testing.T) {
+	evt := events.DeletionCancelledEvent{
+		MediaName: "Firefly",
+		MediaType: "show",
+		SizeBytes: 1024,
+	}
+
+	expected := "Deletion cancelled: Firefly"
+	if got := evt.EventMessage(); got != expected {
+		t.Errorf("expected EventMessage() = %q, got %q", expected, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Existing tests continued
+// ---------------------------------------------------------------------------
+
 func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)

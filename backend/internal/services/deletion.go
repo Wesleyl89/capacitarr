@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,17 @@ type DeleteJob struct {
 	Factors     []engine.ScoreFactor
 	RunStatsID  uint // Engine run stats row to increment Deleted counter
 	ForceDryRun bool // When true, skip actual deletion even if DeletionsEnabled=true
+}
+
+// DeleteJobSummary is a serialisable snapshot of a queued deletion job,
+// suitable for API responses. It deliberately excludes the Integration
+// client to avoid exposing internal state.
+type DeleteJobSummary struct {
+	MediaName     string `json:"mediaName"`
+	MediaType     string `json:"mediaType"`
+	SizeBytes     int64  `json:"sizeBytes"`
+	IntegrationID uint   `json:"integrationId"`
+	Reason        string `json:"reason"`
 }
 
 // DeletionService manages the background deletion worker and queue.
@@ -51,6 +63,15 @@ type DeletionService struct {
 	batchProcessed atomic.Int64
 	batchSucceeded atomic.Int64
 	batchFailed    atomic.Int64
+
+	// Cancellation skip-list. Items are added via CancelDeletion() and
+	// checked in processJob(). The map key is "mediaName:mediaType".
+	cancelled sync.Map
+
+	// Parallel tracking slice — mirrors the channel contents so callers
+	// can list queued items (Go channels don't support peeking).
+	queuedMu    sync.Mutex
+	queuedItems []DeleteJobSummary
 }
 
 // SettingsReader provides read access to application preferences.
@@ -106,6 +127,15 @@ func (s *DeletionService) Stop() {
 func (s *DeletionService) QueueDeletion(job DeleteJob) error {
 	select {
 	case s.queue <- job:
+		s.queuedMu.Lock()
+		s.queuedItems = append(s.queuedItems, DeleteJobSummary{
+			MediaName:     job.Item.Title,
+			MediaType:     string(job.Item.Type),
+			SizeBytes:     job.Item.SizeBytes,
+			IntegrationID: job.Item.IntegrationID,
+			Reason:        job.Reason,
+		})
+		s.queuedMu.Unlock()
 		return nil
 	default:
 		return fmt.Errorf("deletion queue is full")
@@ -135,7 +165,11 @@ func (s *DeletionService) Failed() int64 {
 // engine cycle. When all items are processed, DeletionBatchCompleteEvent is
 // published. If count is 0 (no items to process), the event is published
 // immediately — the DeletionService owns this event.
+//
+// Also clears the cancellation skip-list from the previous cycle.
 func (s *DeletionService) SignalBatchSize(count int) {
+	s.clearCancelled()
+
 	if count == 0 {
 		s.bus.Publish(events.DeletionBatchCompleteEvent{
 			Succeeded: 0,
@@ -167,6 +201,38 @@ func (s *DeletionService) processJob(job DeleteJob) {
 	s.currentlyDeleting.Store(job.Item.Title)
 	defer s.currentlyDeleting.Store("")
 	defer s.checkBatchComplete()
+
+	// Remove this item from the parallel tracking slice.
+	s.removeQueuedItem(job.Item.Title, string(job.Item.Type))
+
+	// Check cancellation skip-list before doing any work.
+	if s.IsCancelled(job.Item.Title, string(job.Item.Type)) {
+		s.cancelled.Delete(job.Item.Title + ":" + string(job.Item.Type))
+
+		s.processed.Add(1)
+		s.batchSucceeded.Add(1)
+
+		logEntry := db.AuditLogEntry{
+			MediaName: job.Item.Title,
+			MediaType: string(job.Item.Type),
+			Reason:    "Cancelled by user",
+			Action:    db.ActionCancelled,
+			SizeBytes: job.Item.SizeBytes,
+		}
+		if err := s.auditLog.Create(logEntry); err != nil {
+			slog.Error("Failed to create audit log entry", "component", "services", "error", err)
+		}
+
+		s.bus.Publish(events.DeletionCancelledEvent{
+			MediaName: job.Item.Title,
+			MediaType: string(job.Item.Type),
+			SizeBytes: job.Item.SizeBytes,
+		})
+		s.publishProgress()
+
+		slog.Info("Deletion cancelled by user", "component", "services", "media", job.Item.Title)
+		return
+	}
 
 	// Check whether actual deletions are enabled via SettingsService
 	deletionsEnabled := false
@@ -291,5 +357,84 @@ func (s *DeletionService) checkBatchComplete() {
 			Failed:    int(s.batchFailed.Load()),
 		})
 		s.batchExpected.Store(0) // reset for next cycle
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation skip-list
+// ---------------------------------------------------------------------------
+
+// cancelKey builds the map key for the cancellation skip-list.
+func cancelKey(mediaName, mediaType string) string {
+	return mediaName + ":" + mediaType
+}
+
+// CancelDeletion marks a queued item for cancellation. When processJob
+// encounters the item it will skip the actual deletion and log the
+// cancellation instead. Returns true if the item was found in the queued
+// items tracking slice (best-effort — the item may already be processing).
+func (s *DeletionService) CancelDeletion(mediaName, mediaType string) bool {
+	key := cancelKey(mediaName, mediaType)
+
+	// Check whether the item exists in the tracking slice.
+	s.queuedMu.Lock()
+	found := false
+	for _, item := range s.queuedItems {
+		if item.MediaName == mediaName && item.MediaType == mediaType {
+			found = true
+			break
+		}
+	}
+	s.queuedMu.Unlock()
+
+	if !found {
+		return false
+	}
+
+	s.cancelled.Store(key, true)
+	return true
+}
+
+// IsCancelled checks whether a given item has been marked for cancellation.
+func (s *DeletionService) IsCancelled(mediaName, mediaType string) bool {
+	_, ok := s.cancelled.Load(cancelKey(mediaName, mediaType))
+	return ok
+}
+
+// clearCancelled removes all entries from the cancellation skip-list.
+// Called at the start of each batch via SignalBatchSize.
+func (s *DeletionService) clearCancelled() {
+	s.cancelled.Range(func(key, _ any) bool {
+		s.cancelled.Delete(key)
+		return true
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Queued items tracking
+// ---------------------------------------------------------------------------
+
+// ListQueuedItems returns a snapshot copy of the items currently waiting in
+// the deletion queue. The returned slice is safe to mutate.
+func (s *DeletionService) ListQueuedItems() []DeleteJobSummary {
+	s.queuedMu.Lock()
+	defer s.queuedMu.Unlock()
+
+	out := make([]DeleteJobSummary, len(s.queuedItems))
+	copy(out, s.queuedItems)
+	return out
+}
+
+// removeQueuedItem removes the first matching entry from the tracking slice.
+// Called by processJob when the worker picks up the item.
+func (s *DeletionService) removeQueuedItem(mediaName, mediaType string) {
+	s.queuedMu.Lock()
+	defer s.queuedMu.Unlock()
+
+	for i, item := range s.queuedItems {
+		if item.MediaName == mediaName && item.MediaType == mediaType {
+			s.queuedItems = append(s.queuedItems[:i], s.queuedItems[i+1:]...)
+			return
+		}
 	}
 }

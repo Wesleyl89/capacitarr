@@ -153,6 +153,7 @@ const (
 	ActionDeleted   = "deleted"
 	ActionDryRun    = "dry_run"
 	ActionDryDelete = "dry_delete"
+	ActionCancelled = "cancelled"
 )
 
 // AuditLogEntry stores a permanent record of deletions and dry-runs.

@@ -74,4 +74,7 @@ func RegisterAPIRoutes(g *echo.Group, reg *services.Registry, appVersion, appCom
 
 	// Settings backup (export/import)
 	RegisterBackupRoutes(protected, reg, appVersion)
+
+	// Deletion queue management (list + cancel)
+	RegisterDeletionQueueRoutes(protected, reg)
 }

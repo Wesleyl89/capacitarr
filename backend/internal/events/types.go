@@ -431,6 +431,22 @@ func (e DeletionDryRunEvent) EventMessage() string {
 	return fmt.Sprintf("Dry-run flagged: %s", e.MediaName)
 }
 
+// DeletionCancelledEvent is published when a queued deletion is cancelled
+// by the user before it executes.
+type DeletionCancelledEvent struct {
+	MediaName string `json:"mediaName"`
+	MediaType string `json:"mediaType"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
+// EventType implements Event.
+func (e DeletionCancelledEvent) EventType() string { return "deletion_cancelled" }
+
+// EventMessage implements Event.
+func (e DeletionCancelledEvent) EventMessage() string {
+	return fmt.Sprintf("Deletion cancelled: %s", e.MediaName)
+}
+
 // DeletionBatchCompleteEvent is published when all queued deletions for an
 // engine cycle have been processed (successfully or not). This is the "gate 2"
 // signal that the NotificationDispatchService waits for before flushing the
