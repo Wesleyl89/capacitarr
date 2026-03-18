@@ -19,8 +19,9 @@ import (
 
 // Sentinel errors for approval operations.
 var (
-	ErrApprovalNotFound   = errors.New("approval queue entry not found")
-	ErrApprovalNotPending = errors.New("entry is not in pending status")
+	ErrApprovalNotFound       = errors.New("approval queue entry not found")
+	ErrApprovalNotPending     = errors.New("entry is not in pending status")
+	ErrApprovalNotDismissable = errors.New("entry is not in a dismissable state")
 )
 
 // ApprovalService manages the approval queue lifecycle.
@@ -122,6 +123,32 @@ func (s *ApprovalService) Unsnooze(entryID uint) (*db.ApprovalQueueItem, error) 
 
 	s.db.First(&entry, entryID) // Reload
 	return &entry, nil
+}
+
+// Dismiss removes a single approval queue entry that is in a dismissable state
+// (pending or rejected). Approved items cannot be dismissed because they have
+// already been forwarded to the deletion pipeline.
+func (s *ApprovalService) Dismiss(entryID uint) error {
+	var entry db.ApprovalQueueItem
+	if err := s.db.First(&entry, entryID).Error; err != nil {
+		return fmt.Errorf("%w: %v", ErrApprovalNotFound, err)
+	}
+
+	if entry.Status != db.StatusPending && entry.Status != db.StatusRejected {
+		return fmt.Errorf("%w (current: %s)", ErrApprovalNotDismissable, entry.Status)
+	}
+
+	if err := s.db.Delete(&entry).Error; err != nil {
+		return fmt.Errorf("failed to dismiss entry: %w", err)
+	}
+
+	s.bus.Publish(events.ApprovalDismissedEvent{
+		EntryID:   entry.ID,
+		MediaName: entry.MediaName,
+		MediaType: entry.MediaType,
+	})
+
+	return nil
 }
 
 // UpsertPending creates or updates a pending approval queue item.

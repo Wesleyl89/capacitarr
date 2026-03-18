@@ -324,6 +324,60 @@ export function useApprovalQueue() {
     }
   }
 
+  /** Dismiss all items in a group — calls DELETE /approval-queue/:id for each ID */
+  async function dismissGroup(group: ApprovalGroup) {
+    if (group.auditIds.length === 0) return;
+
+    // Optimistic update: remove from both lists
+    pendingItems.value = pendingItems.value.filter((g) => g.key !== group.key);
+    snoozedItems.value = snoozedItems.value.filter((g) => g.key !== group.key);
+
+    try {
+      await Promise.all(
+        group.auditIds.map((id) => api(`/api/v1/approval-queue/${id}`, { method: 'DELETE' })),
+      );
+      addToast('Dismissed from queue', 'info');
+    } catch {
+      // Revert optimistic update on failure
+      if (group.state === 'snoozed') {
+        snoozedItems.value = [...snoozedItems.value, group];
+      } else {
+        pendingItems.value = [...pendingItems.value, group];
+      }
+      addToast('Failed to dismiss group', 'error');
+    }
+  }
+
+  /** Dismiss a single season by its approval queue ID, then refresh the queue */
+  async function dismissSeason(auditId: number) {
+    try {
+      await api(`/api/v1/approval-queue/${auditId}`, { method: 'DELETE' });
+      addToast('Season dismissed', 'info');
+      fetchQueue();
+    } catch {
+      addToast('Failed to dismiss season', 'error');
+    }
+  }
+
+  /** Clear the entire approval queue (pending + rejected items) */
+  async function clearQueue() {
+    // Optimistic update: clear pending and snoozed lists
+    const prevPending = pendingItems.value;
+    const prevSnoozed = snoozedItems.value;
+    pendingItems.value = [];
+    snoozedItems.value = [];
+
+    try {
+      await api('/api/v1/approval-queue/clear', { method: 'POST' });
+      addToast('Queue cleared', 'info');
+    } catch {
+      // Revert optimistic update on failure
+      pendingItems.value = prevPending;
+      snoozedItems.value = prevSnoozed;
+      addToast('Failed to clear queue', 'error');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // SSE subscriptions — registered once globally to refresh queue on changes
   // ---------------------------------------------------------------------------
@@ -342,6 +396,7 @@ export function useApprovalQueue() {
     sseOn('approval_orphans_recovered', refreshOnEvent);
     sseOn('approval_bulk_unsnoozed', refreshOnEvent);
     sseOn('approval_queue_cleared', refreshOnEvent);
+    sseOn('approval_dismissed', refreshOnEvent);
   }
 
   return {
@@ -359,5 +414,8 @@ export function useApprovalQueue() {
     unsnoozeGroup,
     approveSeason,
     snoozeSeason,
+    dismissGroup,
+    dismissSeason,
+    clearQueue,
   };
 }

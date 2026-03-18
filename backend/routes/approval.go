@@ -180,4 +180,35 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 
 		return c.JSON(http.StatusOK, unsnoozed)
 	})
+
+	// Dismiss a single queued item (pending or rejected only)
+	g.DELETE("/approval-queue/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		entryID, err := strconv.ParseUint(id, 10, 64)
+		if err != nil {
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
+		}
+
+		if err := reg.Approval.Dismiss(uint(entryID)); err != nil {
+			if errors.Is(err, services.ErrApprovalNotDismissable) {
+				return apiError(c, http.StatusBadRequest, err.Error())
+			}
+			if errors.Is(err, services.ErrApprovalNotFound) {
+				return apiError(c, http.StatusNotFound, "Approval queue entry not found")
+			}
+			return apiError(c, http.StatusInternalServerError, "Failed to dismiss entry")
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{"status": "dismissed"})
+	})
+
+	// Clear the entire approval queue (pending + rejected items)
+	g.POST("/approval-queue/clear", func(c echo.Context) error {
+		count, err := reg.Approval.ClearQueue()
+		if err != nil {
+			return apiError(c, http.StatusInternalServerError, "Failed to clear approval queue")
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{"cleared": count})
+	})
 }

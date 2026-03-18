@@ -306,6 +306,173 @@ func TestUnsnoozeQueueItem_NotRejected(t *testing.T) {
 	}
 }
 
+func TestDismissQueueItem_Pending(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	ic := db.IntegrationConfig{
+		Type: "sonarr", Name: "Test", URL: "http://localhost:8989", APIKey: "key",
+	}
+	database.Create(&ic)
+
+	item := db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.85",
+		SizeBytes: 5000000, IntegrationID: ic.ID, ExternalID: "1", Status: db.StatusPending,
+	}
+	database.Create(&item)
+
+	req := testutil.AuthenticatedRequest(t,
+		http.MethodDelete,
+		fmt.Sprintf("/api/approval-queue/%d", item.ID),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify item was deleted
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected item to be deleted, but it still exists")
+	}
+}
+
+func TestDismissQueueItem_Rejected(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	ic := db.IntegrationConfig{
+		Type: "sonarr", Name: "Test", URL: "http://localhost:8989", APIKey: "key",
+	}
+	database.Create(&ic)
+
+	snoozed := time.Now().Add(24 * time.Hour)
+	item := db.ApprovalQueueItem{
+		MediaName: "Serenity", MediaType: "movie", Reason: "Score: 0.40",
+		SizeBytes: 3000000, IntegrationID: ic.ID, ExternalID: "2",
+		Status: db.StatusRejected, SnoozedUntil: &snoozed,
+	}
+	database.Create(&item)
+
+	req := testutil.AuthenticatedRequest(t,
+		http.MethodDelete,
+		fmt.Sprintf("/api/approval-queue/%d", item.ID),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify item was deleted
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected item to be deleted, but it still exists")
+	}
+}
+
+func TestDismissQueueItem_Approved(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	ic := db.IntegrationConfig{
+		Type: "sonarr", Name: "Test", URL: "http://localhost:8989", APIKey: "key",
+	}
+	database.Create(&ic)
+
+	item := db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.90",
+		SizeBytes: 5000000, IntegrationID: ic.ID, ExternalID: "1", Status: db.StatusApproved,
+	}
+	database.Create(&item)
+
+	req := testutil.AuthenticatedRequest(t,
+		http.MethodDelete,
+		fmt.Sprintf("/api/approval-queue/%d", item.ID),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("Expected 400 for approved item, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDismissQueueItem_NotFound(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	req := testutil.AuthenticatedRequest(t,
+		http.MethodDelete,
+		"/api/approval-queue/99999",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestClearQueue(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	ic := db.IntegrationConfig{
+		Type: "sonarr", Name: "Test", URL: "http://localhost:8989", APIKey: "key",
+	}
+	database.Create(&ic)
+
+	// Create 2 pending + 1 rejected items
+	database.Create(&db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.80",
+		SizeBytes: 1000, IntegrationID: ic.ID, ExternalID: "1", Status: db.StatusPending,
+	})
+	database.Create(&db.ApprovalQueueItem{
+		MediaName: "Serenity", MediaType: "movie", Reason: "Score: 0.70",
+		SizeBytes: 2000, IntegrationID: ic.ID, ExternalID: "2", Status: db.StatusPending,
+	})
+	snoozed := time.Now().Add(24 * time.Hour)
+	database.Create(&db.ApprovalQueueItem{
+		MediaName: "Firefly - Season 1", MediaType: "season", Reason: "Score: 0.50",
+		SizeBytes: 3000, IntegrationID: ic.ID, ExternalID: "3",
+		Status: db.StatusRejected, SnoozedUntil: &snoozed,
+	})
+
+	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/approval-queue/clear", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+	cleared, ok := result["cleared"].(float64)
+	if !ok || int(cleared) != 3 {
+		t.Errorf("Expected cleared=3, got %v", result["cleared"])
+	}
+
+	// Verify queue is empty
+	var remaining int64
+	database.Model(&db.ApprovalQueueItem{}).Count(&remaining)
+	if remaining != 0 {
+		t.Errorf("Expected 0 remaining items, got %d", remaining)
+	}
+}
+
 func TestListApprovalQueue_RequiresAuth(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)

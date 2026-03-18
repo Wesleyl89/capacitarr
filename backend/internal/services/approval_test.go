@@ -263,6 +263,127 @@ func TestApprovalService_Unsnooze_NotRejected(t *testing.T) {
 	}
 }
 
+func TestApprovalService_Dismiss_Pending(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+	item := seedPendingItem(t, database, intID)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	err := svc.Dismiss(item.ID)
+	if err != nil {
+		t.Fatalf("Dismiss returned error: %v", err)
+	}
+
+	// Verify item was deleted from DB
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 0 {
+		t.Error("expected item to be deleted from DB")
+	}
+
+	// Verify event was published
+	select {
+	case evt := <-ch:
+		if evt.EventType() != "approval_dismissed" {
+			t.Errorf("expected event type 'approval_dismissed', got %q", evt.EventType())
+		}
+		dismissed, ok := evt.(events.ApprovalDismissedEvent)
+		if !ok {
+			t.Fatalf("expected ApprovalDismissedEvent, got %T", evt)
+		}
+		if dismissed.EntryID != item.ID {
+			t.Errorf("expected entry ID %d, got %d", item.ID, dismissed.EntryID)
+		}
+		if dismissed.MediaName != "Firefly" {
+			t.Errorf("expected media name 'Firefly', got %q", dismissed.MediaName)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for dismissed event")
+	}
+}
+
+func TestApprovalService_Dismiss_Rejected(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+	item := seedPendingItem(t, database, intID)
+
+	// Reject the item first so it's in rejected status
+	if _, err := svc.Reject(item.ID, 24); err != nil {
+		t.Fatalf("Reject failed: %v", err)
+	}
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	err := svc.Dismiss(item.ID)
+	if err != nil {
+		t.Fatalf("Dismiss returned error: %v", err)
+	}
+
+	// Verify item was deleted from DB
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 0 {
+		t.Error("expected rejected item to be deleted from DB")
+	}
+
+	// Verify event was published
+	select {
+	case evt := <-ch:
+		if evt.EventType() != "approval_dismissed" {
+			t.Errorf("expected event type 'approval_dismissed', got %q", evt.EventType())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for dismissed event")
+	}
+}
+
+func TestApprovalService_Dismiss_Approved(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+	item := seedPendingItem(t, database, intID)
+
+	// Approve the item
+	if _, err := svc.Approve(item.ID); err != nil {
+		t.Fatalf("Approve failed: %v", err)
+	}
+
+	// Dismissing an approved item should fail
+	err := svc.Dismiss(item.ID)
+	if err == nil {
+		t.Fatal("expected error when dismissing approved item")
+	}
+
+	// Verify item still exists in DB
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 1 {
+		t.Error("expected approved item to still exist in DB")
+	}
+}
+
+func TestApprovalService_Dismiss_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	err := svc.Dismiss(99999)
+	if err == nil {
+		t.Fatal("expected error for non-existent entry")
+	}
+}
+
 func TestApprovalService_UpsertPending_Create(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)

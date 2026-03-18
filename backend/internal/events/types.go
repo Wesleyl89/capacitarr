@@ -363,6 +363,22 @@ func (e ApprovalQueueClearedEvent) EventMessage() string {
 	return fmt.Sprintf("Approval queue cleared: %d items removed (disk below threshold)", e.Count)
 }
 
+// ApprovalDismissedEvent is published when a single approval queue item is
+// manually dismissed (removed without approving or snoozing).
+type ApprovalDismissedEvent struct {
+	EntryID   uint   `json:"entryId"`
+	MediaName string `json:"mediaName"`
+	MediaType string `json:"mediaType"`
+}
+
+// EventType implements Event.
+func (e ApprovalDismissedEvent) EventType() string { return "approval_dismissed" }
+
+// EventMessage implements Event.
+func (e ApprovalDismissedEvent) EventMessage() string {
+	return fmt.Sprintf("Dismissed from queue: %s", e.MediaName)
+}
+
 // =============================================================================
 // Deletion Events
 // =============================================================================

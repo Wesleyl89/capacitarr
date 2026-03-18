@@ -7,6 +7,7 @@ import {
   Undo2Icon,
   ChevronRightIcon,
   Trash2Icon,
+  XIcon,
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 import type { ApprovalGroup } from '~/composables/useApprovalQueue';
@@ -23,6 +24,9 @@ const {
   unsnoozeGroup,
   approveSeason,
   snoozeSeason,
+  dismissGroup,
+  dismissSeason,
+  clearQueue,
 } = useApprovalQueue();
 
 const totalCount = computed(
@@ -373,6 +377,16 @@ onUnmounted(() => {
           >
             {{ t('approval.deletingCount', { count: approvedItems.length }) }}
           </UiBadge>
+          <UiButton
+            v-if="pendingItems.length > 0 || snoozedItems.length > 0"
+            variant="ghost"
+            size="sm"
+            class="h-6 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+            @click="clearQueue()"
+          >
+            <Trash2Icon class="h-3 w-3 mr-1" />
+            Clear All
+          </UiButton>
         </div>
       </div>
     </UiCardHeader>
@@ -483,6 +497,15 @@ onUnmounted(() => {
                             @click="snoozeSeason(season.auditId!)"
                           >
                             <AlarmClockIcon class="h-3.5 w-3.5" />
+                          </UiButton>
+                          <UiButton
+                            variant="ghost"
+                            size="sm"
+                            class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                            aria-label="Dismiss"
+                            @click="dismissSeason(season.auditId!)"
+                          >
+                            <XIcon class="h-3.5 w-3.5" />
                           </UiButton>
                         </div>
                       </div>
@@ -598,6 +621,18 @@ onUnmounted(() => {
                     >
                       <AlarmClockIcon class="h-4 w-4" />
                     </UiButton>
+                    <UiButton
+                      v-if="group.auditIds.length > 0"
+                      variant="ghost"
+                      size="sm"
+                      class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                      :disabled="!!loading[group.key]"
+                      aria-label="Dismiss"
+                      title="Dismiss"
+                      @click="dismissGroup(group)"
+                    >
+                      <XIcon class="h-4 w-4" />
+                    </UiButton>
                     <!-- Checkbox for batch selection (after snooze icon) -->
                     <UiCheckbox
                       v-if="group.auditIds.length > 0"
@@ -678,6 +713,20 @@ onUnmounted(() => {
                       >
                         <AlarmClockIcon class="h-3.5 w-3.5" />
                       </UiButton>
+                      <UiButton
+                        v-if="group.auditIds.length > 0"
+                        variant="ghost"
+                        size="sm"
+                        class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                        aria-label="Dismiss"
+                        @click.stop="
+                          season.auditId !== null
+                            ? dismissSeason(season.auditId)
+                            : dismissGroup(group)
+                        "
+                      >
+                        <XIcon class="h-3.5 w-3.5" />
+                      </UiButton>
                       <!-- Season-level checkbox -->
                       <UiCheckbox
                         :model-value="selectedKeys.has(seasonKey(group.key, season.title))"
@@ -723,15 +772,26 @@ onUnmounted(() => {
                           · 💤 Snoozed
                         </p>
                       </div>
-                      <UiButton
-                        variant="outline"
-                        size="sm"
-                        class="h-7 text-xs shrink-0"
-                        @click="unsnoozeGroup(group)"
-                      >
-                        <Undo2Icon class="h-3 w-3 mr-1" />
-                        Unsnooze
-                      </UiButton>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <UiButton
+                          variant="outline"
+                          size="sm"
+                          class="h-7 text-xs"
+                          @click="unsnoozeGroup(group)"
+                        >
+                          <Undo2Icon class="h-3 w-3 mr-1" />
+                          Unsnooze
+                        </UiButton>
+                        <UiButton
+                          variant="ghost"
+                          size="sm"
+                          class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                          aria-label="Dismiss"
+                          @click="dismissGroup(group)"
+                        >
+                          <XIcon class="h-3.5 w-3.5" />
+                        </UiButton>
+                      </div>
                     </div>
                     <div class="max-h-60 overflow-y-auto">
                       <div
@@ -763,7 +823,7 @@ onUnmounted(() => {
                     @click="showDetail(group)"
                   />
                   <div
-                    class="absolute inset-x-0 top-0 flex justify-center pt-8 opacity-0 group-hover/snooze:opacity-100 transition-opacity"
+                    class="absolute inset-x-0 top-0 flex justify-center gap-1 pt-8 opacity-0 group-hover/snooze:opacity-100 transition-opacity"
                   >
                     <UiButton
                       variant="secondary"
@@ -773,6 +833,15 @@ onUnmounted(() => {
                     >
                       <Undo2Icon class="h-3 w-3 mr-1" />
                       Unsnooze
+                    </UiButton>
+                    <UiButton
+                      variant="secondary"
+                      size="sm"
+                      class="h-7 w-7 p-0 shadow-lg text-muted-foreground hover:text-destructive"
+                      aria-label="Dismiss"
+                      @click.stop="dismissGroup(group)"
+                    >
+                      <XIcon class="h-3.5 w-3.5" />
                     </UiButton>
                   </div>
                 </div>
@@ -812,18 +881,29 @@ onUnmounted(() => {
                   }}</span>
                 </div>
 
-                <!-- Undo action -->
-                <div @click.stop>
+                <!-- Undo + dismiss actions -->
+                <div class="flex items-center gap-1 shrink-0" @click.stop>
                   <UiButton
                     variant="ghost"
                     size="sm"
-                    class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground shrink-0"
+                    class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground"
                     :disabled="!!loading[group.key]"
                     :aria-label="t('approval.undoSnooze')"
                     @click="unsnoozeGroup(group)"
                   >
                     <Undo2Icon class="h-3.5 w-3.5 mr-1" />
                     <span class="text-xs">{{ t('approval.undoSnooze') }}</span>
+                  </UiButton>
+                  <UiButton
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                    :disabled="!!loading[group.key]"
+                    aria-label="Dismiss"
+                    title="Dismiss"
+                    @click="dismissGroup(group)"
+                  >
+                    <XIcon class="h-4 w-4" />
                   </UiButton>
                 </div>
               </div>
