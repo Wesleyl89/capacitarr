@@ -27,18 +27,79 @@ const (
 	IntegrationTypeEmby IntegrationType = "emby"
 )
 
-// Integration defines the common interface all service integrations implement
-type Integration interface {
-	// TestConnection verifies the URL + API key are valid
+// ============================================================================
+// Capability Interfaces (2.0)
+//
+// Each integration implements only the interfaces it supports. This replaces
+// the monolithic Integration interface — no more no-op methods.
+//
+// Sonarr, Radarr, Lidarr, Readarr: Connectable + MediaSource + DiskReporter + MediaDeleter + RuleValueFetcher
+// Plex:                             Connectable + MediaSource + WatchDataProvider + WatchlistProvider
+// Tautulli:                         Connectable + WatchDataProvider
+// Seerr:                            Connectable + RequestProvider
+// Jellyfin, Emby:                   Connectable + WatchDataProvider + WatchlistProvider
+// ============================================================================
+
+// Connectable is implemented by any integration that can verify its connection.
+type Connectable interface {
 	TestConnection() error
-	// GetDiskSpace returns disk usage info from the service
-	GetDiskSpace() ([]DiskSpace, error)
-	// GetRootFolders returns the configured media root folder paths
-	GetRootFolders() ([]string, error)
-	// GetMediaItems returns all media items managed by the service
+}
+
+// MediaSource is implemented by integrations that can list managed media items.
+type MediaSource interface {
 	GetMediaItems() ([]MediaItem, error)
-	// DeleteMediaItem removes the item from the service and disk
+}
+
+// DiskReporter is implemented by integrations that can report disk usage.
+type DiskReporter interface {
+	GetDiskSpace() ([]DiskSpace, error)
+	GetRootFolders() ([]string, error)
+}
+
+// MediaDeleter is implemented by integrations that can delete media items.
+type MediaDeleter interface {
 	DeleteMediaItem(item MediaItem) error
+}
+
+// WatchDataProvider is implemented by integrations that can supply bulk watch data.
+// Implementations resolve any internal setup (e.g. admin user ID) internally.
+type WatchDataProvider interface {
+	GetBulkWatchData() (map[string]*WatchData, error)
+}
+
+// WatchData holds watch statistics for a single media item.
+type WatchData struct {
+	PlayCount  int
+	LastPlayed *time.Time
+	Users      []string // Users who watched this item
+}
+
+// RequestProvider is implemented by integrations that track media requests.
+type RequestProvider interface {
+	GetRequestedMedia() ([]MediaRequest, error)
+}
+
+// MediaRequest represents a user request for media content.
+type MediaRequest struct {
+	MediaType   string // "movie" or "tv"
+	TMDbID      int
+	Status      int // 1=pending, 2=approved, 3=declined, 4=available
+	RequestedBy string
+}
+
+// WatchlistProvider is implemented by integrations that can report watchlist/favorites.
+type WatchlistProvider interface {
+	GetWatchlistItems() (map[string]bool, error)
+}
+
+// Integration defines the legacy monolithic interface. Deprecated in 2.0 — use
+// capability interfaces (Connectable, MediaSource, DiskReporter, MediaDeleter) instead.
+// Retained temporarily for backward compatibility during the Phase 2 transition.
+type Integration interface {
+	Connectable
+	DiskReporter
+	MediaSource
+	MediaDeleter
 }
 
 // DiskSpace represents disk usage reported by a service
