@@ -206,52 +206,39 @@ Verify all linting, tests, and security checks pass.
 
 ---
 
-## Phase 3: Stale Data After Deletions
+## Phase 3: Stale Data After Deletions ✅ Complete
 
 Ensure the frontend removes deleted items from the Library page and Deletion Priority card in real-time.
 
-### Step 3.1: Add client-side filtering on `deletion_success` in `usePreview.ts`
+### Step 3.1: Add client-side filtering on `deletion_success` in `usePreview.ts` ✅
 
 **File:** `frontend/app/composables/usePreview.ts`
 
-Subscribe to the `deletion_success` SSE event. When received, filter the deleted item out of the local `items` ref:
+Added `handleDeletionSuccess` handler that subscribes to `deletion_success` SSE events and filters the deleted item out of the local `items` ref by matching `item.title === event.mediaName && item.type === event.mediaType`. Registered in `onMounted()`, unregistered in `onUnmounted()`.
 
-```typescript
-on('deletion_success', (data) => {
-  const event = data as { mediaName: string; mediaType: string };
-  items.value = items.value.filter(
-    (item) => !(item.item.title === event.mediaName && item.item.type === event.mediaType)
-  );
-});
-```
-
-Register in `onMounted()`, unregister in `onUnmounted()`.
-
-### Step 3.2: Add `deletion_dry_run` filtering in `usePreview.ts`
+### Step 3.2: Add `deletion_dry_run` filtering in `usePreview.ts` ✅
 
 **File:** `frontend/app/composables/usePreview.ts`
 
-Also filter on `deletion_dry_run` events, since dry-deleted items should also be marked/removed from the preview (they've been "processed" even if not actually deleted). Use a visual differentiation — either remove or add a `dryDeleted` flag.
+Added `handleDeletionDryRun` handler with identical filtering logic. Decision: **removal** for consistency — the audit log is the authoritative record of dry-deletions, so processed items are removed from the preview list.
 
-Decision needed: Should dry-deleted items be removed from the list or marked with a badge? Recommend **removal** for consistency — the audit log is the authoritative record of dry-deletions.
-
-### Step 3.3: Add batch reconciliation on `deletion_batch_complete`
+### Step 3.3: Add batch reconciliation on `deletion_batch_complete` ✅
 
 **File:** `frontend/app/composables/usePreview.ts`
 
-Subscribe to `deletion_batch_complete` and call `refresh(true)` to re-fetch authoritative data from the server after all deletions for a cycle are complete.
+Added `handleDeletionBatchComplete` handler that calls `refresh(true)` to re-fetch authoritative data from the server after all deletions for a cycle are complete.
 
-### Step 3.4: Verify Library page and dashboard reflect changes
+### Step 3.4: Verify Library page and dashboard reflect changes ✅
 
-**Files:** `frontend/app/pages/library.vue`, `frontend/app/pages/index.vue`
+**Files verified:** `frontend/app/pages/library.vue`, `frontend/app/pages/index.vue`
 
-Both consume `usePreview()` — verify that reactive updates propagate correctly when `items.value` is mutated or replaced. The Library page uses `items` directly from `usePreview()`, so filtering should propagate automatically.
+- `library.vue` uses `const { items } = usePreview()` and passes `items` directly to `<LibraryTable :items="items">`. Since `items` is a mutable ref, filtering propagates automatically. No changes needed.
+- `index.vue` (dashboard) does NOT use `usePreview()`. It has its own SSE handlers for deletion events (sparklines, stats, approval queue). No changes needed.
+- `rules.vue` also consumes `usePreview()` and benefits from the real-time filtering. No changes needed.
 
-The dashboard's deletion priority display (if it uses preview data) should also reflect changes.
+### Step 3.5: Run `make ci` ✅
 
-### Step 3.5: Run `make ci`
-
-Verify all linting, tests, and security checks pass.
+All linting, tests, and security checks passed. Full CI pipeline passed locally.
 
 ---
 

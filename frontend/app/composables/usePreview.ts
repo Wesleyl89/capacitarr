@@ -54,6 +54,38 @@ export function usePreview() {
     refresh(true);
   }
 
+  /**
+   * Remove a successfully deleted item from the local list so the Library page
+   * and Deletion Priority card update in real-time without waiting for the next
+   * engine cycle.
+   */
+  function handleDeletionSuccess(data: unknown) {
+    const event = data as { mediaName: string; mediaType: string };
+    items.value = items.value.filter(
+      (item) => !(item.item.title === event.mediaName && item.item.type === event.mediaType),
+    );
+  }
+
+  /**
+   * Remove dry-deleted items from the local list for consistency — they've been
+   * "processed" even if not actually deleted. The audit log is the authoritative
+   * record of dry-deletions.
+   */
+  function handleDeletionDryRun(data: unknown) {
+    const event = data as { mediaName: string; mediaType: string };
+    items.value = items.value.filter(
+      (item) => !(item.item.title === event.mediaName && item.item.type === event.mediaType),
+    );
+  }
+
+  /**
+   * After all deletions in a cycle are processed, reconcile with the server to
+   * ensure the local list matches the authoritative backend state.
+   */
+  function handleDeletionBatchComplete() {
+    refresh(true);
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -61,11 +93,17 @@ export function usePreview() {
   onMounted(() => {
     on('preview_updated', handlePreviewUpdated);
     on('preview_invalidated', handlePreviewInvalidated);
+    on('deletion_success', handleDeletionSuccess);
+    on('deletion_dry_run', handleDeletionDryRun);
+    on('deletion_batch_complete', handleDeletionBatchComplete);
   });
 
   onUnmounted(() => {
     off('preview_updated', handlePreviewUpdated);
     off('preview_invalidated', handlePreviewInvalidated);
+    off('deletion_success', handleDeletionSuccess);
+    off('deletion_dry_run', handleDeletionDryRun);
+    off('deletion_batch_complete', handleDeletionBatchComplete);
   });
 
   return {
