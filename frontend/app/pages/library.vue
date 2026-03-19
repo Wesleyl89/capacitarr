@@ -33,11 +33,18 @@
           >
             <component :is="preset.icon" class="w-3.5 h-3.5" />
             {{ preset.label }}
+            <UiBadge
+              v-if="filterCounts[preset.key] != null"
+              variant="secondary"
+              class="ml-1 text-[10px] px-1.5 py-0 tabular-nums"
+            >
+              {{ filterCounts[preset.key] }}
+            </UiBadge>
           </UiButton>
 
           <!-- Active filter indicator -->
           <div
-            v-if="activeFilter"
+            v-if="activeFilter || activeQuality || activeRuleId"
             class="flex items-center gap-1 text-xs text-muted-foreground ml-2"
           >
             <span>{{ $t('library.filterActive', { name: activeFilterLabel }) }}</span>
@@ -79,7 +86,7 @@
         <!-- Library Table -->
         <LibraryTable
           ref="libraryTableRef"
-          :items="items"
+          :items="filteredItems"
           :integrations="enabledIntegrations"
           :loading="loading"
           @refresh="refresh(true)"
@@ -142,7 +149,12 @@ const filterPresets = [
 ];
 
 const activeFilter = ref<string | null>((route.query.filter as string) || null);
+const activeQuality = ref<string | null>((route.query.quality as string) || null);
+const activeRuleId = ref<number | null>(route.query.ruleId ? Number(route.query.ruleId) : null);
+
 const activeFilterLabel = computed(() => {
+  if (activeQuality.value) return `Quality: ${activeQuality.value}`;
+  if (activeRuleId.value) return `Rule #${activeRuleId.value}`;
   const preset = filterPresets.find((p) => p.key === activeFilter.value);
   return preset?.label ?? '';
 });
@@ -152,24 +164,121 @@ function toggleFilter(key: string) {
     clearFilter();
   } else {
     activeFilter.value = key;
+    activeQuality.value = null;
+    activeRuleId.value = null;
     router.replace({ query: { ...route.query, filter: key, tab: 'browse' } });
   }
 }
 
 function clearFilter() {
   activeFilter.value = null;
+  activeQuality.value = null;
+  activeRuleId.value = null;
   const query = { ...route.query };
   delete query.filter;
+  delete query.quality;
+  delete query.ruleId;
   router.replace({ query });
 }
 
 // Re-read filter from URL on route changes (e.g. Insights → Library links)
 watch(
-  () => route.query.filter,
-  (newFilter) => {
-    activeFilter.value = (newFilter as string) || null;
+  () => route.query,
+  (q) => {
+    activeFilter.value = (q.filter as string) || null;
+    activeQuality.value = (q.quality as string) || null;
+    activeRuleId.value = q.ruleId ? Number(q.ruleId) : null;
   },
 );
+
+// ---------------------------------------------------------------------------
+// Backend analytics data for smart filter matching
+// ---------------------------------------------------------------------------
+interface DeadContentReport {
+  items: { title: string }[];
+  totalCount: number;
+}
+interface StaleContentReport {
+  items: { title: string }[];
+  totalCount: number;
+}
+interface SizeAnomaly {
+  title: string;
+}
+
+const deadTitles = ref<Set<string>>(new Set());
+const staleTitles = ref<Set<string>>(new Set());
+const bloatedTitles = ref<Set<string>>(new Set());
+
+async function fetchFilterData() {
+  try {
+    const [deadResp, staleResp, bloatResp] = await Promise.all([
+      api('/api/v1/analytics/dead-content') as Promise<DeadContentReport>,
+      api('/api/v1/analytics/stale-content') as Promise<StaleContentReport>,
+      api('/api/v1/analytics/bloat') as Promise<SizeAnomaly[]>,
+    ]);
+    deadTitles.value = new Set((deadResp?.items ?? []).map((i) => i.title));
+    staleTitles.value = new Set((staleResp?.items ?? []).map((i) => i.title));
+    bloatedTitles.value = new Set((bloatResp ?? []).map((i) => i.title));
+  } catch {
+    // Silent — filters will just show all items
+  }
+}
+
+// Badge counts for each filter
+const filterCounts = computed<Record<string, number | null>>(() => {
+  const all = items.value;
+  return {
+    dead:
+      deadTitles.value.size > 0
+        ? all.filter((e) => deadTitles.value.has(e.item.title)).length
+        : null,
+    stale:
+      staleTitles.value.size > 0
+        ? all.filter((e) => staleTitles.value.has(e.item.title)).length
+        : null,
+    bloated:
+      bloatedTitles.value.size > 0
+        ? all.filter((e) => bloatedTitles.value.has(e.item.title)).length
+        : null,
+    requested: all.filter((e) => e.item.isRequested).length || null,
+    protected: all.filter((e) => e.isProtected).length || null,
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Client-side filtering of preview items
+// ---------------------------------------------------------------------------
+const filteredItems = computed<EvaluatedItem[]>(() => {
+  let result = items.value;
+
+  // Smart filter presets
+  if (activeFilter.value === 'dead') {
+    result = result.filter((e) => deadTitles.value.has(e.item.title));
+  } else if (activeFilter.value === 'stale') {
+    result = result.filter((e) => staleTitles.value.has(e.item.title));
+  } else if (activeFilter.value === 'bloated') {
+    result = result.filter((e) => bloatedTitles.value.has(e.item.title));
+  } else if (activeFilter.value === 'requested') {
+    result = result.filter((e) => e.item.isRequested);
+  } else if (activeFilter.value === 'protected') {
+    result = result.filter((e) => e.isProtected);
+  }
+
+  // Quality filter (from Insights → Library links)
+  if (activeQuality.value) {
+    const q = activeQuality.value.toLowerCase();
+    result = result.filter((e) => e.item.qualityProfile?.toLowerCase() === q);
+  }
+
+  // Rule filter (from Rules → Library links)
+  if (activeRuleId.value) {
+    const ruleId = activeRuleId.value;
+    result = result.filter((e) => e.factors?.some((f) => f.ruleId === ruleId));
+  }
+
+  return result;
+});
 
 // ---------------------------------------------------------------------------
 // Integrations
@@ -227,6 +336,6 @@ async function handleForceDelete(selectedItems: EvaluatedItem[]) {
 // Init
 // ---------------------------------------------------------------------------
 onMounted(async () => {
-  await Promise.all([fetchIntegrations(), refresh()]);
+  await Promise.all([fetchIntegrations(), refresh(), fetchFilterData()]);
 });
 </script>

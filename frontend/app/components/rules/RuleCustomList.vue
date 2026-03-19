@@ -148,7 +148,7 @@
                   >
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <!-- Impact badge placeholder (wired in Phase 6) -->
+                  <!-- Impact badge — shows how many items this rule affects -->
                   <NuxtLink
                     v-if="rule.enabled !== false"
                     :to="`/library?ruleId=${rule.id}`"
@@ -160,7 +160,7 @@
                       class="text-xs tabular-nums cursor-pointer hover:bg-accent transition-colors gap-1"
                     >
                       <component :is="BarChart3Icon" class="w-3 h-3" />
-                      <span>—</span>
+                      <span>{{ impactCounts.get(rule.id) ?? '—' }}</span>
                     </UiBadge>
                   </NuxtLink>
                   <!-- Effect badge -->
@@ -234,6 +234,7 @@ interface RuleGroup {
 }
 
 const router = useRouter();
+const api = useApi();
 
 const props = defineProps<{
   rules: CustomRule[];
@@ -371,4 +372,42 @@ function onDrop(event: DragEvent, targetIntegrationId: number, targetIdx: number
 
   emit('reorder', fullOrder);
 }
+
+// ─── Rule impact counts (fetched from API) ────────────────────────────────
+interface RuleImpact {
+  ruleId: number;
+  affectedCount: number;
+  totalItems: number;
+}
+
+const impactCounts = ref<Map<number, number>>(new Map());
+
+async function fetchRuleImpacts() {
+  const enabledRules = props.rules.filter((r) => r.enabled !== false);
+  const results = await Promise.allSettled(
+    enabledRules.map((rule) =>
+      (api(`/api/v1/custom-rules/${rule.id}/impact`) as Promise<RuleImpact>).then((resp) => ({
+        id: rule.id,
+        count: resp.affectedCount,
+      })),
+    ),
+  );
+
+  const newCounts = new Map<number, number>();
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      newCounts.set(result.value.id, result.value.count);
+    }
+  }
+  impactCounts.value = newCounts;
+}
+
+// Fetch impacts when rules change
+watch(
+  () => props.rules,
+  () => {
+    fetchRuleImpacts();
+  },
+  { immediate: true },
+);
 </script>
