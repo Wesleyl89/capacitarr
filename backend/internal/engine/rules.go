@@ -14,6 +14,12 @@ import (
 
 const boolTrue = "true"
 
+// ApplyRulesExported is the exported version of applyRules for use by other packages
+// (e.g. RulesService.GetRuleImpact). Returns (isAbsolutelyProtected, scoreModifier, reasonString, ruleFactors).
+func ApplyRulesExported(item integrations.MediaItem, rules []db.CustomRule) (bool, float64, string, []ScoreFactor) {
+	return applyRules(item, rules)
+}
+
 // applyRules checks if a media item meets any custom rules and applies score modifiers.
 // Uses the new "effect" field for the combined keep/remove spectrum.
 // Implements "Keep Always Wins" conflict resolution:

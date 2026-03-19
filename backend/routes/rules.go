@@ -22,6 +22,19 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 	// Delegate rule-field and rule-value routes to rulefields.go
 	RegisterRuleFieldRoutes(protected, reg)
 
+	// Rule impact preview
+	protected.GET("/custom-rules/:id/impact", func(c echo.Context) error {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			return apiError(c, http.StatusBadRequest, "Invalid rule ID")
+		}
+		impact, err := reg.Rules.GetRuleImpact(uint(id))
+		if err != nil {
+			return apiError(c, http.StatusNotFound, err.Error())
+		}
+		return c.JSON(http.StatusOK, impact)
+	})
+
 	// ---------------------------------------------------------
 	// CUSTOM RULES (protection/targeting)
 	// ---------------------------------------------------------

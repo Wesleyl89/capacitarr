@@ -99,6 +99,9 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	// Wire PreviewService's queue status enrichment dependencies
 	previewSvc.SetQueueDependencies(reg.Approval, deletionSvc)
 
+	// Wire RulesService's preview source for rule impact calculation
+	reg.Rules.SetPreviewSource(previewSvc)
+
 	return reg
 }
 

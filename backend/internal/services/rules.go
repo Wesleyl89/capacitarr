@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/engine"
 	"capacitarr/internal/events"
 )
 
@@ -19,13 +20,19 @@ var ErrRuleValidation = errors.New("rule validation failed")
 
 // RulesService manages custom rule CRUD and reordering.
 type RulesService struct {
-	db  *gorm.DB
-	bus *events.EventBus
+	db      *gorm.DB
+	bus     *events.EventBus
+	preview PreviewDataSource // optional, for rule impact preview
 }
 
 // NewRulesService creates a new RulesService.
 func NewRulesService(database *gorm.DB, bus *events.EventBus) *RulesService {
 	return &RulesService{db: database, bus: bus}
+}
+
+// SetPreviewSource sets the preview data source for rule impact calculations.
+func (s *RulesService) SetPreviewSource(preview PreviewDataSource) {
+	s.preview = preview
 }
 
 // List returns all custom rules ordered by sort_order ASC, id ASC.
@@ -124,4 +131,46 @@ func (s *RulesService) Reorder(ids []uint) error {
 		}
 	}
 	return tx.Commit().Error
+}
+
+// RuleImpact holds the impact preview for a single rule.
+type RuleImpact struct {
+	RuleID        uint `json:"ruleId"`
+	AffectedCount int  `json:"affectedCount"`
+	TotalItems    int  `json:"totalItems"`
+}
+
+// GetRuleImpact returns how many preview cache items the given rule affects.
+// Uses the engine's rule matching logic against the current preview cache.
+func (s *RulesService) GetRuleImpact(ruleID uint) (*RuleImpact, error) {
+	var rule db.CustomRule
+	if err := s.db.First(&rule, ruleID).Error; err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRuleNotFound, err)
+	}
+
+	if s.preview == nil {
+		return &RuleImpact{RuleID: ruleID, AffectedCount: 0, TotalItems: 0}, nil
+	}
+
+	items := s.preview.GetCachedItems()
+	if len(items) == 0 {
+		return &RuleImpact{RuleID: ruleID, AffectedCount: 0, TotalItems: 0}, nil
+	}
+
+	// Test the single rule against each item using the engine
+	singleRule := []db.CustomRule{rule}
+	affected := 0
+	for _, item := range items {
+		isProtected, modifier, _, _ := engine.ApplyRulesExported(item, singleRule)
+		// If the rule matched, isProtected will be true or modifier will differ from 1.0
+		if isProtected || modifier != 1.0 {
+			affected++
+		}
+	}
+
+	return &RuleImpact{
+		RuleID:        ruleID,
+		AffectedCount: affected,
+		TotalItems:    len(items),
+	}, nil
 }
