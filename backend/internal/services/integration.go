@@ -550,6 +550,30 @@ func (s *IntegrationService) BuildEnrichmentClients() (*EnrichmentBuildResult, e
 	return result, nil
 }
 
+// BuildIntegrationRegistry creates an IntegrationRegistry populated with clients
+// for all enabled integrations, using the factory + capability-based pattern.
+// This is the 2.0 replacement for BuildEnrichmentClients. Clients are created via
+// RegisterAllFactories and auto-discovered for their capabilities.
+func (s *IntegrationService) BuildIntegrationRegistry() (*integrations.IntegrationRegistry, error) {
+	configs, err := s.ListEnabled()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list enabled integrations: %w", err)
+	}
+
+	// Ensure factories are registered
+	integrations.RegisterAllFactories()
+
+	registry := integrations.NewIntegrationRegistry()
+	for _, cfg := range configs {
+		client := integrations.CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+		if client != nil {
+			registry.Register(cfg.ID, client)
+		}
+	}
+
+	return registry, nil
+}
+
 // UpdateSyncStatus updates the last_sync and last_error fields on an integration config.
 func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, lastError string) error {
 	result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]any{
