@@ -29,7 +29,7 @@ export function typeIcon(type: string): FunctionalComponent {
       return MonitorPlayIcon;
     case 'tautulli':
       return ActivityIcon;
-    case 'overseerr':
+    case 'seerr':
       return InboxIcon;
     default:
       return ServerIcon;
@@ -54,7 +54,7 @@ export function typeColor(type: string): string {
       return 'bg-emerald-500';
     case 'tautulli':
       return 'bg-teal-500';
-    case 'overseerr':
+    case 'seerr':
       return 'bg-indigo-500';
     default:
       return 'bg-muted-foreground';
@@ -79,7 +79,7 @@ export function typeTextColor(type: string): string {
       return 'text-emerald-500';
     case 'tautulli':
       return 'text-teal-500';
-    case 'overseerr':
+    case 'seerr':
       return 'text-indigo-500';
     default:
       return 'text-muted-foreground';
@@ -95,7 +95,7 @@ export const namePlaceholders: Record<string, string> = {
   jellyfin: 'My Jellyfin',
   emby: 'My Emby',
   tautulli: 'My Tautulli',
-  overseerr: 'My Overseerr',
+  seerr: 'My Seerr',
 };
 
 export const urlPlaceholders: Record<string, string> = {
@@ -107,7 +107,7 @@ export const urlPlaceholders: Record<string, string> = {
   jellyfin: 'http://localhost:8096',
   emby: 'http://localhost:8096',
   tautulli: 'http://localhost:8181',
-  overseerr: 'http://localhost:5055',
+  seerr: 'http://localhost:5055',
 };
 
 export const urlHelpTexts: Record<string, string> = {
@@ -119,5 +119,5 @@ export const urlHelpTexts: Record<string, string> = {
   jellyfin: 'Your Jellyfin server URL (IP or hostname + port).',
   emby: 'Your Emby server URL (IP or hostname + port).',
   tautulli: 'Your Tautulli instance URL (IP or hostname + port).',
-  overseerr: 'Full URL including any subpath (e.g., https://example.com/requests/).',
+  seerr: 'Full URL including any subpath (e.g., https://example.com/requests/).',
 };
