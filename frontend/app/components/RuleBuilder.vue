@@ -224,7 +224,7 @@ const emit = defineEmits<{
 
 const api = useApi();
 
-// Only show *arr integrations (not enrichment services like Plex/Tautulli/Overseerr)
+// Only show *arr integrations (not enrichment services like Plex/Tautulli/Seerr)
 const arrTypes = ['sonarr', 'radarr', 'lidarr', 'readarr'];
 const arrIntegrations = computed(() =>
   props.integrations.filter((i) => i.enabled && arrTypes.includes(i.type)),
