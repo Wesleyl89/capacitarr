@@ -468,5 +468,7 @@
   "settings.thresholdPct": "Cleanup Threshold",
   "settings.thresholdPctDesc": "Begin cleanup when disk usage exceeds this %",
   "settings.targetPct": "Cleanup Target",
-  "settings.targetPctDesc": "Stop cleanup when disk usage drops to this %"
+  "settings.targetPctDesc": "Stop cleanup when disk usage drops to this %",
+  "settings.thresholdsSaved": "Threshold overrides saved",
+  "settings.thresholdsSaveFailed": "Failed to save threshold overrides"
 }

@@ -120,6 +120,10 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 		existing.Enabled = update.Enabled
 
+		// Per-integration threshold overrides (nullable)
+		existing.ThresholdPct = update.ThresholdPct
+		existing.TargetPct = update.TargetPct
+
 		// Clear stale sync status — configuration has changed, so the
 		// previous error and sync time are no longer valid.
 		existing.LastError = ""

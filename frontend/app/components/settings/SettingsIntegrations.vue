@@ -515,11 +515,51 @@ function getThresholdState(integrationId: number): ThresholdOverride {
 function toggleThresholdOverride(integrationId: number, enabled: boolean) {
   const state = getThresholdState(integrationId);
   state.enabled = enabled;
+
+  // Persist: when disabling, set both to null (inherit from disk group)
+  if (!enabled) {
+    saveThresholds(integrationId, null, null);
+  } else {
+    saveThresholds(integrationId, state.thresholdPct, state.targetPct);
+  }
 }
 
 function updateThreshold(integrationId: number, key: 'thresholdPct' | 'targetPct', value: number) {
   const state = getThresholdState(integrationId);
   state[key] = value;
+  debouncedSaveThresholds(integrationId);
+}
+
+// Debounce threshold saves to avoid flooding the API during slider drags
+const _thresholdTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+function debouncedSaveThresholds(integrationId: number) {
+  const existing = _thresholdTimers.get(integrationId);
+  if (existing) clearTimeout(existing);
+  _thresholdTimers.set(
+    integrationId,
+    setTimeout(() => {
+      const state = getThresholdState(integrationId);
+      saveThresholds(integrationId, state.thresholdPct, state.targetPct);
+      _thresholdTimers.delete(integrationId);
+    }, 500),
+  );
+}
+
+async function saveThresholds(
+  integrationId: number,
+  thresholdPct: number | null,
+  targetPct: number | null,
+) {
+  try {
+    await api(`/api/v1/integrations/${integrationId}`, {
+      method: 'PUT',
+      body: { thresholdPct, targetPct },
+    });
+    addToast(t('settings.thresholdsSaved'), 'success');
+  } catch {
+    addToast(t('settings.thresholdsSaveFailed'), 'error');
+  }
 }
 
 const formState = reactive({ type: 'sonarr', name: '', url: '', apiKey: '' });
