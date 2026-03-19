@@ -163,21 +163,7 @@ func (s *IntegrationService) TestConnection(intType, url, apiKey string, integra
 		}
 	}
 
-	// Enrichment-only services have separate client constructors
-	switch intType {
-	case string(integrations.IntegrationTypeTautulli):
-		return s.testClient(intType, url, integrations.NewTautulliClient(url, apiKey).TestConnection)
-	case string(integrations.IntegrationTypeSeerr):
-		return s.testClient(intType, url, integrations.NewSeerrClient(url, apiKey).TestConnection)
-	case string(integrations.IntegrationTypeJellyfin):
-		return s.testClient(intType, url, integrations.NewJellyfinClient(url, apiKey).TestConnection)
-	case string(integrations.IntegrationTypeEmby):
-		return s.testClient(intType, url, integrations.NewEmbyClient(url, apiKey).TestConnection)
-	case string(integrations.IntegrationTypePlex):
-		return s.testClient(intType, url, integrations.NewPlexClient(url, apiKey).TestConnection)
-	}
-
-	// Standard *arr and other integrations via factory
+	// All integration types use the factory + capability interface discovery
 	rawClient := integrations.CreateClient(intType, url, apiKey)
 	if rawClient == nil {
 		return TestConnectionResult{Success: false, Error: "Unknown integration type"}
@@ -313,7 +299,7 @@ func (s *IntegrationService) FetchRuleValues(integrationID uint, action string) 
 		return nil, err
 	}
 
-	client := integrations.NewClient(cfg.Type, cfg.URL, cfg.APIKey)
+	client := integrations.CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
 	if client == nil {
 		return nil, ErrUnsupportedIntegrationType
 	}

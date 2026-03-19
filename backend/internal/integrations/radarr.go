@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// RadarrClient implements Integration for Radarr v3 API
+// RadarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Radarr v3 API.
 type RadarrClient struct {
 	URL    string
 	APIKey string `json:"-"`

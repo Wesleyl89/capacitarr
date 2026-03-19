@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// PlexClient implements Integration for Plex Media Server
+// PlexClient implements Connectable, MediaSource, WatchDataProvider, and WatchlistProvider for Plex Media Server.
 type PlexClient struct {
 	URL   string
 	Token string `json:"-"` // X-Plex-Token
@@ -34,17 +34,6 @@ func (p *PlexClient) doRequest(endpoint string) ([]byte, error) {
 func (p *PlexClient) TestConnection() error {
 	_, err := p.doRequest("/identity")
 	return err
-}
-
-// GetDiskSpace returns an empty slice because Plex doesn't report disk space
-// directly through its API. Disk info comes from *arr services.
-func (p *PlexClient) GetDiskSpace() ([]DiskSpace, error) {
-	return []DiskSpace{}, nil
-}
-
-// GetRootFolders returns an empty slice because Plex doesn't have root folders in the *arr sense.
-func (p *PlexClient) GetRootFolders() ([]string, error) {
-	return []string{}, nil
 }
 
 // plexLibraryResponse maps /library/sections response
@@ -316,16 +305,8 @@ func (p *PlexClient) GetWatchlistItems() (map[string]bool, error) {
 	return p.GetOnDeckItems()
 }
 
-// Ensure PlexClient implements Integration + WatchlistProvider
 // Verify PlexClient satisfies capability interfaces at compile time.
 var _ Connectable = (*PlexClient)(nil)
 var _ MediaSource = (*PlexClient)(nil)
 var _ WatchDataProvider = (*PlexClient)(nil)
 var _ WatchlistProvider = (*PlexClient)(nil)
-
-// DeleteMediaItem is a no-op for Plex; actual deletion is performed via *arr services.
-func (p *PlexClient) DeleteMediaItem(_ MediaItem) error {
-	// Plex is read-only for watch history in this architecture.
-	// Actual deletion happens via Radarr/Sonarr.
-	return nil
-}

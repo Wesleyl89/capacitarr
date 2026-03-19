@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// LidarrClient implements Integration for Lidarr v1 API (Servarr framework).
+// LidarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Lidarr v1 API (Servarr framework).
 // Lidarr manages music libraries and follows the same API patterns as Sonarr/Radarr.
 type LidarrClient struct {
 	URL    string

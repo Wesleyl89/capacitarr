@@ -56,40 +56,6 @@ func TestPlexClient_TestConnection_ServerError(t *testing.T) {
 	}
 }
 
-func TestPlexClient_GetDiskSpace_Empty(t *testing.T) {
-	// Plex doesn't report disk space — should always return empty slice
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	client := NewPlexClient(srv.URL, "test-token")
-	disks, err := client.GetDiskSpace()
-	if err != nil {
-		t.Fatalf("GetDiskSpace should succeed: %v", err)
-	}
-	if len(disks) != 0 {
-		t.Errorf("Expected empty disk space from Plex, got %d", len(disks))
-	}
-}
-
-func TestPlexClient_GetRootFolders_Empty(t *testing.T) {
-	// Plex doesn't have root folders in the *arr sense
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	client := NewPlexClient(srv.URL, "test-token")
-	folders, err := client.GetRootFolders()
-	if err != nil {
-		t.Fatalf("GetRootFolders should succeed: %v", err)
-	}
-	if len(folders) != 0 {
-		t.Errorf("Expected empty root folders from Plex, got %d", len(folders))
-	}
-}
-
 func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -377,19 +343,6 @@ func TestPlexClient_GetLibrarySections(t *testing.T) {
 
 	if sections[0].Title != "Movies" || sections[0].Type != "movie" || sections[0].Key != "1" {
 		t.Errorf("Unexpected first section: %+v", sections[0])
-	}
-}
-
-func TestPlexClient_DeleteMediaItem_Noop(t *testing.T) {
-	// Plex's DeleteMediaItem is a no-op (read-only for watch history)
-	client := NewPlexClient("http://localhost", "test-token")
-	err := client.DeleteMediaItem(MediaItem{
-		ExternalID: "101",
-		Title:      "Serenity",
-		Type:       MediaTypeMovie,
-	})
-	if err != nil {
-		t.Errorf("DeleteMediaItem should be a no-op, got error: %v", err)
 	}
 }
 

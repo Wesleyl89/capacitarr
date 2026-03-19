@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// SonarrClient implements Integration for Sonarr v3 API
+// SonarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Sonarr v3 API.
 type SonarrClient struct {
 	URL    string
 	APIKey string `json:"-"`

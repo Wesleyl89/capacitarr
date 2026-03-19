@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// ReadarrClient implements Integration for Readarr v1 API (books/audiobooks).
+// ReadarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Readarr v1 API (books/audiobooks).
 // Follows the same API pattern as Sonarr/Radarr/Lidarr.
 type ReadarrClient struct {
 	URL    string

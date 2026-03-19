@@ -30,8 +30,8 @@ const (
 // ============================================================================
 // Capability Interfaces (2.0)
 //
-// Each integration implements only the interfaces it supports. This replaces
-// the monolithic Integration interface — no more no-op methods.
+// Each integration implements only the interfaces it supports. Client creation
+// uses CreateClient() via the factory registry — no switch-statement wiring.
 //
 // Sonarr, Radarr, Lidarr, Readarr: Connectable + MediaSource + DiskReporter + MediaDeleter + RuleValueFetcher
 // Plex:                             Connectable + MediaSource + WatchDataProvider + WatchlistProvider
@@ -90,16 +90,6 @@ type MediaRequest struct {
 // WatchlistProvider is implemented by integrations that can report watchlist/favorites.
 type WatchlistProvider interface {
 	GetWatchlistItems() (map[string]bool, error)
-}
-
-// Integration defines the legacy monolithic interface. Deprecated in 2.0 — use
-// capability interfaces (Connectable, MediaSource, DiskReporter, MediaDeleter) instead.
-// Retained temporarily for backward compatibility during the Phase 2 transition.
-type Integration interface {
-	Connectable
-	DiskReporter
-	MediaSource
-	MediaDeleter
 }
 
 // DiskSpace represents disk usage reported by a service
@@ -170,30 +160,6 @@ const (
 	// MediaTypeBook represents a book or audiobook.
 	MediaTypeBook MediaType = "book"
 )
-
-// NewClient constructs an Integration client for the given integration type.
-// Returns nil if the type is not a primary media-managing integration
-// (e.g. tautulli, seerr are enrichment-only and don't implement Integration).
-func NewClient(intType, url, apiKey string) Integration {
-	switch IntegrationType(intType) {
-	case IntegrationTypeSonarr:
-		return NewSonarrClient(url, apiKey)
-	case IntegrationTypeRadarr:
-		return NewRadarrClient(url, apiKey)
-	case IntegrationTypeLidarr:
-		return NewLidarrClient(url, apiKey)
-	case IntegrationTypeReadarr:
-		return NewReadarrClient(url, apiKey)
-	case IntegrationTypePlex:
-		return NewPlexClient(url, apiKey)
-	case IntegrationTypeTautulli, IntegrationTypeSeerr, IntegrationTypeJellyfin, IntegrationTypeEmby:
-		// These are enrichment-only clients that don't implement the full
-		// Integration interface (no DeleteMediaItem). Use their dedicated
-		// constructors (NewTautulliClient, etc.) directly.
-		return nil
-	}
-	return nil
-}
 
 // NameValue is a simple label/value pair used for rule value options.
 type NameValue struct {
