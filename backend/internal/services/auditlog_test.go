@@ -17,6 +17,7 @@ func TestAuditLogService_Create(t *testing.T) {
 		Reason:    "Score: 0.85 (WatchHistory: 1.0)",
 		Action:    db.ActionDeleted,
 		SizeBytes: 5069636198,
+		Score:     0.85,
 	}
 
 	if err := svc.Create(entry); err != nil {
@@ -37,6 +38,9 @@ func TestAuditLogService_Create(t *testing.T) {
 	if saved.Action != db.ActionDeleted {
 		t.Errorf("expected action %q, got %q", db.ActionDeleted, saved.Action)
 	}
+	if saved.Score != 0.85 {
+		t.Errorf("expected score 0.85, got %f", saved.Score)
+	}
 }
 
 func TestAuditLogService_UpsertDryRun_Create(t *testing.T) {
@@ -49,6 +53,7 @@ func TestAuditLogService_UpsertDryRun_Create(t *testing.T) {
 		Reason:    "Score: 0.70",
 		Action:    db.ActionDryRun,
 		SizeBytes: 3000000000,
+		Score:     0.70,
 	}
 
 	if err := svc.UpsertDryRun(entry); err != nil {
@@ -59,6 +64,13 @@ func TestAuditLogService_UpsertDryRun_Create(t *testing.T) {
 	database.Model(&db.AuditLogEntry{}).Count(&count)
 	if count != 1 {
 		t.Errorf("expected 1 entry, got %d", count)
+	}
+
+	// Verify score is stored
+	var saved db.AuditLogEntry
+	database.First(&saved)
+	if saved.Score != 0.70 {
+		t.Errorf("expected score 0.70, got %f", saved.Score)
 	}
 }
 
@@ -73,6 +85,7 @@ func TestAuditLogService_UpsertDryRun_Update(t *testing.T) {
 		Reason:    "Score: 0.70",
 		Action:    db.ActionDryRun,
 		SizeBytes: 3000000000,
+		Score:     0.70,
 	}
 	if err := svc.UpsertDryRun(entry); err != nil {
 		t.Fatalf("First UpsertDryRun failed: %v", err)
@@ -81,6 +94,7 @@ func TestAuditLogService_UpsertDryRun_Update(t *testing.T) {
 	// Upsert same media with updated score
 	entry.Reason = "Score: 0.85"
 	entry.SizeBytes = 3500000000
+	entry.Score = 0.85
 	if err := svc.UpsertDryRun(entry); err != nil {
 		t.Fatalf("Second UpsertDryRun failed: %v", err)
 	}
@@ -100,6 +114,9 @@ func TestAuditLogService_UpsertDryRun_Update(t *testing.T) {
 	}
 	if saved.SizeBytes != 3500000000 {
 		t.Errorf("expected updated size, got %d", saved.SizeBytes)
+	}
+	if saved.Score != 0.85 {
+		t.Errorf("expected updated score 0.85, got %f", saved.Score)
 	}
 }
 

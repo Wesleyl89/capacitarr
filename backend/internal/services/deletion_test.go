@@ -366,6 +366,7 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 			SizeBytes: 1024 * 1024 * 100,
 		},
 		Reason: "test-progress",
+		Score:  0.72,
 	}
 	if err := svc.QueueDeletion(job); err != nil {
 		t.Fatalf("QueueDeletion returned error: %v", err)
@@ -383,6 +384,15 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 	}
 	if pe.BatchTotal != 1 {
 		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
+	}
+
+	// Verify audit log entry contains the score from the DeleteJob
+	var entry db.AuditLogEntry
+	if err := database.First(&entry).Error; err != nil {
+		t.Fatalf("Expected audit log entry: %v", err)
+	}
+	if entry.Score != 0.72 {
+		t.Errorf("expected audit log score 0.72, got %f", entry.Score)
 	}
 }
 
@@ -413,6 +423,7 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 			SizeBytes: 1024 * 1024 * 50,
 		},
 		Reason: "test-progress",
+		Score:  0.91,
 	}
 	if err := svc.QueueDeletion(job); err != nil {
 		t.Fatalf("QueueDeletion returned error: %v", err)
@@ -430,6 +441,15 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 	}
 	if pe.BatchTotal != 1 {
 		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
+	}
+
+	// Verify audit log entry contains the score from the DeleteJob
+	var entry db.AuditLogEntry
+	if err := database.First(&entry).Error; err != nil {
+		t.Fatalf("Expected audit log entry: %v", err)
+	}
+	if entry.Score != 0.91 {
+		t.Errorf("expected audit log score 0.91, got %f", entry.Score)
 	}
 }
 
@@ -800,5 +820,87 @@ func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 	}
 	if pe.BatchTotal != 1 {
 		t.Errorf("expected BatchTotal=1, got %d", pe.BatchTotal)
+	}
+}
+
+func TestDeletionQueuedEvent_EventType(t *testing.T) {
+	evt := events.DeletionQueuedEvent{
+		MediaName:     "Serenity",
+		MediaType:     "movie",
+		SizeBytes:     1024 * 1024 * 100,
+		IntegrationID: 1,
+	}
+
+	if got := evt.EventType(); got != "deletion_queued" {
+		t.Errorf("expected EventType() = %q, got %q", "deletion_queued", got)
+	}
+}
+
+func TestDeletionQueuedEvent_EventMessage(t *testing.T) {
+	evt := events.DeletionQueuedEvent{
+		MediaName:     "Serenity",
+		MediaType:     "movie",
+		SizeBytes:     1024 * 1024 * 100,
+		IntegrationID: 1,
+	}
+
+	expected := "Queued for deletion: Serenity"
+	if got := evt.EventMessage(); got != expected {
+		t.Errorf("expected EventMessage() = %q, got %q", expected, got)
+	}
+}
+
+func TestDeletionService_QueueDeletion_PublishesDeletionQueuedEvent(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	// Don't start the worker — we only want to verify the enqueue event,
+	// not the downstream processing events.
+	job := DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:         "Serenity",
+			Type:          "movie",
+			SizeBytes:     1024 * 1024 * 100,
+			IntegrationID: 7,
+		},
+		Reason: "test-queued-event",
+	}
+	if err := svc.QueueDeletion(job); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Read the first event — should be DeletionQueuedEvent
+	deadline := time.After(2 * time.Second)
+	select {
+	case evt := <-ch:
+		qe, ok := evt.(events.DeletionQueuedEvent)
+		if !ok {
+			t.Fatalf("expected DeletionQueuedEvent, got %T", evt)
+		}
+		if qe.MediaName != "Serenity" {
+			t.Errorf("expected MediaName=%q, got %q", "Serenity", qe.MediaName)
+		}
+		if qe.MediaType != "movie" {
+			t.Errorf("expected MediaType=%q, got %q", "movie", qe.MediaType)
+		}
+		if qe.SizeBytes != 1024*1024*100 {
+			t.Errorf("expected SizeBytes=%d, got %d", 1024*1024*100, qe.SizeBytes)
+		}
+		if qe.IntegrationID != 7 {
+			t.Errorf("expected IntegrationID=%d, got %d", 7, qe.IntegrationID)
+		}
+	case <-deadline:
+		t.Fatal("timeout waiting for DeletionQueuedEvent")
 	}
 }

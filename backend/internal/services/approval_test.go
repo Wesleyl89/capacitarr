@@ -76,6 +76,7 @@ func seedPendingItem(t *testing.T, database *gorm.DB, integrationID uint) db.App
 		MediaType:     "show",
 		Reason:        "Score: 0.85",
 		SizeBytes:     5069636198,
+		Score:         0.85,
 		IntegrationID: integrationID,
 		ExternalID:    "1",
 		Status:        db.StatusPending,
@@ -104,6 +105,9 @@ func TestApprovalService_Approve(t *testing.T) {
 
 	if result.Status != db.StatusApproved {
 		t.Errorf("expected status %q, got %q", db.StatusApproved, result.Status)
+	}
+	if result.Score != 0.85 {
+		t.Errorf("expected score 0.85 preserved after approve, got %f", result.Score)
 	}
 
 	// Verify event was published
@@ -396,6 +400,7 @@ func TestApprovalService_UpsertPending_Create(t *testing.T) {
 		MediaType:     "movie",
 		Reason:        "Score: 0.90",
 		SizeBytes:     1000000,
+		Score:         0.90,
 		IntegrationID: intID,
 		ExternalID:    "42",
 	})
@@ -412,6 +417,13 @@ func TestApprovalService_UpsertPending_Create(t *testing.T) {
 	if count != 1 {
 		t.Errorf("expected 1 item in queue, got %d", count)
 	}
+
+	// Verify score is stored
+	var item db.ApprovalQueueItem
+	database.First(&item)
+	if item.Score != 0.90 {
+		t.Errorf("expected score 0.90, got %f", item.Score)
+	}
 }
 
 func TestApprovalService_UpsertPending_Update(t *testing.T) {
@@ -427,6 +439,7 @@ func TestApprovalService_UpsertPending_Update(t *testing.T) {
 		MediaType:     "movie",
 		Reason:        "Score: 0.80",
 		SizeBytes:     1000000,
+		Score:         0.80,
 		IntegrationID: intID,
 		ExternalID:    "42",
 	})
@@ -434,12 +447,13 @@ func TestApprovalService_UpsertPending_Update(t *testing.T) {
 		t.Fatalf("First UpsertPending failed: %v", err)
 	}
 
-	// Upsert again with updated reason
+	// Upsert again with updated reason and score
 	created, err := svc.UpsertPending(db.ApprovalQueueItem{
 		MediaName:     "Existing Movie",
 		MediaType:     "movie",
 		Reason:        "Score: 0.95",
 		SizeBytes:     2000000,
+		Score:         0.95,
 		IntegrationID: intID,
 		ExternalID:    "42",
 	})
@@ -465,6 +479,9 @@ func TestApprovalService_UpsertPending_Update(t *testing.T) {
 	}
 	if item.SizeBytes != 2000000 {
 		t.Errorf("expected updated size, got %d", item.SizeBytes)
+	}
+	if item.Score != 0.95 {
+		t.Errorf("expected updated score 0.95, got %f", item.Score)
 	}
 }
 

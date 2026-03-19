@@ -108,6 +108,7 @@ export interface AuditLogEntry {
   scoreDetails: string;
   action: AuditAction;
   sizeBytes: number;
+  score: number;
   integrationId?: number;
   createdAt: string;
 }
@@ -126,6 +127,7 @@ export interface ApprovalQueueItem {
   reason: string;
   scoreDetails: string;
   sizeBytes: number;
+  score: number;
   posterUrl?: string;
   integrationId: number;
   externalId: string;

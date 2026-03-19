@@ -179,6 +179,7 @@ type ApprovalQueueItem struct {
 	Reason        string     `gorm:"not null" json:"reason"`                             // e.g. "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
 	ScoreDetails  string     `gorm:"type:text" json:"scoreDetails"`                      // JSON-encoded []ScoreFactor
 	SizeBytes     int64      `gorm:"not null;default:0" json:"sizeBytes"`                // File size in bytes
+	Score         float64    `gorm:"not null;default:0" json:"score"`                    // Numeric score from engine evaluation
 	PosterURL     string     `gorm:"not null;default:''" json:"posterUrl"`               // Poster image URL from *arr
 	IntegrationID uint       `gorm:"not null" json:"integrationId"`                      // FK to IntegrationConfig (required)
 	ExternalID    string     `gorm:"not null;default:''" json:"externalId"`              // External ID in the integration
@@ -212,6 +213,7 @@ type AuditLogEntry struct {
 	ScoreDetails  string    `gorm:"type:text" json:"scoreDetails"` // JSON-encoded []ScoreFactor
 	Action        string    `gorm:"not null" json:"action"`        // "deleted", "dry_run", "dry_delete", "cancelled"
 	SizeBytes     int64     `gorm:"not null;default:0" json:"sizeBytes"`
+	Score         float64   `gorm:"not null;default:0" json:"score"`                      // Numeric score from engine evaluation
 	IntegrationID *uint     `json:"integrationId,omitempty" gorm:"column:integration_id"` // FK to IntegrationConfig (nullable — preserved on integration delete)
 	CreatedAt     time.Time `json:"createdAt"`
 }

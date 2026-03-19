@@ -431,6 +431,25 @@ func (e DeletionDryRunEvent) EventMessage() string {
 	return fmt.Sprintf("Dry-run flagged: %s", e.MediaName)
 }
 
+// DeletionQueuedEvent is published when a media item is added to the
+// deletion queue. This is especially useful in approval mode, where
+// approved items enter the deletion queue asynchronously — the frontend
+// subscribes to this event to refresh the deletion queue card.
+type DeletionQueuedEvent struct {
+	MediaName     string `json:"mediaName"`
+	MediaType     string `json:"mediaType"`
+	SizeBytes     int64  `json:"sizeBytes"`
+	IntegrationID uint   `json:"integrationId"`
+}
+
+// EventType implements Event.
+func (e DeletionQueuedEvent) EventType() string { return "deletion_queued" }
+
+// EventMessage implements Event.
+func (e DeletionQueuedEvent) EventMessage() string {
+	return fmt.Sprintf("Queued for deletion: %s", e.MediaName)
+}
+
 // DeletionCancelledEvent is published when a queued deletion is cancelled
 // by the user before it executes.
 type DeletionCancelledEvent struct {

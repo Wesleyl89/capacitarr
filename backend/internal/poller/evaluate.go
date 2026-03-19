@@ -159,6 +159,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				Reason:        fmt.Sprintf("Score: %.2f (%s)", ev.Score, ev.Reason),
 				ScoreDetails:  string(factorsJSON),
 				SizeBytes:     ev.Item.SizeBytes,
+				Score:         ev.Score,
 				PosterURL:     ev.Item.PosterURL,
 				IntegrationID: ev.Item.IntegrationID,
 				ExternalID:    ev.Item.ExternalID,
@@ -189,6 +190,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 			ScoreDetails:  string(factorsJSON),
 			Action:        db.ActionDryRun,
 			SizeBytes:     ev.Item.SizeBytes,
+			Score:         ev.Score,
 			IntegrationID: &integrationID,
 		}
 

@@ -30,6 +30,7 @@ func seedAuditLogs(t *testing.T, database *gorm.DB, n int) {
 			Reason:    "Score: 0.85",
 			Action:    action,
 			SizeBytes: int64(1000000 * (i + 1)),
+			Score:     0.85,
 			CreatedAt: time.Now().Add(-time.Duration(i) * time.Minute),
 		}
 		if err := database.Create(&log).Error; err != nil {
@@ -103,6 +104,13 @@ func TestGetAuditLogs_WithData(t *testing.T) {
 	}
 	if len(resp.Data) != 5 {
 		t.Errorf("Expected 5 items, got %d", len(resp.Data))
+	}
+
+	// Verify score field appears in API response
+	for _, entry := range resp.Data {
+		if entry.Score != 0.85 {
+			t.Errorf("Expected score 0.85 in API response, got %f for %q", entry.Score, entry.MediaName)
+		}
 	}
 }
 
@@ -365,6 +373,7 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (itemID uint) {
 		ScoreDetails:  `[{"name":"WatchHistory","rawScore":0.5,"weight":10},{"name":"Size","rawScore":0.8,"weight":6}]`,
 		Status:        "pending",
 		SizeBytes:     5000000,
+		Score:         0.75,
 		IntegrationID: integration.ID,
 		ExternalID:    "ext-test-1",
 		CreatedAt:     time.Now(),

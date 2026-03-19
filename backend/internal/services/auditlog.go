@@ -83,6 +83,7 @@ func (s *AuditLogService) UpsertDryRun(entry db.AuditLogEntry) error {
 			"reason":         entry.Reason,
 			"score_details":  entry.ScoreDetails,
 			"size_bytes":     entry.SizeBytes,
+			"score":          entry.Score,
 			"integration_id": entry.IntegrationID,
 			"created_at":     entry.CreatedAt,
 		}).Error

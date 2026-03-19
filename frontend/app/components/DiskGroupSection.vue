@@ -136,6 +136,8 @@
           :mode="chartMode"
           :disk-group-id="group.id"
           :since="dateRange"
+          :threshold-pct="group.thresholdPct"
+          :target-pct="group.targetPct"
         />
       </div>
     </UiCardContent>

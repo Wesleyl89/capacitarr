@@ -10,9 +10,14 @@ import {
 import { formatBytes } from '~/utils/format';
 
 const { t } = useI18n();
-const { deletionProgress: engineDeletionProgress, isDeletionActive: engineIsDeletionActive } =
-  useEngineControl();
+const {
+  deletionProgress: engineDeletionProgress,
+  isDeletionActive: engineIsDeletionActive,
+  executionMode,
+} = useEngineControl();
 const { queuedItems, completedItems, fetchQueue, cancelItem } = useDeletionQueue();
+
+const isApprovalMode = computed(() => executionMode.value === 'approval');
 
 // Fetch queue on mount
 onMounted(() => {
@@ -24,6 +29,8 @@ const hasContent = computed(
     engineIsDeletionActive.value || queuedItems.value.length > 0 || completedItems.value.length > 0,
 );
 
+const showCard = computed(() => hasContent.value || isApprovalMode.value);
+
 const progressPercent = computed(() => {
   if (!engineDeletionProgress.value) return 0;
   const { processed, batchTotal } = engineDeletionProgress.value;
@@ -33,7 +40,7 @@ const progressPercent = computed(() => {
 
 <template>
   <UiCard
-    v-if="hasContent"
+    v-if="showCard"
     v-motion
     :initial="{ opacity: 0, y: 12 }"
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
@@ -159,9 +166,9 @@ const progressPercent = computed(() => {
         </div>
       </div>
 
-      <!-- Empty state (shouldn't normally show due to v-if on card, but safety net) -->
+      <!-- Empty state — shown in approval mode when no items are queued -->
       <div v-if="!hasContent" class="text-center py-6 text-muted-foreground text-sm">
-        {{ t('deletion.noItems') }}
+        {{ isApprovalMode ? t('deletion.emptyInApproval') : t('deletion.noItems') }}
       </div>
     </UiCardContent>
   </UiCard>

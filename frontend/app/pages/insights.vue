@@ -550,7 +550,19 @@ const activeTab = ref('overview');
 const api = useApi();
 const router = useRouter();
 const { isDark } = useAppColorMode();
-const { primaryColor, chart1Color, chart2Color, chart3Color, chart4Color } = useThemeColors();
+const {
+  chart1Color,
+  chart2Color,
+  chart3Color,
+  chart4Color,
+  glowLineStyle,
+  gradientArea,
+  gradientBar,
+  tooltipConfig,
+  emphasisConfig,
+  generatePalette,
+  colorAlpha,
+} = useEChartsDefaults();
 const { on, off } = useEventStream();
 
 const compositionData = ref<CompositionResponse | null>(null);
@@ -686,16 +698,24 @@ const textColor = computed(() => (isDark.value ? '#a1a1aa' : '#71717a'));
 
 const qualityDonutOption = computed(() => {
   const data = compositionData.value?.qualityDistribution ?? [];
+  const palette = generatePalette(chart1Color.value, data.length);
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', ...tooltipConfig() },
     series: [
       {
         type: 'pie',
         radius: ['40%', '70%'],
         avoidLabelOverlap: true,
+        animationType: 'scale',
         label: { color: textColor.value, fontSize: 11 },
-        data: data.map((d) => ({ name: d.name, value: d.count })),
+        itemStyle: { shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.15)' },
+        emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.3)' } },
+        data: data.map((d, i) => ({
+          name: d.name,
+          value: d.count,
+          itemStyle: { color: palette[i] },
+        })),
       },
     ],
   };
@@ -705,9 +725,13 @@ const genreBarOption = computed(() => {
   const data = (compositionData.value?.genreDistribution ?? []).slice(0, 10);
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', ...tooltipConfig() },
     grid: { top: 10, right: 10, bottom: 30, left: 80 },
-    xAxis: { type: 'value', axisLabel: { color: textColor.value, fontSize: 11 } },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: textColor.value, fontSize: 11 },
+      splitLine: { lineStyle: { type: 'dashed', opacity: 0.15 } },
+    },
     yAxis: {
       type: 'category',
       data: data.map((d) => d.name).reverse(),
@@ -717,7 +741,8 @@ const genreBarOption = computed(() => {
       {
         type: 'bar',
         data: data.map((d) => d.count).reverse(),
-        itemStyle: { color: primaryColor.value },
+        itemStyle: { color: gradientBar(chart1Color.value), borderRadius: [0, 4, 4, 0] },
+        emphasis: { itemStyle: { shadowBlur: 8 } },
       },
     ],
   };
@@ -728,7 +753,7 @@ const yearAreaOption = computed(() => {
   const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, ...tooltipConfig() },
     grid: { top: 10, right: 10, bottom: 30, left: 50 },
     xAxis: {
       type: 'category',
@@ -744,9 +769,11 @@ const yearAreaOption = computed(() => {
         type: 'line',
         smooth: true,
         symbol: 'none',
-        areaStyle: { opacity: 0.3 },
+        lineStyle: glowLineStyle(chart1Color.value),
+        areaStyle: gradientArea(chart1Color.value),
         data: sorted.map((d) => d.count),
-        itemStyle: { color: primaryColor.value },
+        itemStyle: { color: chart1Color.value },
+        emphasis: emphasisConfig(),
       },
     ],
   };
@@ -759,6 +786,7 @@ const integrationTreemapOption = computed(() => {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
+      ...tooltipConfig(),
       formatter: (params: { name: string; value: number }) =>
         `${params.name}: ${params.value} items`,
     },
@@ -770,11 +798,17 @@ const integrationTreemapOption = computed(() => {
           value: d.count,
           itemStyle: { color: colors[i % colors.length] },
         })),
+        itemStyle: {
+          borderWidth: 2,
+          borderColor: isDark.value ? '#18181b' : '#fafafa',
+        },
         label: {
           show: true,
           color: '#fff',
           fontSize: 12,
           formatter: '{b}\n{c}',
+          textShadowBlur: 2,
+          textShadowColor: 'rgba(0,0,0,0.5)',
         },
         breadcrumb: { show: false },
       },
@@ -795,7 +829,7 @@ const growthLineOption = computed(() => {
 
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', ...tooltipConfig() },
     legend: {
       data: ['Used (GB)', 'Total (GB)'],
       textStyle: { color: textColor.value },
@@ -816,18 +850,20 @@ const growthLineOption = computed(() => {
         type: 'line',
         smooth: true,
         symbol: 'none',
-        areaStyle: { opacity: 0.2 },
+        lineStyle: glowLineStyle(chart1Color.value),
+        areaStyle: gradientArea(chart1Color.value),
         data: used,
-        itemStyle: { color: chart2Color.value },
+        itemStyle: { color: chart1Color.value },
+        emphasis: emphasisConfig(),
       },
       {
         name: 'Total (GB)',
         type: 'line',
         smooth: true,
         symbol: 'none',
-        lineStyle: { type: 'dashed', width: 1 },
+        lineStyle: { type: 'dashed', width: 1, color: chart2Color.value },
         data: total,
-        itemStyle: { color: textColor.value },
+        itemStyle: { color: chart2Color.value },
       },
     ],
   };
@@ -844,6 +880,7 @@ const qualityStackedBarOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
+      ...tooltipConfig(),
     },
     legend: {
       data: ['Items', 'Storage (GB)'],
@@ -874,14 +911,16 @@ const qualityStackedBarOption = computed(() => {
         name: 'Items',
         type: 'bar',
         data: counts,
-        itemStyle: { color: chart1Color.value },
+        itemStyle: { color: chart1Color.value, borderRadius: [4, 4, 0, 0] },
+        emphasis: emphasisConfig(),
       },
       {
         name: 'Storage (GB)',
         type: 'bar',
         yAxisIndex: 1,
         data: sizes,
-        itemStyle: { color: chart3Color.value },
+        itemStyle: { color: chart3Color.value, borderRadius: [4, 4, 0, 0] },
+        emphasis: emphasisConfig(),
       },
     ],
   };
@@ -917,6 +956,7 @@ const popularityHeatmapOption = computed(() => {
     backgroundColor: 'transparent',
     tooltip: {
       position: 'top',
+      ...tooltipConfig(),
       formatter: (params: { value: [number, number, number] }) => {
         const [xi, yi, val] = params.value;
         return `${genres[yi]} × ${years[xi]}: ${val} plays`;
@@ -945,8 +985,18 @@ const popularityHeatmapOption = computed(() => {
       textStyle: { color: textColor.value },
       inRange: {
         color: isDark.value
-          ? ['#1a1a2e', '#16213e', '#0f3460', '#e94560']
-          : ['#f0f0f0', '#c3d9e8', '#7ea8c4', '#e94560'],
+          ? [
+              'transparent',
+              colorAlpha(chart1Color.value, 0.2),
+              colorAlpha(chart1Color.value, 0.6),
+              chart1Color.value,
+            ]
+          : [
+              '#fafafa',
+              colorAlpha(chart1Color.value, 0.2),
+              colorAlpha(chart1Color.value, 0.6),
+              chart1Color.value,
+            ],
       },
     },
     series: [
@@ -954,6 +1004,10 @@ const popularityHeatmapOption = computed(() => {
         type: 'heatmap',
         data: data,
         label: { show: false },
+        itemStyle: {
+          borderWidth: 1,
+          borderColor: isDark.value ? '#27272a' : '#f4f4f5',
+        },
         emphasis: {
           itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' },
         },

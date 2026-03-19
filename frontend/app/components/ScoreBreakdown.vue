@@ -116,12 +116,14 @@ import type { ScoreFactor } from '~/types/api';
 
 interface Props {
   reason: string;
+  score?: number;
   scoreDetails?: string;
   factors?: ScoreFactor[];
   size?: string;
 }
 const props = withDefaults(defineProps<Props>(), {
   size: 'md',
+  score: undefined,
   scoreDetails: '',
   factors: () => [],
 });
@@ -198,8 +200,11 @@ const visibleWeightFactors = computed(() =>
   weightFactors.value.filter((f) => f.contribution > 0.01),
 );
 
-// Extract score from reason string for display
+// Prefer the dedicated score prop; fall back to parsing the reason string for backward compat
 const scoreDisplay = computed(() => {
+  if (props.score !== undefined && props.score !== null) {
+    return props.score.toFixed(2);
+  }
   const match = props.reason.match(/^Score:\s*([\d.]+)/);
   return match ? match[1] : factors.value.reduce((s, f) => s + f.contribution, 0).toFixed(2);
 });

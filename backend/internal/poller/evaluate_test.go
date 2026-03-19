@@ -88,6 +88,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 		ScoreDetails:  `[{"name":"size","contribution":3.0},{"name":"age","contribution":2.5}]`,
 		Status:        "pending",
 		SizeBytes:     1000000000,
+		Score:         5.50,
 		IntegrationID: integrationID,
 		ExternalID:    "ext-1",
 		CreatedAt:     time.Now().Add(-1 * time.Hour),
@@ -105,6 +106,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 			"reason":         firstEntry.Reason,
 			"score_details":  firstEntry.ScoreDetails,
 			"size_bytes":     firstEntry.SizeBytes,
+			"score":          firstEntry.Score,
 			"integration_id": firstEntry.IntegrationID,
 			"external_id":    firstEntry.ExternalID,
 		})
@@ -127,6 +129,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 		ScoreDetails:  `[{"name":"size","contribution":3.5},{"name":"age","contribution":2.7}]`,
 		Status:        "pending",
 		SizeBytes:     1100000000,
+		Score:         6.20,
 		IntegrationID: integrationID,
 		ExternalID:    "ext-1",
 		CreatedAt:     time.Now(),
@@ -144,6 +147,7 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 			"reason":         secondEntry.Reason,
 			"score_details":  secondEntry.ScoreDetails,
 			"size_bytes":     secondEntry.SizeBytes,
+			"score":          secondEntry.Score,
 			"integration_id": secondEntry.IntegrationID,
 			"external_id":    secondEntry.ExternalID,
 		})
@@ -165,6 +169,9 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 	}
 	if updated.SizeBytes != 1100000000 {
 		t.Errorf("Expected updated sizeBytes=1100000000, got %d", updated.SizeBytes)
+	}
+	if updated.Score != 6.20 {
+		t.Errorf("Expected updated score=6.20, got %f", updated.Score)
 	}
 }
 
@@ -305,6 +312,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 		ScoreDetails:  `[]`,
 		Status:        "approved",
 		SizeBytes:     500000000,
+		Score:         4.00,
 		IntegrationID: integrationID,
 		ExternalID:    "ext-2",
 		CreatedAt:     time.Now().Add(-30 * time.Minute),
@@ -320,6 +328,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 		ScoreDetails:  `[{"name":"size","contribution":4.5}]`,
 		Status:        "pending",
 		SizeBytes:     550000000,
+		Score:         4.50,
 		IntegrationID: integrationID,
 		ExternalID:    "ext-2",
 		CreatedAt:     time.Now(),
@@ -337,6 +346,7 @@ func TestApprovalDedup_DoesNotTouchApproved(t *testing.T) {
 			"reason":         newEntry.Reason,
 			"score_details":  newEntry.ScoreDetails,
 			"size_bytes":     newEntry.SizeBytes,
+			"score":          newEntry.Score,
 			"integration_id": newEntry.IntegrationID,
 			"external_id":    newEntry.ExternalID,
 		})

@@ -607,7 +607,15 @@ import type {
 
 const { t } = useI18n();
 const api = useApi();
-const { primaryColor, destructiveColor, successColor } = useThemeColors();
+const {
+  chart1Color,
+  chart3Color,
+  destructiveColor,
+  glowLineStyle,
+  gradientArea,
+  tooltipConfig,
+  emphasisConfig,
+} = useEChartsDefaults();
 
 // Use shared engine control composable for isRunning detection + toast on completion
 const {
@@ -760,6 +768,7 @@ function eventIcon(eventType: string) {
     case 'approval_orphans_recovered':
       return RefreshCwIcon;
     // Deletion
+    case 'deletion_queued':
     case 'deletion_success':
     case 'deletion_dry_run':
       return Trash2Icon;
@@ -835,6 +844,7 @@ function eventIconClass(eventType: string): string {
     case 'notification_channel_removed':
     case 'notification_delivery_failed':
       return 'text-destructive';
+    case 'deletion_queued':
     case 'deletion_dry_run':
     case 'deletion_progress':
     case 'approval_orphans_recovered':
@@ -1004,6 +1014,7 @@ const activityEventTypes = [
   'approval_unsnoozed',
   'approval_bulk_unsnoozed',
   'approval_orphans_recovered',
+  'deletion_queued',
   'deletion_success',
   'deletion_failed',
   'deletion_dry_run',
@@ -1168,20 +1179,9 @@ const sparklineEChartsOption = computed(() => {
       type: 'line',
       smooth: true,
       symbol: 'none',
-      lineStyle: { width: 2, color: primaryColor.value },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: primaryColor.value + '73' },
-            { offset: 1, color: primaryColor.value + '0D' },
-          ],
-        },
-      },
+      lineStyle: glowLineStyle(chart1Color.value),
+      areaStyle: gradientArea(chart1Color.value),
+      emphasis: emphasisConfig(),
       data: flagged.map((d) => [d.x, d.y]),
     });
   }
@@ -1191,34 +1191,29 @@ const sparklineEChartsOption = computed(() => {
       type: 'line',
       smooth: true,
       symbol: 'none',
-      lineStyle: { width: 2, color: destructiveColor.value },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: destructiveColor.value + '73' },
-            { offset: 1, color: destructiveColor.value + '0D' },
-          ],
-        },
-      },
+      lineStyle: glowLineStyle(destructiveColor.value),
+      areaStyle: gradientArea(destructiveColor.value),
+      emphasis: emphasisConfig(),
       data: deleted.map((d) => [d.x, d.y]),
     });
   }
 
   return {
     animation: true,
+    animationDelay: (idx: number) => idx * 10,
     grid: { top: 4, right: 4, bottom: 4, left: 4 },
-    xAxis: { type: 'time', show: false },
+    xAxis: {
+      type: 'time',
+      show: false,
+      axisPointer: {
+        type: 'cross',
+        lineStyle: { color: chart1Color.value, opacity: 0.3 },
+      },
+    },
     yAxis: { type: 'value', show: false },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(0,0,0,0.8)',
-      borderColor: 'transparent',
-      textStyle: { color: '#fff', fontSize: 12 },
+      ...tooltipConfig(),
     },
     series,
   };
@@ -1247,9 +1242,7 @@ const durationSparklineEChartsOption = computed(() => ({
   yAxis: { type: 'value' as const, show: false },
   tooltip: {
     trigger: 'axis' as const,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    borderColor: 'transparent',
-    textStyle: { color: '#fff', fontSize: 12 },
+    ...tooltipConfig(),
     formatter: (params: Array<{ value: [number, number] }>) => {
       if (!params[0]) return '';
       const [ts, val] = params[0].value;
@@ -1257,26 +1250,23 @@ const durationSparklineEChartsOption = computed(() => ({
       return `${date}<br/>${val}ms`;
     },
   },
+  visualMap: [
+    {
+      show: false,
+      min: 0,
+      max: maxDurationMs.value || 1,
+      inRange: { color: [chart3Color.value, '#f59e0b', destructiveColor.value] },
+    },
+  ],
   series: [
     {
       name: 'Duration',
       type: 'line',
       smooth: true,
       symbol: 'none',
-      lineStyle: { width: 2, color: successColor.value },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: successColor.value + '73' },
-            { offset: 1, color: successColor.value + '0D' },
-          ],
-        },
-      },
+      lineStyle: glowLineStyle(chart3Color.value),
+      areaStyle: gradientArea(chart3Color.value),
+      emphasis: emphasisConfig(),
       data: engineHistoryData.value.map((p) => [new Date(p.timestamp).getTime(), p.durationMs]),
     },
   ],

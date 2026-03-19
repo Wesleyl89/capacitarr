@@ -36,6 +36,8 @@ const props = defineProps<{
   mode: string;
   diskGroupId?: number;
   since?: string;
+  thresholdPct?: number;
+  targetPct?: number;
 }>();
 
 const api = useApi();
@@ -44,7 +46,16 @@ const error = ref(false);
 const noData = ref(false);
 
 const { isDark } = useAppColorMode();
-const { primaryColor, successColor } = useThemeColors();
+const {
+  chart1Color,
+  chart2Color,
+  destructiveColor,
+  successColor,
+  glowLineStyle,
+  gradientArea,
+  tooltipConfig,
+  emphasisConfig,
+} = useEChartsDefaults();
 
 interface ChartSeries {
   name: string;
@@ -61,8 +72,24 @@ const chartOption = computed(() => {
   const isPercent = props.mode === 'percentage';
   const isRaw = props.mode === 'raw';
 
-  const colors =
-    isPercent || isRaw ? [primaryColor.value] : [primaryColor.value, successColor.value];
+  const colors = isPercent || isRaw ? [chart1Color.value] : [chart1Color.value, chart2Color.value];
+
+  // Build mark line data for threshold/target (percentage mode only)
+  const markLineData: Array<Record<string, unknown>> = [];
+  if (isPercent && props.thresholdPct != null) {
+    markLineData.push({
+      yAxis: props.thresholdPct,
+      lineStyle: { color: destructiveColor.value, type: 'dashed', width: 1 },
+      label: { formatter: 'Threshold {c}%', position: 'insideEndTop', fontSize: 10 },
+    });
+  }
+  if (isPercent && props.targetPct != null) {
+    markLineData.push({
+      yAxis: props.targetPct,
+      lineStyle: { color: successColor.value, type: 'dashed', width: 1 },
+      label: { formatter: 'Target {c}%', position: 'insideEndTop', fontSize: 10 },
+    });
+  }
 
   return {
     backgroundColor: 'transparent',
@@ -70,9 +97,7 @@ const chartOption = computed(() => {
     color: colors,
     tooltip: {
       trigger: 'axis',
-      backgroundColor: dark ? 'rgba(30,30,30,0.9)' : 'rgba(255,255,255,0.96)',
-      borderColor: dark ? '#333' : '#e3e3e3',
-      textStyle: { color: dark ? '#fff' : '#333' },
+      ...tooltipConfig(),
       valueFormatter: (value: number) => (isPercent ? `${value.toFixed(1)}%` : formatBytes(value)),
     },
     legend: {
@@ -105,22 +130,13 @@ const chartOption = computed(() => {
       type: 'line',
       smooth: true,
       symbol: 'none',
-      lineStyle: { width: 2 },
-      areaStyle: {
-        opacity: 0.35,
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: colors[idx] || colors[0] },
-            { offset: 1, color: 'transparent' },
-          ],
-        },
-      },
+      lineStyle: glowLineStyle(colors[idx] || colors[0]!),
+      areaStyle: gradientArea(colors[idx] || colors[0]!),
+      emphasis: emphasisConfig(),
       data: s.data,
+      ...(idx === 0 && markLineData.length > 0
+        ? { markLine: { silent: true, symbol: 'none', data: markLineData } }
+        : {}),
     })),
     animationDuration: 400,
     animationEasing: 'cubicInOut',

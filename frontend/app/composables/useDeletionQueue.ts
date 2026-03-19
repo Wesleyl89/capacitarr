@@ -30,7 +30,7 @@ export function useDeletionQueue() {
 
   async function fetchQueue() {
     try {
-      const data = await api<DeletionQueueItem[]>('/api/deletion-queue');
+      const data = await api<DeletionQueueItem[]>('/api/v1/deletion-queue');
       queuedItems.value = data ?? [];
     } catch {
       queuedItems.value = [];
@@ -40,7 +40,7 @@ export function useDeletionQueue() {
   async function cancelItem(mediaName: string, mediaType: string) {
     try {
       await api(
-        `/api/deletion-queue?mediaName=${encodeURIComponent(mediaName)}&mediaType=${encodeURIComponent(mediaType)}`,
+        `/api/v1/deletion-queue?mediaName=${encodeURIComponent(mediaName)}&mediaType=${encodeURIComponent(mediaType)}`,
         {
           method: 'DELETE',
         },
@@ -58,6 +58,11 @@ export function useDeletionQueue() {
   // SSE subscriptions (register once)
   if (!_sseRegistered) {
     _sseRegistered = true;
+
+    on('deletion_queued', () => {
+      // New item entered the deletion queue (e.g. approved in approval mode) — refresh
+      fetchQueue();
+    });
 
     on('deletion_progress', () => {
       // Queue shrinks as items are processed — refresh

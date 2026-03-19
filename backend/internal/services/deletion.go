@@ -136,6 +136,14 @@ func (s *DeletionService) QueueDeletion(job DeleteJob) error {
 			Reason:        job.Reason,
 		})
 		s.queuedMu.Unlock()
+
+		s.bus.Publish(events.DeletionQueuedEvent{
+			MediaName:     job.Item.Title,
+			MediaType:     string(job.Item.Type),
+			SizeBytes:     job.Item.SizeBytes,
+			IntegrationID: job.Item.IntegrationID,
+		})
+
 		return nil
 	default:
 		return fmt.Errorf("deletion queue is full")
@@ -258,6 +266,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 			ScoreDetails: string(factorsJSON),
 			Action:       db.ActionDryDelete,
 			SizeBytes:    job.Item.SizeBytes,
+			Score:        job.Score,
 		}
 		if err := s.auditLog.Create(logEntry); err != nil {
 			slog.Error("Failed to create audit log entry", "component", "services", "error", err)
@@ -311,6 +320,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 		ScoreDetails: string(factorsJSON),
 		Action:       db.ActionDeleted,
 		SizeBytes:    job.Item.SizeBytes,
+		Score:        job.Score,
 	}
 	if err := s.auditLog.Create(logEntry); err != nil {
 		slog.Error("Failed to create audit log entry", "component", "services", "error", err)

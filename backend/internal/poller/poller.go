@@ -36,6 +36,10 @@ func New(reg *services.Registry) *Poller {
 // Start begins the continuous polling loop. Call Stop() to terminate.
 func (p *Poller) Start() {
 	go func() {
+		// Run immediately on startup so users see results without waiting
+		// for the first poll interval to elapse.
+		p.safePoll()
+
 		timer := time.NewTimer(p.getPollInterval())
 		defer timer.Stop()
 		for {
