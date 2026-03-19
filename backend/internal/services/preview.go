@@ -136,9 +136,14 @@ func (s *PreviewService) GetPreview(force bool) (*PreviewResult, error) {
 		s.previewCache = result
 		s.previewMu.Unlock()
 
+		now := time.Now().UTC()
 		s.bus.Publish(events.PreviewUpdatedEvent{
 			ItemCount: len(result.Items),
-			Timestamp: time.Now().UTC(),
+			Timestamp: now,
+		})
+		s.bus.Publish(events.AnalyticsUpdatedEvent{
+			ItemCount: len(result.Items),
+			Timestamp: now,
 		})
 
 		return result, nil
@@ -160,9 +165,14 @@ func (s *PreviewService) SetPreviewCache(items []integrations.MediaItem, prefs d
 	s.previewCache = result
 	s.previewMu.Unlock()
 
+	now := time.Now().UTC()
 	s.bus.Publish(events.PreviewUpdatedEvent{
 		ItemCount: len(result.Items),
-		Timestamp: time.Now().UTC(),
+		Timestamp: now,
+	})
+	s.bus.Publish(events.AnalyticsUpdatedEvent{
+		ItemCount: len(result.Items),
+		Timestamp: now,
 	})
 }
 

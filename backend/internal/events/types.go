@@ -698,6 +698,23 @@ func (e PreviewUpdatedEvent) EventMessage() string {
 	return fmt.Sprintf("Preview updated: %d items scored", e.ItemCount)
 }
 
+// AnalyticsUpdatedEvent is published alongside PreviewUpdatedEvent to signal
+// that analytics data (composition, quality, watch intelligence) should be
+// refetched by the frontend. The analytics APIs aggregate from the preview
+// cache, so they're only valid after a cache refresh.
+type AnalyticsUpdatedEvent struct {
+	ItemCount int       `json:"itemCount"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// EventType implements Event.
+func (e AnalyticsUpdatedEvent) EventType() string { return "analytics_updated" }
+
+// EventMessage implements Event.
+func (e AnalyticsUpdatedEvent) EventMessage() string {
+	return fmt.Sprintf("Analytics updated: %d items available", e.ItemCount)
+}
+
 // PreviewInvalidatedEvent is published when the preview cache is cleared due
 // to a configuration change that affects scoring (rules, settings,
 // integrations, thresholds). Connected clients should show a stale indicator
