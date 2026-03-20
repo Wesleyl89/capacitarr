@@ -10,15 +10,29 @@ import (
 	"capacitarr/internal/events"
 )
 
+// PreviewCacheClearer provides the ability to clear the persisted media cache.
+// Defined here to avoid import cycles between DataService and PreviewService.
+type PreviewCacheClearer interface {
+	ClearPersistedCache()
+	InvalidatePreviewCache(reason string)
+}
+
 // DataService handles data reset operations.
 type DataService struct {
-	db  *gorm.DB
-	bus *events.EventBus
+	db      *gorm.DB
+	bus     *events.EventBus
+	preview PreviewCacheClearer
 }
 
 // NewDataService creates a new DataService.
 func NewDataService(database *gorm.DB, bus *events.EventBus) *DataService {
 	return &DataService{db: database, bus: bus}
+}
+
+// SetPreviewService wires the preview service dependency for cache clearing.
+// Called by Registry after construction to avoid circular initialization.
+func (s *DataService) SetPreviewService(preview PreviewCacheClearer) {
+	s.preview = preview
 }
 
 // Reset clears all scraped data. Returns a summary of rows affected.
@@ -77,6 +91,13 @@ func (s *DataService) Reset() (map[string]int64, error) {
 		return nil, fmt.Errorf("failed to reset integration stats: %w", res.Error)
 	}
 	summary["integrationsReset"] = res.RowsAffected
+
+	// 7. Clear persisted media cache and in-memory preview cache
+	if s.preview != nil {
+		s.preview.ClearPersistedCache()
+		s.preview.InvalidatePreviewCache("data_reset")
+	}
+	summary["mediaCacheCleared"] = int64(1)
 
 	s.bus.Publish(events.DataResetEvent{Summary: summary})
 	slog.Info("Data reset completed", "component", "services", "summary", summary)

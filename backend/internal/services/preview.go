@@ -1,11 +1,13 @@
 package services
 
 import (
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
@@ -62,9 +64,11 @@ type DiskContext struct {
 // PreviewService owns the global scored-media preview for the Library
 // Management page and other UI consumers. It caches the result of
 // evaluating all media items and provides SSE-based notifications when
-// the cache is updated or invalidated.
+// the cache is updated or invalidated. The cache is also persisted to the
+// database so it survives container restarts.
 type PreviewService struct {
-	bus *events.EventBus
+	database *gorm.DB
+	bus      *events.EventBus
 
 	// Cross-service dependencies (set via SetDependencies)
 	integrations IntegrationLister
@@ -87,10 +91,11 @@ type PreviewService struct {
 }
 
 // NewPreviewService creates a new PreviewService.
-func NewPreviewService(bus *events.EventBus) *PreviewService {
+func NewPreviewService(database *gorm.DB, bus *events.EventBus) *PreviewService {
 	return &PreviewService{
-		bus:  bus,
-		done: make(chan struct{}),
+		database: database,
+		bus:      bus,
+		done:     make(chan struct{}),
 	}
 }
 
@@ -158,12 +163,16 @@ func (s *PreviewService) GetPreview(force bool) (*PreviewResult, error) {
 // SetPreviewCache populates the cache with pre-fetched, enriched items.
 // Called by the poller at the end of each cycle. The service runs
 // EvaluateMedia + SortEvaluated + DiskContext assembly internally.
+// The result is also persisted to the database for restart recovery.
 func (s *PreviewService) SetPreviewCache(items []integrations.MediaItem, prefs db.PreferenceSet, rules []db.CustomRule) {
 	result := s.buildPreview(items, prefs, rules)
 
 	s.previewMu.Lock()
 	s.previewCache = result
 	s.previewMu.Unlock()
+
+	// Persist to DB for restart recovery
+	s.PersistToDB()
 
 	now := time.Now().UTC()
 	s.bus.Publish(events.PreviewUpdatedEvent{
@@ -419,5 +428,88 @@ func (s *PreviewService) buildDiskContext() *DiskContext {
 		TargetPct:    bestGroup.TargetPct,
 		ThresholdPct: bestGroup.ThresholdPct,
 		BytesToFree:  bestBytesToFree,
+	}
+}
+
+// ─── DB persistence (restart recovery) ──────────────────────────────────────
+
+// LoadFromDB loads the persisted preview cache from the database.
+// Called once during startup to restore the last engine run's data so the
+// dashboard and analytics have data immediately without waiting for the
+// first engine run. Returns true if data was loaded, false otherwise.
+func (s *PreviewService) LoadFromDB() bool {
+	var row db.MediaCache
+	if err := s.database.First(&row, 1).Error; err != nil {
+		slog.Debug("No persisted media cache found — dashboard will populate on first engine run",
+			"component", "preview")
+		return false
+	}
+
+	var result PreviewResult
+	if err := json.Unmarshal([]byte(row.PreviewJSON), &result); err != nil {
+		slog.Error("Failed to deserialize persisted media cache",
+			"component", "preview", "error", err)
+		return false
+	}
+
+	s.previewMu.Lock()
+	s.previewCache = &result
+	s.previewMu.Unlock()
+
+	slog.Info("Restored media cache from database",
+		"component", "preview", "items", row.ItemCount,
+		"cachedAt", row.UpdatedAt.Format(time.RFC3339))
+	return true
+}
+
+// PersistToDB writes the current preview cache to the database for restart
+// recovery. Called at the end of each engine cycle after SetPreviewCache.
+// Uses an upsert pattern (delete + create) to replace the singleton row.
+func (s *PreviewService) PersistToDB() {
+	s.previewMu.RLock()
+	cache := s.previewCache
+	s.previewMu.RUnlock()
+
+	if cache == nil {
+		return
+	}
+
+	data, err := json.Marshal(cache)
+	if err != nil {
+		slog.Error("Failed to serialize preview cache for persistence",
+			"component", "preview", "error", err)
+		return
+	}
+
+	row := db.MediaCache{
+		ID:          1,
+		PreviewJSON: string(data),
+		ItemCount:   len(cache.Items),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	// Upsert: delete existing then create. SQLite doesn't support ON CONFLICT
+	// with CHECK constraints reliably, so explicit delete+create is safest.
+	if err := s.database.Where("id = ?", 1).Delete(&db.MediaCache{}).Error; err != nil {
+		slog.Error("Failed to clear old media cache row",
+			"component", "preview", "error", err)
+		return
+	}
+	if err := s.database.Create(&row).Error; err != nil {
+		slog.Error("Failed to persist media cache to database",
+			"component", "preview", "error", err)
+		return
+	}
+
+	slog.Debug("Persisted media cache to database",
+		"component", "preview", "items", row.ItemCount)
+}
+
+// ClearPersistedCache deletes the media cache row from the database.
+// Called by DataService.Reset to clear all scraped data.
+func (s *PreviewService) ClearPersistedCache() {
+	if err := s.database.Where("id = ?", 1).Delete(&db.MediaCache{}).Error; err != nil {
+		slog.Error("Failed to clear persisted media cache",
+			"component", "preview", "error", err)
 	}
 }

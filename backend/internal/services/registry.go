@@ -61,7 +61,7 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	notifChannelSvc := NewNotificationChannelService(database, bus)
 	notifDispatch := NewNotificationDispatchService(bus, notifChannelSvc, nil, "")
 	backupSvc := NewBackupService(database, bus)
-	previewSvc := NewPreviewService(bus)
+	previewSvc := NewPreviewService(database, bus)
 
 	reg := &Registry{
 		DB:                   database,
@@ -109,6 +109,9 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	// Wire analytics services' rules sources for protected-item filtering
 	reg.Analytics.SetRulesSource(reg.Rules)
 	reg.WatchAnalytics.SetRulesSource(reg.Rules)
+
+	// Wire DataService's preview dependency for cache clearing on data reset
+	reg.Data.SetPreviewService(previewSvc)
 
 	return reg
 }

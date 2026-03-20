@@ -249,6 +249,17 @@ func main() {
 	reg := services.NewRegistry(database, bus, cfg)
 	reg.InitVersion(version)
 
+	// ─── Restore persisted caches ─────────────────────────────────────────
+	// Load the media cache from the database so the dashboard and analytics
+	// have data immediately without waiting for the first engine run.
+	if reg.Preview.LoadFromDB() {
+		slog.Info("Media cache restored from database — dashboard data available immediately", "component", "main")
+	}
+
+	// Seed engine stats from the latest DB row so the worker stats panel
+	// shows the last run's counters instead of zeros.
+	reg.Engine.RestoreLastRunStats()
+
 	// Activity Persister — writes all events to the activity_events table via SettingsService.
 	// Must be created after the service registry since it depends on SettingsService.
 	activityPersister := events.NewActivityPersister(reg.Settings, bus)

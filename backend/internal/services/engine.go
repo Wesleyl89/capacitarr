@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -176,6 +177,25 @@ func (s *EngineService) IncrementDeletedStats(runStatsID uint, sizeBytes int64) 
 		return fmt.Errorf("failed to increment deleted stats: %w", result.Error)
 	}
 	return nil
+}
+
+// RestoreLastRunStats initializes the in-memory atomic counters from the most
+// recent EngineRunStats DB row. Called once on startup so the worker stats
+// panel shows the last run's results instead of zeros.
+func (s *EngineService) RestoreLastRunStats() {
+	var latest db.EngineRunStats
+	if err := s.db.Order("run_at desc").First(&latest).Error; err != nil {
+		return // No previous runs — leave at zero
+	}
+
+	s.lastEvaluated.Store(int64(latest.Evaluated))
+	s.lastFlagged.Store(int64(latest.Flagged))
+
+	slog.Info("Restored engine stats from last run",
+		"component", "engine",
+		"evaluated", latest.Evaluated,
+		"flagged", latest.Flagged,
+		"runAt", latest.RunAt.Format(time.RFC3339))
 }
 
 // GetStats returns the current engine statistics as a map.

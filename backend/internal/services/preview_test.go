@@ -32,7 +32,7 @@ func (m *mockDeletionStateReader) CurrentlyDeleting() string {
 func TestPreviewService_GetPreview_NoIntegrations(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	// Wire real services as dependencies
 	integrationSvc := NewIntegrationService(database, bus)
@@ -59,7 +59,7 @@ func TestPreviewService_GetPreview_NoIntegrations(t *testing.T) {
 func TestPreviewService_GetPreview_WithDiskGroups(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	// Wire real services as dependencies
 	integrationSvc := NewIntegrationService(database, bus)
@@ -98,7 +98,7 @@ func TestPreviewService_GetPreview_WithDiskGroups(t *testing.T) {
 func TestPreviewService_SetDependencies(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	// Before wiring, fields should be nil
 	if svc.integrations != nil {
@@ -128,7 +128,7 @@ func TestPreviewService_SetDependencies(t *testing.T) {
 func TestPreviewService_SetPreviewCache(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -169,7 +169,7 @@ func TestPreviewService_SetPreviewCache(t *testing.T) {
 func TestPreviewService_CacheHit(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -192,7 +192,7 @@ func TestPreviewService_CacheHit(t *testing.T) {
 func TestPreviewService_InvalidatePreviewCache(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -234,7 +234,7 @@ func TestPreviewService_InvalidatePreviewCache(t *testing.T) {
 func TestPreviewService_ForceBypassesCache(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -259,7 +259,7 @@ func TestPreviewService_ForceBypassesCache(t *testing.T) {
 func TestPreviewService_SingleflightCoalesces(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -295,7 +295,7 @@ func TestPreviewService_SingleflightCoalesces(t *testing.T) {
 func TestPreviewService_CacheInvalidationOnEvents(t *testing.T) {
 	bus := newTestBus(t)
 	database := setupTestDB(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	diskGroupSvc := NewDiskGroupService(database, bus)
 	settingsSvc := NewSettingsService(database, bus)
@@ -334,8 +334,9 @@ func TestPreviewService_CacheInvalidationOnEvents(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_Pending(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	approvalMock := &mockApprovalQueueReader{
 		items: map[string][]db.ApprovalQueueItem{
@@ -370,8 +371,9 @@ func TestPreviewService_EnrichWithQueueStatus_Pending(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_Approved(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	approvalMock := &mockApprovalQueueReader{
 		items: map[string][]db.ApprovalQueueItem{
@@ -399,8 +401,9 @@ func TestPreviewService_EnrichWithQueueStatus_Approved(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_ForceDelete(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	approvalMock := &mockApprovalQueueReader{
 		items: map[string][]db.ApprovalQueueItem{
@@ -425,8 +428,9 @@ func TestPreviewService_EnrichWithQueueStatus_ForceDelete(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_Deleting(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	approvalMock := &mockApprovalQueueReader{
 		items: map[string][]db.ApprovalQueueItem{
@@ -454,8 +458,9 @@ func TestPreviewService_EnrichWithQueueStatus_Deleting(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_NotInQueue(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	approvalMock := &mockApprovalQueueReader{
 		items: map[string][]db.ApprovalQueueItem{
@@ -481,8 +486,9 @@ func TestPreviewService_EnrichWithQueueStatus_NotInQueue(t *testing.T) {
 }
 
 func TestPreviewService_EnrichWithQueueStatus_NilDependencies(t *testing.T) {
+	database := setupTestDB(t)
 	bus := newTestBus(t)
-	svc := NewPreviewService(bus)
+	svc := NewPreviewService(database, bus)
 
 	// Do not set queue dependencies — should be a no-op
 	items := []engine.EvaluatedItem{

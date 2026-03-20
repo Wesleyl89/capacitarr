@@ -279,3 +279,14 @@ type ActivityEvent struct {
 	Metadata  string    `gorm:"type:text" json:"metadata"`       // Optional JSON for extra data
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+// MediaCache is a singleton row (id=1) storing a JSON snapshot of the scored
+// preview result. This allows the dashboard and analytics to have data
+// immediately on startup without waiting for the first engine run.
+// The row is fully replaced at the end of each engine cycle.
+type MediaCache struct {
+	ID          uint   `gorm:"primarykey"`
+	PreviewJSON string `gorm:"column:preview_json;type:text;not null"`
+	ItemCount   int    `gorm:"column:item_count;not null"`
+	UpdatedAt   time.Time
+}
