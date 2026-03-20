@@ -519,6 +519,26 @@ func (e DeletionProgressEvent) EventMessage() string {
 		e.Processed, e.BatchTotal, e.Succeeded, e.Failed)
 }
 
+// DeletionGracePeriodEvent is published when the deletion queue grace period
+// starts, resets, or expires. The frontend uses this to show a countdown timer
+// before the queue begins processing.
+type DeletionGracePeriodEvent struct {
+	RemainingSeconds int  `json:"remainingSeconds"`
+	QueueSize        int  `json:"queueSize"`
+	Active           bool `json:"active"` // true = grace period running, false = processing started
+}
+
+// EventType implements Event.
+func (e DeletionGracePeriodEvent) EventType() string { return "deletion_grace_period" }
+
+// EventMessage implements Event.
+func (e DeletionGracePeriodEvent) EventMessage() string {
+	if e.Active {
+		return fmt.Sprintf("Deletion grace period active: %ds remaining, %d items queued", e.RemainingSeconds, e.QueueSize)
+	}
+	return fmt.Sprintf("Deletion grace period expired: processing %d items", e.QueueSize)
+}
+
 // =============================================================================
 // Disk Events
 // =============================================================================

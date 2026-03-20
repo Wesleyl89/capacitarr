@@ -610,3 +610,42 @@ func (s *ApprovalService) RecoverOrphans() (int, error) {
 
 	return count, nil
 }
+
+// CreateSnoozedEntry creates or updates an approval queue entry with
+// status=rejected and snoozed_until set to now + snoozeDurationHours.
+// If an entry for the same media already exists (any status), it is updated
+// to rejected with the new snooze time. Returns the snooze expiry time.
+func (s *ApprovalService) CreateSnoozedEntry(mediaName, mediaType string, integrationID uint, snoozeDurationHours int) (*time.Time, error) {
+	snoozedUntil := time.Now().UTC().Add(time.Duration(snoozeDurationHours) * time.Hour)
+
+	var existing db.ApprovalQueueItem
+	err := s.db.Where("media_name = ? AND media_type = ?", mediaName, mediaType).First(&existing).Error
+	if err == nil {
+		// Entry exists — update to snoozed state
+		if err := s.db.Model(&existing).Updates(map[string]any{
+			"status":        db.StatusRejected,
+			"snoozed_until": snoozedUntil,
+			"updated_at":    time.Now().UTC(),
+		}).Error; err != nil {
+			return nil, fmt.Errorf("failed to update snoozed entry: %w", err)
+		}
+		return &snoozedUntil, nil
+	}
+
+	// Create new snoozed entry
+	entry := db.ApprovalQueueItem{
+		MediaName:     mediaName,
+		MediaType:     mediaType,
+		IntegrationID: integrationID,
+		Reason:        "Snoozed from deletion queue",
+		Status:        db.StatusRejected,
+		SnoozedUntil:  &snoozedUntil,
+	}
+	if err := s.db.Create(&entry).Error; err != nil {
+		return nil, fmt.Errorf("failed to create snoozed entry: %w", err)
+	}
+
+	slog.Info("Created snoozed approval entry", "component", "services",
+		"media", mediaName, "type", mediaType, "snoozedUntil", snoozedUntil)
+	return &snoozedUntil, nil
+}

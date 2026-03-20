@@ -13,6 +13,9 @@ import (
 func RegisterDeletionQueueRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/deletion-queue", handleListDeletionQueue(reg))
 	g.DELETE("/deletion-queue", handleCancelDeletion(reg))
+	g.POST("/deletion-queue/snooze", handleSnoozeDeletion(reg))
+	g.POST("/deletion-queue/clear", handleClearDeletionQueue(reg))
+	g.GET("/deletion-queue/grace-period", handleGracePeriodState(reg))
 	g.POST("/delete", handleManualDelete(reg))
 }
 
@@ -38,6 +41,68 @@ func handleCancelDeletion(reg *services.Registry) echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusOK, map[string]bool{"cancelled": true})
+	}
+}
+
+func handleSnoozeDeletion(reg *services.Registry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var body struct {
+			MediaName string `json:"mediaName"`
+			MediaType string `json:"mediaType"`
+		}
+		if err := c.Bind(&body); err != nil {
+			return apiError(c, http.StatusBadRequest, "Invalid request body")
+		}
+		if body.MediaName == "" || body.MediaType == "" {
+			return apiError(c, http.StatusBadRequest, "mediaName and mediaType are required")
+		}
+
+		// Look up the item in the queue to get integration ID
+		queuedItem := reg.Deletion.FindQueuedItem(body.MediaName, body.MediaType)
+		var integrationID uint
+		if queuedItem != nil {
+			integrationID = queuedItem.IntegrationID
+		}
+
+		// Remove from deletion queue
+		reg.Deletion.CancelDeletion(body.MediaName, body.MediaType)
+
+		// Get snooze duration from preferences
+		prefs, err := reg.Settings.GetPreferences()
+		if err != nil {
+			slog.Error("Failed to load preferences for snooze", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to load preferences")
+		}
+
+		// Create snoozed entry in approval queue
+		snoozedUntil, err := reg.Approval.CreateSnoozedEntry(body.MediaName, body.MediaType, integrationID, prefs.SnoozeDurationHours)
+		if err != nil {
+			slog.Error("Failed to create snoozed entry", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to snooze item")
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"snoozed":      true,
+			"snoozedUntil": snoozedUntil,
+		})
+	}
+}
+
+func handleClearDeletionQueue(reg *services.Registry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		count := reg.Deletion.ClearQueue()
+		return c.JSON(http.StatusOK, map[string]int{"cancelled": count})
+	}
+}
+
+func handleGracePeriodState(reg *services.Registry) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		active, remaining, queueSize := reg.Deletion.GracePeriodState()
+		return c.JSON(http.StatusOK, map[string]any{
+			"active":           active,
+			"remainingSeconds": remaining,
+			"queueSize":        queueSize,
+		})
 	}
 }
 

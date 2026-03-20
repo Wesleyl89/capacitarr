@@ -20,6 +20,12 @@ export function _resetDeletionQueueSSE() {
   _sseRegistered = false;
 }
 
+export interface GracePeriodState {
+  active: boolean;
+  remainingSeconds: number;
+  queueSize: number;
+}
+
 export function useDeletionQueue() {
   const api = useApi();
   const { on } = useEventStream();
@@ -27,6 +33,34 @@ export function useDeletionQueue() {
   const queuedItems = useState<DeletionQueueItem[]>('deletionQueueItems', () => []);
   const completedItems = useState<DeletionCompletedItem[]>('deletionCompletedItems', () => []);
   const loading = ref(false);
+
+  // Grace period state — updated via SSE and local countdown
+  const gracePeriod = useState<GracePeriodState>('deletionGracePeriod', () => ({
+    active: false,
+    remainingSeconds: 0,
+    queueSize: 0,
+  }));
+  const countdown = ref(0);
+  let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startCountdown(seconds: number) {
+    stopCountdown();
+    countdown.value = seconds;
+    countdownTimer = setInterval(() => {
+      countdown.value = Math.max(0, countdown.value - 1);
+      if (countdown.value <= 0) {
+        stopCountdown();
+      }
+    }, 1000);
+  }
+
+  function stopCountdown() {
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+    countdown.value = 0;
+  }
 
   async function fetchQueue() {
     try {
@@ -51,6 +85,31 @@ export function useDeletionQueue() {
       );
     } catch {
       // Refresh to get accurate state
+      await fetchQueue();
+    }
+  }
+
+  async function snoozeItem(mediaName: string, mediaType: string) {
+    try {
+      await api('/api/v1/deletion-queue/snooze', {
+        method: 'POST',
+        body: { mediaName, mediaType },
+      });
+      // Optimistically remove from local list
+      queuedItems.value = queuedItems.value.filter(
+        (item) => !(item.mediaName === mediaName && item.mediaType === mediaType),
+      );
+    } catch {
+      await fetchQueue();
+    }
+  }
+
+  async function clearAll() {
+    try {
+      await api('/api/v1/deletion-queue/clear', { method: 'POST' });
+      queuedItems.value = [];
+      stopCountdown();
+    } catch {
       await fetchQueue();
     }
   }
@@ -110,14 +169,29 @@ export function useDeletionQueue() {
       // Clear completed items and queue after batch finishes
       completedItems.value = [];
       queuedItems.value = [];
+      stopCountdown();
+    });
+
+    on('deletion_grace_period', (raw: unknown) => {
+      const data = raw as GracePeriodState;
+      gracePeriod.value = { ...data };
+      if (data.active) {
+        startCountdown(data.remainingSeconds);
+      } else {
+        stopCountdown();
+      }
     });
   }
 
   return {
     queuedItems: readonly(queuedItems),
     completedItems: readonly(completedItems),
+    gracePeriod: readonly(gracePeriod),
+    countdown: readonly(countdown),
     loading,
     fetchQueue,
     cancelItem,
+    snoozeItem,
+    clearAll,
   };
 }

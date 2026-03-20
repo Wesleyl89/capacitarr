@@ -64,6 +64,11 @@ func RegisterPreferenceRoutes(protected *echo.Group, reg *services.Registry) {
 			payload.PollIntervalSeconds = 300
 		}
 
+		// Validate deletion queue delay (10-300 seconds, default 30)
+		if payload.DeletionQueueDelaySeconds < 10 || payload.DeletionQueueDelaySeconds > 300 {
+			payload.DeletionQueueDelaySeconds = 30
+		}
+
 		// Delegate to SettingsService (handles DB save, log level change, event publishing)
 		saved, err := reg.Settings.UpdatePreferences(payload)
 		if err != nil {

@@ -131,9 +131,10 @@ CREATE TABLE preference_sets (
     tiebreaker_method          TEXT    NOT NULL DEFAULT 'size_desc',
     deletions_enabled          INTEGER NOT NULL DEFAULT 1,
     snooze_duration_hours      INTEGER NOT NULL DEFAULT 24,
-    check_for_updates          INTEGER NOT NULL DEFAULT 1,
+    check_for_updates              INTEGER NOT NULL DEFAULT 1,
+    deletion_queue_delay_seconds   INTEGER NOT NULL DEFAULT 30,   -- Grace period before processing queued deletions (10-300)
     -- Analytics thresholds (NEW in 2.0)
-    dead_content_min_days      INTEGER NOT NULL DEFAULT 90,   -- Minimum days in library for "dead content" report
+    dead_content_min_days          INTEGER NOT NULL DEFAULT 90,   -- Minimum days in library for "dead content" report
     stale_content_days         INTEGER NOT NULL DEFAULT 180,  -- Days since last watch for "stale content" report
     updated_at                 DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

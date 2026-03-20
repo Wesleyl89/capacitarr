@@ -6,6 +6,8 @@ import {
   XCircleIcon,
   BanIcon,
   LoaderCircleIcon,
+  ClockIcon,
+  Trash2Icon as ClearAllIcon,
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 
@@ -15,7 +17,8 @@ const {
   isDeletionActive: engineIsDeletionActive,
   executionMode,
 } = useEngineControl();
-const { queuedItems, completedItems, fetchQueue, cancelItem } = useDeletionQueue();
+const { queuedItems, completedItems, countdown, fetchQueue, cancelItem, snoozeItem, clearAll } =
+  useDeletionQueue();
 
 const isApprovalMode = computed(() => executionMode.value === 'approval');
 
@@ -64,10 +67,32 @@ const progressPercent = computed(() => {
           <UiBadge v-if="completedItems.length > 0" variant="secondary" class="text-xs">
             {{ completedItems.length }} done
           </UiBadge>
+          <UiButton
+            v-if="queuedItems.length > 0"
+            variant="ghost"
+            size="sm"
+            class="h-7 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+            :title="t('deletion.clearAll')"
+            @click="clearAll()"
+          >
+            <ClearAllIcon class="h-3.5 w-3.5 mr-1" />
+            {{ t('deletion.clearAll') }}
+          </UiButton>
         </div>
       </div>
     </UiCardHeader>
     <UiCardContent>
+      <!-- Grace period countdown -->
+      <div
+        v-if="countdown > 0 && queuedItems.length > 0 && !engineIsDeletionActive"
+        class="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+      >
+        <ClockIcon class="w-4 h-4 text-amber-500 shrink-0" />
+        <span class="text-sm text-amber-700 dark:text-amber-400">
+          {{ t('deletion.gracePeriod', { seconds: countdown }) }}
+        </span>
+      </div>
+
       <!-- Batch progress bar -->
       <div v-if="engineDeletionProgress" class="mb-4">
         <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -111,16 +136,28 @@ const progressPercent = computed(() => {
                 {{ item.mediaType }} · {{ formatBytes(item.sizeBytes) }}
               </span>
             </div>
-            <UiButton
-              variant="ghost"
-              size="sm"
-              class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20 shrink-0"
-              :aria-label="t('deletion.cancelItem')"
-              :title="t('deletion.cancelItem')"
-              @click="cancelItem(item.mediaName, item.mediaType)"
-            >
-              <XIcon class="h-4 w-4" />
-            </UiButton>
+            <div class="flex items-center gap-1 shrink-0">
+              <UiButton
+                variant="ghost"
+                size="sm"
+                class="h-7 w-7 p-0 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 dark:hover:bg-amber-500/20"
+                :aria-label="t('deletion.snoozeItem')"
+                :title="t('deletion.snoozeItem')"
+                @click="snoozeItem(item.mediaName, item.mediaType)"
+              >
+                <ClockIcon class="h-4 w-4" />
+              </UiButton>
+              <UiButton
+                variant="ghost"
+                size="sm"
+                class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 dark:hover:bg-destructive/20"
+                :aria-label="t('deletion.cancelItem')"
+                :title="t('deletion.cancelItem')"
+                @click="cancelItem(item.mediaName, item.mediaType)"
+              >
+                <XIcon class="h-4 w-4" />
+              </UiButton>
+            </div>
           </div>
         </div>
       </div>

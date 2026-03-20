@@ -51,11 +51,58 @@
     </UiCardContent>
   </UiCard>
 
-  <!-- Log Level -->
+  <!-- Deletion Queue Delay -->
   <UiCard
     v-motion
     :initial="{ opacity: 0, y: 12 }"
     :enter="{ opacity: 1, y: 0, transition: { delay: 50 } }"
+    class="overflow-hidden"
+  >
+    <UiCardHeader class="border-b border-border">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
+          <component :is="ClockIcon" class="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <UiCardTitle class="text-base">
+            {{ $t('deletion.deletionQueueDelay') }}
+          </UiCardTitle>
+          <UiCardDescription>{{ $t('deletion.deletionQueueDelayDesc') }}</UiCardDescription>
+        </div>
+      </div>
+    </UiCardHeader>
+    <UiCardContent class="pt-5">
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <UiLabel>{{ $t('deletion.deletionQueueDelay') }}</UiLabel>
+          <SaveIndicator :status="saveStatus.deletionQueueDelay ?? 'idle'" />
+        </div>
+        <UiSelect v-model="deletionQueueDelayStr">
+          <UiSelectTrigger class="w-full max-w-xs">
+            <UiSelectValue placeholder="Select delay" />
+          </UiSelectTrigger>
+          <UiSelectContent>
+            <UiSelectItem value="10"> 10 seconds </UiSelectItem>
+            <UiSelectItem value="15"> 15 seconds </UiSelectItem>
+            <UiSelectItem value="30"> 30 seconds (default) </UiSelectItem>
+            <UiSelectItem value="60"> 1 minute </UiSelectItem>
+            <UiSelectItem value="120"> 2 minutes </UiSelectItem>
+            <UiSelectItem value="180"> 3 minutes </UiSelectItem>
+            <UiSelectItem value="300"> 5 minutes </UiSelectItem>
+          </UiSelectContent>
+        </UiSelect>
+        <p class="text-xs text-muted-foreground/70">
+          {{ $t('deletion.deletionQueueDelayHint') }}
+        </p>
+      </div>
+    </UiCardContent>
+  </UiCard>
+
+  <!-- Log Level -->
+  <UiCard
+    v-motion
+    :initial="{ opacity: 0, y: 12 }"
+    :enter="{ opacity: 1, y: 0, transition: { delay: 100 } }"
     class="overflow-hidden"
   >
     <UiCardHeader class="border-b border-border">
@@ -392,6 +439,7 @@ import {
   AlertTriangleIcon,
   Trash2Icon,
   RefreshCwIcon,
+  ClockIcon,
 } from 'lucide-vue-next';
 import type { PreferenceSet, ApiError } from '~/types/api';
 import SaveIndicator from '~/components/settings/SaveIndicator.vue';
@@ -402,6 +450,7 @@ const { saveStatus, initFields, autoSavePreference } = useAutoSave();
 
 initFields([
   'pollInterval',
+  'deletionQueueDelay',
   'retention',
   'defaultThreshold',
   'defaultTarget',
@@ -418,6 +467,7 @@ const defaultThreshold = ref(85);
 const defaultTarget = ref(75);
 const deletionsEnabled = ref(true);
 const checkForUpdatesEnabled = ref(true);
+const deletionQueueDelaySeconds = ref(30);
 const showDeletionConfirmDialog = ref(false);
 const showResetDialog = ref(false);
 const resettingData = ref(false);
@@ -426,6 +476,13 @@ const pollIntervalStr = computed({
   get: () => String(pollIntervalSeconds.value),
   set: (val: string) => {
     pollIntervalSeconds.value = Number(val);
+  },
+});
+
+const deletionQueueDelayStr = computed({
+  get: () => String(deletionQueueDelaySeconds.value),
+  set: (val: string) => {
+    deletionQueueDelaySeconds.value = Number(val);
   },
 });
 
@@ -440,6 +497,13 @@ const retentionStr = computed({
 watch(pollIntervalSeconds, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
     autoSavePreference('pollInterval', 'pollIntervalSeconds', newVal);
+  }
+});
+
+// Watch deletion queue delay
+watch(deletionQueueDelaySeconds, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    autoSavePreference('deletionQueueDelay', 'deletionQueueDelaySeconds', newVal);
   }
 });
 
@@ -514,6 +578,9 @@ async function fetchPreferences() {
     }
     if (prefs?.logLevel) {
       logLevel.value = prefs.logLevel;
+    }
+    if (prefs?.deletionQueueDelaySeconds !== undefined && prefs.deletionQueueDelaySeconds >= 10) {
+      deletionQueueDelaySeconds.value = prefs.deletionQueueDelaySeconds;
     }
     if (prefs?.checkForUpdates !== undefined) {
       checkForUpdatesEnabled.value = prefs.checkForUpdates;

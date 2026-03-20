@@ -252,6 +252,12 @@
   "deletion.currentlyDeleting": "Currently Deleting",
   "deletion.batchProgress": "Batch Progress",
   "deletion.emptyInApproval": "No items in deletion queue. Approved items will appear here.",
+  "deletion.gracePeriod": "Processing starts in {seconds}s…",
+  "deletion.snoozeItem": "Snooze Item",
+  "deletion.clearAll": "Clear All",
+  "deletion.deletionQueueDelay": "Deletion Queue Delay",
+  "deletion.deletionQueueDelayDesc": "Time to wait before processing queued deletions",
+  "deletion.deletionQueueDelayHint": "Resets when items are added or removed from the queue.",
 
   "nav.changeLanguage": "Change language",
 

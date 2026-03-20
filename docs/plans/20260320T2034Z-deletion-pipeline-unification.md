@@ -210,96 +210,107 @@ Updated WHERE clauses from `force_delete = ?` to `user_initiated = ?` to preserv
 
 ## Phase 3: Deletion Queue Grace Period
 
-### Step 3.1: Add `DeletionQueueDelaySeconds` preference
+**Status:** ✅ Complete
 
-**Files:** `internal/db/models.go`, `internal/db/migrations/00001_v2_baseline.sql`
+### Step 3.1: Add `DeletionQueueDelaySeconds` preference ✅
 
-- Add `DeletionQueueDelaySeconds int` to `PreferenceSet` with default 30
-- Add column to baseline migration: `deletion_queue_delay_seconds INTEGER NOT NULL DEFAULT 30`
-- Validation: minimum 10, maximum 300
+**Files:** `internal/db/models.go`, `internal/db/migrations/00001_v2_baseline.sql`, `routes/preferences.go`
 
-### Step 3.2: Implement grace period in DeletionService worker
+- Added `DeletionQueueDelaySeconds int` to `PreferenceSet` with GORM tag `gorm:"default:30;not null"` and JSON tag `json:"deletionQueueDelaySeconds"`
+- Added column to baseline migration: `deletion_queue_delay_seconds INTEGER NOT NULL DEFAULT 30`
+- Added validation in `routes/preferences.go`: minimum 10, maximum 300, resets to 30 if out of range
+- Updated `mockSettingsReader` in tests to include the new field
+- Updated frontend `PreferenceSet` TypeScript interface
+
+### Step 3.2: Implement grace period in DeletionService worker ✅
 
 **File:** `internal/services/deletion.go`
 
-Replace the current immediate-processing worker loop with a grace-period-aware loop:
+Replaced the old channel-based immediate-processing worker with a grace-period-aware architecture:
 
-1. When the first item arrives in the queue (or `SignalBatchSize()` is called), start a grace period timer set to the configured delay
-2. The timer resets to the full configured value on any queue mutation (item added via `QueueDeletion()`, item cancelled via `CancelDeletion()`)
-3. When the timer expires, the worker begins draining the queue with the existing rate limiter
-4. Once draining starts, new items added during draining are processed after the current batch (no new grace period until the queue is empty)
+- Removed the Go channel (`chan DeleteJob`) — items are now stored directly in `queuedItems []DeleteJob` (the tracking slice doubles as the job store)
+- Worker goroutine uses a `select` on a `notify` channel and `stopCh` for shutdown
+- `time.AfterFunc` manages the grace period timer; when it fires, it pokes the worker
+- `resetGracePeriod()` starts/resets the timer and publishes `DeletionGracePeriodEvent`
+- `QueueDeletion()` resets the grace period if not currently processing
+- `CancelDeletion()` resets the grace period on queue mutation if not processing
+- `drainAll()` processes all items with rate limiting; items added during draining are also processed
+- Added `ClearQueue()` method — cancels all items and stops the grace timer
+- Added `GracePeriodState()` method — returns active/remaining/queueSize for the REST API
+- Added `FindQueuedItem()` method — looks up a queued item by name/type for the snooze endpoint
 
-Implementation approach: The worker goroutine blocks on a `select` between the queue channel and a timer channel. The timer is managed by a separate method that resets on mutations.
+### Step 3.3: Publish grace period state via SSE ✅
 
-### Step 3.3: Publish grace period state via SSE
+**Files:** `internal/events/types.go`, `internal/services/deletion.go`
 
-**File:** `internal/events/types.go`, `internal/services/deletion.go`
+- Added `DeletionGracePeriodEvent` with `RemainingSeconds`, `QueueSize`, `Active` fields
+- Event published when grace period starts/resets (active=true) and when it expires (active=false)
+- Frontend uses the initial `remainingSeconds` value to start a local countdown timer
 
-Add a new SSE event type for the grace period countdown:
-
-```go
-type DeletionGracePeriodEvent struct {
-    RemainingSeconds int  `json:"remainingSeconds"`
-    QueueSize        int  `json:"queueSize"`
-    Active           bool `json:"active"` // true = grace period running, false = processing started
-}
-```
-
-Publish this event:
-- When the grace period starts (first item queued)
-- Periodically during the grace period (every second or every 5 seconds)
-- When the grace period expires and processing begins
-
-### Step 3.4: Update frontend deletion queue card
+### Step 3.4: Update frontend deletion queue card ✅
 
 **File:** `frontend/app/components/DeletionQueueCard.vue`
 
-- Show a countdown timer during the grace period: "Processing starts in 12s..."
-- The countdown updates from SSE `DeletionGracePeriodEvent` events
-- When the grace period expires, transition to the existing progress bar UI
+- Subscribed to `deletion_grace_period` SSE event in `useDeletionQueue` composable
+- Shows countdown timer with amber border during grace period: "Processing starts in 12s…"
+- Client-side countdown from the initial `remainingSeconds` value (1-second interval)
+- Countdown stops when grace period expires or batch completes
 
-### Step 3.5: Add grace period setting to advanced settings UI
+### Step 3.5: Add grace period setting to advanced settings UI ✅
 
 **File:** `frontend/app/components/settings/SettingsAdvanced.vue`
 
-- Add a slider/input for "Deletion Queue Delay" with range 10-300 seconds, default 30
-- Label: "Time to wait before processing queued deletions. Resets when items are added or removed."
+- Added "Deletion Queue Delay" card with dropdown selector (10s to 5min, default 30s)
+- Uses `ClockIcon` with amber background
+- Auto-saves via `useAutoSave` composable on change
+- Fetches current value from preferences on mount
 
-### Step 3.6: Implement deletion queue snooze endpoint
+### Step 3.6: Implement deletion queue snooze endpoint ✅
 
-**Files:** `routes/deletion.go`, `internal/services/deletion.go`, `internal/services/approval.go`
+**Files:** `routes/deletion.go`, `internal/services/approval.go`
 
-Add `POST /api/v1/deletion-queue/snooze` endpoint that:
+- Added `POST /api/v1/deletion-queue/snooze` endpoint
+- Looks up the queued item by name/type to get the integration ID
+- Calls `CancelDeletion()` to remove from the deletion queue
+- Creates snoozed entry via `ApprovalService.CreateSnoozedEntry(mediaName, mediaType, integrationID, snoozeDurationHours)`
+- Returns `{ "snoozed": true, "snoozedUntil": "..." }`
 
-1. Calls `DeletionService.CancelDeletion(mediaName, mediaType)` to remove the item from the deletion queue
-2. Creates a rejected/snoozed entry in the approval queue via `ApprovalService.CreateSnoozedEntry()` (new method) with `snoozed_until` set to `now + SnoozeDurationHours`
-3. Resets the grace period timer (queue mutation)
+### Step 3.7: Implement deletion queue clear endpoint ✅
 
-The snoozed approval queue entry acts as a "do not re-queue" marker — the poller's `IsSnoozed()` check prevents the engine from re-queuing the item until the snooze expires. This works in all modes (auto, approval, dry-run).
+**Files:** `routes/deletion.go`, `internal/services/deletion.go`
 
-New service method on `ApprovalService`:
+- Added `POST /api/v1/deletion-queue/clear` endpoint
+- Calls `DeletionService.ClearQueue()` which marks all items for cancellation
+- Returns `{ "cancelled": N }`
 
-```go
-func (s *ApprovalService) CreateSnoozedEntry(item db.ApprovalQueueItem, snoozeDurationHours int) error
-```
+### Step 3.8: Add grace period REST endpoint ✅
 
-This creates a new approval queue entry with `status=rejected` and `snoozed_until` set. If an entry for the same media already exists, it updates the snooze timestamp.
+**File:** `routes/deletion.go`
 
-### Step 3.7: Add snooze button to deletion queue card
+- Added `GET /api/v1/deletion-queue/grace-period` endpoint
+- Returns `{ "active": bool, "remainingSeconds": int, "queueSize": int }`
 
-**File:** `frontend/app/components/DeletionQueueCard.vue`
+### Step 3.9: Add snooze button and clear all button to deletion queue card ✅
 
-Add a snooze button (clock icon) next to the existing cancel button (X icon) on each queued item. Clicking it calls `POST /api/v1/deletion-queue/snooze`.
+**File:** `frontend/app/components/DeletionQueueCard.vue`, `frontend/app/composables/useDeletionQueue.ts`
 
-### Step 3.8: Update tests
+- Added snooze button (clock icon) next to each queued item
+- Added "Clear All" button in the card header when items are queued
+- Added `snoozeItem()` and `clearAll()` functions to `useDeletionQueue` composable
+- Added i18n keys for new UI text
+
+### Step 3.10: Update tests ✅
 
 **Files:** `internal/services/deletion_test.go`, `routes/deletion_test.go`
 
-- Test grace period timer behavior: starts on first item, resets on mutation, expires and triggers processing
-- Test that items queued during processing don't restart the grace period
-- Test configurable delay values
-- Test snooze endpoint: item removed from deletion queue, snoozed entry created in approval queue
-- Test that snoozed items are not re-queued by the engine
+- All existing deletion tests updated to use 1-second grace period via `mockSettingsReader`
+- Refactored `drainProgressEvent`/`drainBatchEvent` to use constant timeout (fixed unparam lint)
+- Added grace period tests: `TestDeletionService_GracePeriod_StartsOnQueue`, `TestDeletionService_GracePeriod_ExpiresAndProcesses`
+- Added clear queue test: `TestDeletionService_ClearQueue_CancelsAll`
+- Added grace period state test: `TestDeletionService_GracePeriodState_InactiveByDefault`
+- Added SSE event tests: `TestDeletionGracePeriodEvent_EventType`, `TestDeletionGracePeriodEvent_EventMessage`
+- Added snooze service tests: `TestApprovalService_CreateSnoozedEntry_New`, `TestApprovalService_CreateSnoozedEntry_UpdatesExisting`
+- Added route tests: `TestDeletionQueue_Clear`, `TestDeletionQueue_GracePeriod`, `TestDeletionQueue_Snooze_*` (success, missing fields, unauthenticated)
 
 ## Phase 4: Always-Visible Deletion Queue Card
 

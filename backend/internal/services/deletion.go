@@ -43,13 +43,19 @@ type DeleteJobSummary struct {
 
 // DeletionService manages the background deletion worker and queue.
 // It replaces the old init()-based goroutine and package-level globals.
+//
+// Grace period: When items enter the queue, a configurable grace period timer
+// starts (default 30 seconds). The timer resets on any queue mutation
+// (additions or cancellations). When the timer expires, all queued items are
+// processed with rate limiting. Items added during processing are queued
+// normally but do not restart the grace period until the current batch
+// completes and a new item arrives.
 type DeletionService struct {
 	bus         *events.EventBus
 	auditLog    *AuditLogService
 	settings    SettingsReader
 	engine      EngineStatsWriter
 	metrics     DeletionStatsWriter
-	queue       chan DeleteJob
 	rateLimiter *rate.Limiter
 	done        chan struct{}
 
@@ -70,10 +76,20 @@ type DeletionService struct {
 	// checked in processJob(). The map key is "mediaName:mediaType".
 	cancelled sync.Map
 
-	// Parallel tracking slice — mirrors the channel contents so callers
-	// can list queued items (Go channels don't support peeking).
+	// Parallel tracking slice — holds queued items so callers can list and
+	// inspect the queue (Go channels don't support peeking). Also serves as
+	// the pending-jobs store for the grace-period-aware worker.
 	queuedMu    sync.Mutex
-	queuedItems []DeleteJobSummary
+	queuedItems []DeleteJob // full jobs (worker reads from here after grace period)
+
+	// Grace period state
+	graceTimerMu  sync.Mutex
+	graceTimer    *time.Timer
+	graceDeadline time.Time     // absolute time when grace period expires
+	graceActive   atomic.Bool   // true while grace period is running
+	processing    atomic.Bool   // true while the worker is draining the queue
+	notify        chan struct{} // signals the worker that something happened
+	stopCh        chan struct{} // closed when Stop() is called
 }
 
 // SettingsReader provides read access to application preferences.
@@ -99,9 +115,10 @@ func NewDeletionService(bus *events.EventBus, auditLog *AuditLogService) *Deleti
 	return &DeletionService{
 		bus:         bus,
 		auditLog:    auditLog,
-		queue:       make(chan DeleteJob, 500),
 		rateLimiter: rate.NewLimiter(rate.Every(3*time.Second), 1),
 		done:        make(chan struct{}),
+		notify:      make(chan struct{}, 1),
+		stopCh:      make(chan struct{}),
 	}
 }
 
@@ -120,36 +137,38 @@ func (s *DeletionService) Start() {
 
 // Stop signals the worker to finish and waits for completion.
 func (s *DeletionService) Stop() {
-	close(s.queue)
+	close(s.stopCh)
 	<-s.done
 }
 
 // QueueDeletion enqueues a media item for background deletion.
-// Returns an error if the queue is full.
+// Starts or resets the grace period timer.
 func (s *DeletionService) QueueDeletion(job DeleteJob) error {
-	select {
-	case s.queue <- job:
-		s.queuedMu.Lock()
-		s.queuedItems = append(s.queuedItems, DeleteJobSummary{
-			MediaName:     job.Item.Title,
-			MediaType:     string(job.Item.Type),
-			SizeBytes:     job.Item.SizeBytes,
-			IntegrationID: job.Item.IntegrationID,
-			Reason:        job.Reason,
-		})
+	s.queuedMu.Lock()
+	if len(s.queuedItems) >= 500 {
 		s.queuedMu.Unlock()
-
-		s.bus.Publish(events.DeletionQueuedEvent{
-			MediaName:     job.Item.Title,
-			MediaType:     string(job.Item.Type),
-			SizeBytes:     job.Item.SizeBytes,
-			IntegrationID: job.Item.IntegrationID,
-		})
-
-		return nil
-	default:
 		return fmt.Errorf("deletion queue is full")
 	}
+	s.queuedItems = append(s.queuedItems, job)
+	queueSize := len(s.queuedItems)
+	s.queuedMu.Unlock()
+
+	s.bus.Publish(events.DeletionQueuedEvent{
+		MediaName:     job.Item.Title,
+		MediaType:     string(job.Item.Type),
+		SizeBytes:     job.Item.SizeBytes,
+		IntegrationID: job.Item.IntegrationID,
+	})
+
+	// Reset grace period if not currently processing
+	if !s.processing.Load() {
+		s.resetGracePeriod(queueSize)
+	}
+
+	// Wake up the worker
+	s.poke()
+
+	return nil
 }
 
 // CurrentlyDeleting returns the name of the item currently being deleted, or empty string.
@@ -193,6 +212,84 @@ func (s *DeletionService) SignalBatchSize(count int) {
 	s.batchFailed.Store(0)
 }
 
+// GracePeriodState returns the current grace period status for the API.
+func (s *DeletionService) GracePeriodState() (active bool, remainingSeconds int, queueSize int) {
+	s.queuedMu.Lock()
+	queueSize = len(s.queuedItems)
+	s.queuedMu.Unlock()
+
+	active = s.graceActive.Load()
+	if active {
+		s.graceTimerMu.Lock()
+		remaining := time.Until(s.graceDeadline)
+		s.graceTimerMu.Unlock()
+		if remaining > 0 {
+			remainingSeconds = int(remaining.Seconds()) + 1 // round up
+		}
+	}
+	return active, remainingSeconds, queueSize
+}
+
+// getGraceDelay reads the configured grace period from preferences.
+// The route handler validates the range (10-300). Here we accept any positive
+// value to support fast tests without artificial minimums.
+func (s *DeletionService) getGraceDelay() time.Duration {
+	if s.settings == nil {
+		return 30 * time.Second
+	}
+	prefs, err := s.settings.GetPreferences()
+	if err != nil {
+		return 30 * time.Second
+	}
+	delay := prefs.DeletionQueueDelaySeconds
+	if delay <= 0 {
+		delay = 30
+	}
+	return time.Duration(delay) * time.Second
+}
+
+// resetGracePeriod starts or resets the grace period timer.
+func (s *DeletionService) resetGracePeriod(queueSize int) {
+	delay := s.getGraceDelay()
+
+	s.graceTimerMu.Lock()
+	if s.graceTimer != nil {
+		s.graceTimer.Stop()
+	}
+	s.graceTimer = time.AfterFunc(delay, func() {
+		s.graceActive.Store(false)
+		// Publish grace period expired event
+		s.queuedMu.Lock()
+		qs := len(s.queuedItems)
+		s.queuedMu.Unlock()
+		s.bus.Publish(events.DeletionGracePeriodEvent{
+			RemainingSeconds: 0,
+			QueueSize:        qs,
+			Active:           false,
+		})
+		s.poke() // wake up worker to start draining
+	})
+	s.graceDeadline = time.Now().Add(delay)
+	s.graceTimerMu.Unlock()
+
+	s.graceActive.Store(true)
+
+	// Publish grace period started/reset event
+	s.bus.Publish(events.DeletionGracePeriodEvent{
+		RemainingSeconds: int(delay.Seconds()),
+		QueueSize:        queueSize,
+		Active:           true,
+	})
+}
+
+// poke sends a non-blocking signal to the worker goroutine.
+func (s *DeletionService) poke() {
+	select {
+	case s.notify <- struct{}{}:
+	default:
+	}
+}
+
 func (s *DeletionService) worker() {
 	defer close(s.done)
 	defer func() {
@@ -201,19 +298,81 @@ func (s *DeletionService) worker() {
 		}
 	}()
 
-	for job := range s.queue {
+	for {
+		select {
+		case <-s.stopCh:
+			// Shutdown: drain any remaining items
+			s.drainAll()
+			return
+		case <-s.notify:
+			// Something happened — check if grace period has expired and we should drain
+			if !s.graceActive.Load() && s.queueLen() > 0 {
+				s.drainAll()
+			}
+		}
+	}
+}
+
+// queueLen returns the number of queued items.
+func (s *DeletionService) queueLen() int {
+	s.queuedMu.Lock()
+	defer s.queuedMu.Unlock()
+	return len(s.queuedItems)
+}
+
+// drainAll processes all items currently in the queue. Items added during
+// draining are also processed (no new grace period until we've fully drained).
+func (s *DeletionService) drainAll() {
+	s.processing.Store(true)
+	defer s.processing.Store(false)
+
+	// Stop the grace timer if it's still running (e.g., during shutdown)
+	s.graceTimerMu.Lock()
+	if s.graceTimer != nil {
+		s.graceTimer.Stop()
+		s.graceTimer = nil
+	}
+	s.graceTimerMu.Unlock()
+	s.graceActive.Store(false)
+
+	for {
+		job, ok := s.dequeueJob()
+		if !ok {
+			return
+		}
+
+		// Check for stop signal between jobs
+		select {
+		case <-s.stopCh:
+			// Process this last job then return
+			s.processJob(job)
+			return
+		default:
+		}
+
 		_ = s.rateLimiter.Wait(context.Background()) //nolint:errcheck // Wait with background context never returns non-nil error
 		s.processJob(job)
 	}
+}
+
+// dequeueJob pops the first job from the queued items slice.
+func (s *DeletionService) dequeueJob() (DeleteJob, bool) {
+	s.queuedMu.Lock()
+	defer s.queuedMu.Unlock()
+
+	if len(s.queuedItems) == 0 {
+		return DeleteJob{}, false
+	}
+
+	job := s.queuedItems[0]
+	s.queuedItems = s.queuedItems[1:]
+	return job, true
 }
 
 func (s *DeletionService) processJob(job DeleteJob) {
 	s.currentlyDeleting.Store(job.Item.Title)
 	defer s.currentlyDeleting.Store("")
 	defer s.checkBatchComplete()
-
-	// Remove this item from the parallel tracking slice.
-	s.removeQueuedItem(job.Item.Title, string(job.Item.Type))
 
 	// Check cancellation skip-list before doing any work.
 	if s.IsCancelled(job.Item.Title, string(job.Item.Type)) {
@@ -361,7 +520,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 func (s *DeletionService) publishProgress() {
 	s.bus.Publish(events.DeletionProgressEvent{
 		CurrentItem: s.CurrentlyDeleting(),
-		QueueDepth:  len(s.queue),
+		QueueDepth:  s.queueLen(),
 		Processed:   int(s.batchSucceeded.Load()) + int(s.batchFailed.Load()),
 		Succeeded:   int(s.batchSucceeded.Load()),
 		Failed:      int(s.batchFailed.Load()),
@@ -400,6 +559,9 @@ func cancelKey(mediaName, mediaType string) string {
 // encounters the item it will skip the actual deletion and log the
 // cancellation instead. Returns true if the item was found in the queued
 // items tracking slice (best-effort — the item may already be processing).
+//
+// Also resets the grace period timer if not currently processing, since
+// the queue was mutated.
 func (s *DeletionService) CancelDeletion(mediaName, mediaType string) bool {
 	key := cancelKey(mediaName, mediaType)
 
@@ -407,11 +569,12 @@ func (s *DeletionService) CancelDeletion(mediaName, mediaType string) bool {
 	s.queuedMu.Lock()
 	found := false
 	for _, item := range s.queuedItems {
-		if item.MediaName == mediaName && item.MediaType == mediaType {
+		if item.Item.Title == mediaName && string(item.Item.Type) == mediaType {
 			found = true
 			break
 		}
 	}
+	queueSize := len(s.queuedItems)
 	s.queuedMu.Unlock()
 
 	if !found {
@@ -419,6 +582,12 @@ func (s *DeletionService) CancelDeletion(mediaName, mediaType string) bool {
 	}
 
 	s.cancelled.Store(key, true)
+
+	// Reset grace period on queue mutation if not processing
+	if !s.processing.Load() && queueSize > 0 {
+		s.resetGracePeriod(queueSize)
+	}
+
 	return true
 }
 
@@ -437,9 +606,58 @@ func (s *DeletionService) clearCancelled() {
 	})
 }
 
+// ClearQueue cancels all items currently in the deletion queue.
+// Returns the number of items cancelled. Resets the grace period timer.
+func (s *DeletionService) ClearQueue() int {
+	s.queuedMu.Lock()
+	count := len(s.queuedItems)
+	for _, job := range s.queuedItems {
+		s.cancelled.Store(cancelKey(job.Item.Title, string(job.Item.Type)), true)
+	}
+	s.queuedMu.Unlock()
+
+	// Stop the grace timer since there's nothing to process
+	s.graceTimerMu.Lock()
+	if s.graceTimer != nil {
+		s.graceTimer.Stop()
+		s.graceTimer = nil
+	}
+	s.graceTimerMu.Unlock()
+	s.graceActive.Store(false)
+
+	// Publish grace period deactivation
+	s.bus.Publish(events.DeletionGracePeriodEvent{
+		RemainingSeconds: 0,
+		QueueSize:        0,
+		Active:           false,
+	})
+
+	return count
+}
+
 // ---------------------------------------------------------------------------
 // Queued items tracking
 // ---------------------------------------------------------------------------
+
+// FindQueuedItem returns the summary of a queued item by name and type,
+// or nil if not found. Used by the snooze endpoint to look up integration details.
+func (s *DeletionService) FindQueuedItem(mediaName, mediaType string) *DeleteJobSummary {
+	s.queuedMu.Lock()
+	defer s.queuedMu.Unlock()
+
+	for _, job := range s.queuedItems {
+		if job.Item.Title == mediaName && string(job.Item.Type) == mediaType {
+			return &DeleteJobSummary{
+				MediaName:     job.Item.Title,
+				MediaType:     string(job.Item.Type),
+				SizeBytes:     job.Item.SizeBytes,
+				IntegrationID: job.Item.IntegrationID,
+				Reason:        job.Reason,
+			}
+		}
+	}
+	return nil
+}
 
 // ListQueuedItems returns a snapshot copy of the items currently waiting in
 // the deletion queue. The returned slice is safe to mutate.
@@ -447,21 +665,15 @@ func (s *DeletionService) ListQueuedItems() []DeleteJobSummary {
 	s.queuedMu.Lock()
 	defer s.queuedMu.Unlock()
 
-	out := make([]DeleteJobSummary, len(s.queuedItems))
-	copy(out, s.queuedItems)
-	return out
-}
-
-// removeQueuedItem removes the first matching entry from the tracking slice.
-// Called by processJob when the worker picks up the item.
-func (s *DeletionService) removeQueuedItem(mediaName, mediaType string) {
-	s.queuedMu.Lock()
-	defer s.queuedMu.Unlock()
-
-	for i, item := range s.queuedItems {
-		if item.MediaName == mediaName && item.MediaType == mediaType {
-			s.queuedItems = append(s.queuedItems[:i], s.queuedItems[i+1:]...)
-			return
-		}
+	out := make([]DeleteJobSummary, 0, len(s.queuedItems))
+	for _, job := range s.queuedItems {
+		out = append(out, DeleteJobSummary{
+			MediaName:     job.Item.Title,
+			MediaType:     string(job.Item.Type),
+			SizeBytes:     job.Item.SizeBytes,
+			IntegrationID: job.Item.IntegrationID,
+			Reason:        job.Reason,
+		})
 	}
+	return out
 }

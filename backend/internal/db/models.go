@@ -100,26 +100,27 @@ type LibraryHistory struct {
 // PreferenceSet stores the global weights for the scoring engine (0-10 scale)
 // and analytics threshold settings.
 type PreferenceSet struct {
-	ID                      uint      `gorm:"primarykey" json:"id"`
-	LogLevel                string    `gorm:"default:'info';not null" json:"logLevel"`          // "debug", "info", "warn", "error"
-	AuditLogRetentionDays   int       `gorm:"default:30;not null" json:"auditLogRetentionDays"` // 0 = forever, else days
-	PollIntervalSeconds     int       `gorm:"default:300;not null" json:"pollIntervalSeconds"`  // minimum 60, default 300 (5 min)
-	WatchHistoryWeight      int       `gorm:"default:10" json:"watchHistoryWeight"`             // High default
-	LastWatchedWeight       int       `gorm:"default:8" json:"lastWatchedWeight"`
-	FileSizeWeight          int       `gorm:"default:6" json:"fileSizeWeight"`
-	RatingWeight            int       `gorm:"default:5" json:"ratingWeight"`
-	TimeInLibraryWeight     int       `gorm:"default:4" json:"timeInLibraryWeight"`
-	SeriesStatusWeight      int       `gorm:"default:3" json:"seriesStatusWeight"`
-	RequestPopularityWeight int       `gorm:"default:2" json:"requestPopularityWeight"`             // NEW in 2.0: RequestPopularityFactor
-	QualityBloatWeight      int       `gorm:"default:2" json:"qualityBloatWeight"`                  // NEW in 2.0: QualityBloatFactor
-	ExecutionMode           string    `gorm:"default:'dry-run';not null" json:"executionMode"`      // "dry-run", "approval", "auto"
-	TiebreakerMethod        string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"` // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
-	DeletionsEnabled        bool      `gorm:"default:true;not null" json:"deletionsEnabled"`        // Safety guard: actual deletions only when true
-	SnoozeDurationHours     int       `gorm:"default:24;not null" json:"snoozeDurationHours"`       // Hours to snooze rejected items before re-evaluation
-	CheckForUpdates         bool      `gorm:"default:true;not null" json:"checkForUpdates"`         // Enable outbound update checks
-	DeadContentMinDays      int       `gorm:"default:90;not null" json:"deadContentMinDays"`        // NEW in 2.0: Minimum days in library for "dead content" report
-	StaleContentDays        int       `gorm:"default:180;not null" json:"staleContentDays"`         // NEW in 2.0: Days since last watch for "stale content" report
-	UpdatedAt               time.Time `json:"updatedAt"`
+	ID                        uint      `gorm:"primarykey" json:"id"`
+	LogLevel                  string    `gorm:"default:'info';not null" json:"logLevel"`          // "debug", "info", "warn", "error"
+	AuditLogRetentionDays     int       `gorm:"default:30;not null" json:"auditLogRetentionDays"` // 0 = forever, else days
+	PollIntervalSeconds       int       `gorm:"default:300;not null" json:"pollIntervalSeconds"`  // minimum 60, default 300 (5 min)
+	WatchHistoryWeight        int       `gorm:"default:10" json:"watchHistoryWeight"`             // High default
+	LastWatchedWeight         int       `gorm:"default:8" json:"lastWatchedWeight"`
+	FileSizeWeight            int       `gorm:"default:6" json:"fileSizeWeight"`
+	RatingWeight              int       `gorm:"default:5" json:"ratingWeight"`
+	TimeInLibraryWeight       int       `gorm:"default:4" json:"timeInLibraryWeight"`
+	SeriesStatusWeight        int       `gorm:"default:3" json:"seriesStatusWeight"`
+	RequestPopularityWeight   int       `gorm:"default:2" json:"requestPopularityWeight"`             // NEW in 2.0: RequestPopularityFactor
+	QualityBloatWeight        int       `gorm:"default:2" json:"qualityBloatWeight"`                  // NEW in 2.0: QualityBloatFactor
+	ExecutionMode             string    `gorm:"default:'dry-run';not null" json:"executionMode"`      // "dry-run", "approval", "auto"
+	TiebreakerMethod          string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"` // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
+	DeletionsEnabled          bool      `gorm:"default:true;not null" json:"deletionsEnabled"`        // Safety guard: actual deletions only when true
+	SnoozeDurationHours       int       `gorm:"default:24;not null" json:"snoozeDurationHours"`       // Hours to snooze rejected items before re-evaluation
+	CheckForUpdates           bool      `gorm:"default:true;not null" json:"checkForUpdates"`         // Enable outbound update checks
+	DeletionQueueDelaySeconds int       `gorm:"default:30;not null" json:"deletionQueueDelaySeconds"` // Grace period before processing queued deletions (10-300)
+	DeadContentMinDays        int       `gorm:"default:90;not null" json:"deadContentMinDays"`        // NEW in 2.0: Minimum days in library for "dead content" report
+	StaleContentDays          int       `gorm:"default:180;not null" json:"staleContentDays"`         // NEW in 2.0: Days since last watch for "stale content" report
+	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
 // GetFactorWeight returns the configured weight for a scoring factor by key.

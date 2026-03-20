@@ -15,11 +15,19 @@ var errMockDelete = errors.New("mock delete error")
 
 // mockSettingsReader implements SettingsReader for deletion tests.
 type mockSettingsReader struct {
-	deletionsEnabled bool
+	deletionsEnabled          bool
+	deletionQueueDelaySeconds int
 }
 
 func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
-	return db.PreferenceSet{DeletionsEnabled: m.deletionsEnabled}, nil
+	delay := m.deletionQueueDelaySeconds
+	if delay == 0 {
+		delay = 30 // default
+	}
+	return db.PreferenceSet{
+		DeletionsEnabled:          m.deletionsEnabled,
+		DeletionQueueDelaySeconds: delay,
+	}, nil
 }
 
 // mockEngineStatsWriter implements EngineStatsWriter for deletion tests.
@@ -57,11 +65,15 @@ func (m *mockIntegration) DeleteMediaItem(_ integrations.MediaItem) error {
 	return m.deleteErr
 }
 
+// testEventTimeout is the maximum time to wait for events in tests.
+// Grace period (1s) + rate limiter (3s) + buffer = 15s.
+const testEventTimeout = 15 * time.Second
+
 // drainProgressEvent reads from the bus subscription channel until a
 // DeletionProgressEvent arrives or the timeout expires.
-func drainProgressEvent(t *testing.T, ch chan events.Event, timeout time.Duration) *events.DeletionProgressEvent {
+func drainProgressEvent(t *testing.T, ch chan events.Event) *events.DeletionProgressEvent {
 	t.Helper()
-	deadline := time.After(timeout)
+	deadline := time.After(testEventTimeout)
 	for {
 		select {
 		case evt := <-ch:
@@ -78,9 +90,9 @@ func drainProgressEvent(t *testing.T, ch chan events.Event, timeout time.Duratio
 
 // drainBatchEvent reads from the bus subscription channel until a
 // DeletionBatchCompleteEvent arrives or the timeout expires.
-func drainBatchEvent(t *testing.T, ch chan events.Event, timeout time.Duration) *events.DeletionBatchCompleteEvent {
+func drainBatchEvent(t *testing.T, ch chan events.Event) *events.DeletionBatchCompleteEvent {
 	t.Helper()
-	deadline := time.After(timeout)
+	deadline := time.After(testEventTimeout)
 	for {
 		select {
 		case evt := <-ch:
@@ -106,7 +118,7 @@ func TestDeletionService_SignalBatchSize_Zero(t *testing.T) {
 	// SignalBatchSize(0) should immediately publish DeletionBatchCompleteEvent
 	svc.SignalBatchSize(0)
 
-	bce := drainBatchEvent(t, ch, 2*time.Second)
+	bce := drainBatchEvent(t, ch)
 	if bce.Succeeded != 0 {
 		t.Errorf("expected Succeeded=0, got %d", bce.Succeeded)
 	}
@@ -121,7 +133,7 @@ func TestDeletionService_BatchTracking_AllSuccess(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -151,7 +163,7 @@ func TestDeletionService_BatchTracking_AllSuccess(t *testing.T) {
 		}
 	}
 
-	bce := drainBatchEvent(t, ch, 15*time.Second)
+	bce := drainBatchEvent(t, ch)
 	if bce.Succeeded != 3 {
 		t.Errorf("expected Succeeded=3, got %d", bce.Succeeded)
 	}
@@ -166,7 +178,7 @@ func TestDeletionService_BatchTracking_MixedSuccessFailure(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true}, // actual deletions
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1}, // actual deletions
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -210,7 +222,7 @@ func TestDeletionService_BatchTracking_MixedSuccessFailure(t *testing.T) {
 		t.Fatalf("QueueDeletion returned error: %v", err)
 	}
 
-	bce := drainBatchEvent(t, ch, 15*time.Second)
+	bce := drainBatchEvent(t, ch)
 	if bce.Succeeded != 2 {
 		t.Errorf("expected Succeeded=2, got %d", bce.Succeeded)
 	}
@@ -225,7 +237,7 @@ func TestDeletionService_BatchTracking_CorrectCounts(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true},
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -262,7 +274,7 @@ func TestDeletionService_BatchTracking_CorrectCounts(t *testing.T) {
 		})
 	}
 
-	bce := drainBatchEvent(t, ch, 20*time.Second)
+	bce := drainBatchEvent(t, ch)
 	if bce.Succeeded != 3 {
 		t.Errorf("expected Succeeded=3, got %d", bce.Succeeded)
 	}
@@ -277,7 +289,7 @@ func TestDeletionService_GracefulShutdown_DrainsQueue(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode for safety
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode for safety
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -345,7 +357,7 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -372,7 +384,7 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 		t.Fatalf("QueueDeletion returned error: %v", err)
 	}
 
-	pe := drainProgressEvent(t, ch, 15*time.Second)
+	pe := drainProgressEvent(t, ch)
 	if pe.Succeeded != 1 {
 		t.Errorf("expected Succeeded=1, got %d", pe.Succeeded)
 	}
@@ -402,7 +414,7 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true},
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -429,7 +441,7 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 		t.Fatalf("QueueDeletion returned error: %v", err)
 	}
 
-	pe := drainProgressEvent(t, ch, 15*time.Second)
+	pe := drainProgressEvent(t, ch)
 	if pe.Succeeded != 1 {
 		t.Errorf("expected Succeeded=1, got %d", pe.Succeeded)
 	}
@@ -459,7 +471,7 @@ func TestDeletionService_ForceDryRun_OverridesDeletionsEnabled(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true}, // deletions enabled, but ForceDryRun overrides
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1}, // deletions enabled, but ForceDryRun overrides
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -512,7 +524,7 @@ func TestDeletionService_NoDryRun_WhenDeletionsDisabled(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // deletions disabled
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // deletions disabled
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -569,7 +581,7 @@ func TestDeletionService_CancelDeletion_ReturnsTrue_WhenItemInQueue(t *testing.T
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true},
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -614,7 +626,7 @@ func TestDeletionService_ProcessJob_SkipsCancelledItem(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true},
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -782,7 +794,7 @@ func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true},
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -808,7 +820,7 @@ func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 		t.Fatalf("QueueDeletion returned error: %v", err)
 	}
 
-	pe := drainProgressEvent(t, ch, 15*time.Second)
+	pe := drainProgressEvent(t, ch)
 	if pe.Succeeded != 0 {
 		t.Errorf("expected Succeeded=0, got %d", pe.Succeeded)
 	}
@@ -856,7 +868,7 @@ func TestDeletionService_UpsertAudit_UsesUpsertSemantics(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -880,7 +892,7 @@ func TestDeletionService_UpsertAudit_UsesUpsertSemantics(t *testing.T) {
 		}
 		// Wait for processing
 		ch := bus.Subscribe()
-		drainBatchEvent(t, ch, 15*time.Second)
+		drainBatchEvent(t, ch)
 		bus.Unsubscribe(ch)
 	}
 
@@ -908,7 +920,7 @@ func TestDeletionService_UpsertAudit_False_AppendsMultiple(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -931,7 +943,7 @@ func TestDeletionService_UpsertAudit_False_AppendsMultiple(t *testing.T) {
 			t.Fatalf("QueueDeletion returned error: %v", err)
 		}
 		ch := bus.Subscribe()
-		drainBatchEvent(t, ch, 15*time.Second)
+		drainBatchEvent(t, ch)
 		bus.Unsubscribe(ch)
 	}
 
@@ -949,7 +961,7 @@ func TestDeletionService_NilClient_DryRunSucceeds(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false}, // dry-run mode
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1}, // dry-run mode
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -1011,7 +1023,7 @@ func TestDeletionService_NilClient_ActualDeletion_Fails(t *testing.T) {
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: true}, // actual deletions enabled
+		&mockSettingsReader{deletionsEnabled: true, deletionQueueDelaySeconds: 1}, // actual deletions enabled
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -1036,7 +1048,7 @@ func TestDeletionService_NilClient_ActualDeletion_Fails(t *testing.T) {
 		t.Fatalf("QueueDeletion returned error: %v", err)
 	}
 
-	bce := drainBatchEvent(t, ch, 15*time.Second)
+	bce := drainBatchEvent(t, ch)
 	if bce.Succeeded != 0 {
 		t.Errorf("expected Succeeded=0, got %d", bce.Succeeded)
 	}
@@ -1058,7 +1070,7 @@ func TestDeletionService_QueueDeletion_PublishesDeletionQueuedEvent(t *testing.T
 	auditLog := NewAuditLogService(database)
 	svc := NewDeletionService(bus, auditLog)
 	svc.SetDependencies(
-		&mockSettingsReader{deletionsEnabled: false},
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1},
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 	)
@@ -1104,5 +1116,245 @@ func TestDeletionService_QueueDeletion_PublishesDeletionQueuedEvent(t *testing.T
 		}
 	case <-deadline:
 		t.Fatal("timeout waiting for DeletionQueuedEvent")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Grace period tests
+// ---------------------------------------------------------------------------
+
+func TestDeletionService_GracePeriod_StartsOnQueue(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 2},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+	svc.Start()
+	defer svc.Stop()
+
+	_ = svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item:   integrations.MediaItem{Title: "Firefly", Type: "show", SizeBytes: 100},
+		Reason: "grace-test",
+	})
+
+	active, remaining, queueSize := svc.GracePeriodState()
+	if !active {
+		t.Error("expected grace period to be active after queueing")
+	}
+	if remaining <= 0 {
+		t.Error("expected remaining seconds > 0")
+	}
+	if queueSize != 1 {
+		t.Errorf("expected queueSize=1, got %d", queueSize)
+	}
+}
+
+func TestDeletionService_GracePeriod_ExpiresAndProcesses(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 1},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	_ = svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item:   integrations.MediaItem{Title: "Serenity", Type: "movie", SizeBytes: 100},
+		Reason: "grace-expire-test",
+	})
+
+	// Grace period is 1 second, then rate limiter takes 3s. Wait up to 15s
+	pe := drainProgressEvent(t, ch)
+	if pe.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1, got %d", pe.Succeeded)
+	}
+}
+
+func TestDeletionService_ClearQueue_CancelsAll(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+	svc.SetDependencies(
+		&mockSettingsReader{deletionsEnabled: false, deletionQueueDelaySeconds: 30},
+		&mockEngineStatsWriter{},
+		&mockDeletionStatsWriter{},
+	)
+
+	// Queue 3 items without starting the worker
+	for i := 0; i < 3; i++ {
+		_ = svc.QueueDeletion(DeleteJob{
+			Client: &mockIntegration{},
+			Item:   integrations.MediaItem{Title: "Firefly", Type: "show", SizeBytes: 100},
+			Reason: "clear-test",
+		})
+	}
+
+	if len(svc.ListQueuedItems()) != 3 {
+		t.Fatalf("expected 3 queued items, got %d", len(svc.ListQueuedItems()))
+	}
+
+	count := svc.ClearQueue()
+	if count != 3 {
+		t.Errorf("expected ClearQueue to return 3, got %d", count)
+	}
+
+	// Items are still in the queue but marked for cancellation
+	if !svc.IsCancelled("Firefly", "show") {
+		t.Error("expected items to be marked as cancelled after ClearQueue")
+	}
+
+	// Grace period should be inactive
+	active, _, _ := svc.GracePeriodState()
+	if active {
+		t.Error("expected grace period to be inactive after ClearQueue")
+	}
+}
+
+func TestDeletionService_GracePeriodState_InactiveByDefault(t *testing.T) {
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(setupTestDB(t))
+	svc := NewDeletionService(bus, auditLog)
+
+	active, remaining, queueSize := svc.GracePeriodState()
+	if active {
+		t.Error("expected grace period to be inactive initially")
+	}
+	if remaining != 0 {
+		t.Errorf("expected remaining=0, got %d", remaining)
+	}
+	if queueSize != 0 {
+		t.Errorf("expected queueSize=0, got %d", queueSize)
+	}
+}
+
+func TestDeletionGracePeriodEvent_EventType(t *testing.T) {
+	evt := events.DeletionGracePeriodEvent{
+		RemainingSeconds: 25,
+		QueueSize:        3,
+		Active:           true,
+	}
+	if got := evt.EventType(); got != "deletion_grace_period" {
+		t.Errorf("expected EventType()=%q, got %q", "deletion_grace_period", got)
+	}
+}
+
+func TestDeletionGracePeriodEvent_EventMessage(t *testing.T) {
+	active := events.DeletionGracePeriodEvent{
+		RemainingSeconds: 25,
+		QueueSize:        3,
+		Active:           true,
+	}
+	if msg := active.EventMessage(); msg != "Deletion grace period active: 25s remaining, 3 items queued" {
+		t.Errorf("unexpected message for active: %q", msg)
+	}
+
+	expired := events.DeletionGracePeriodEvent{
+		RemainingSeconds: 0,
+		QueueSize:        3,
+		Active:           false,
+	}
+	if msg := expired.EventMessage(); msg != "Deletion grace period expired: processing 3 items" {
+		t.Errorf("unexpected message for expired: %q", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Snooze tests (approval service)
+// ---------------------------------------------------------------------------
+
+func TestApprovalService_CreateSnoozedEntry_New(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	// Create an integration first (FK constraint)
+	integration := db.IntegrationConfig{
+		Type: "sonarr", Name: "Test Sonarr", URL: "http://localhost:8989", APIKey: "test-key",
+	}
+	if err := database.Create(&integration).Error; err != nil {
+		t.Fatalf("failed to create integration: %v", err)
+	}
+
+	snoozedUntil, err := svc.CreateSnoozedEntry("Firefly", "show", integration.ID, 24)
+	if err != nil {
+		t.Fatalf("CreateSnoozedEntry failed: %v", err)
+	}
+	if snoozedUntil == nil {
+		t.Fatal("expected non-nil snoozedUntil")
+	}
+
+	// Verify the entry was created
+	var entry db.ApprovalQueueItem
+	if err := database.Where("media_name = ? AND media_type = ?", "Firefly", "show").First(&entry).Error; err != nil {
+		t.Fatalf("expected entry in DB: %v", err)
+	}
+	if entry.Status != db.StatusRejected {
+		t.Errorf("expected status=%q, got %q", db.StatusRejected, entry.Status)
+	}
+	if entry.SnoozedUntil == nil {
+		t.Error("expected SnoozedUntil to be set")
+	}
+}
+
+func TestApprovalService_CreateSnoozedEntry_UpdatesExisting(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	// Create an integration first (FK constraint)
+	integration := db.IntegrationConfig{
+		Type: "radarr", Name: "Test Radarr", URL: "http://localhost:7878", APIKey: "test-key",
+	}
+	if err := database.Create(&integration).Error; err != nil {
+		t.Fatalf("failed to create integration: %v", err)
+	}
+
+	// Create a pending entry first
+	entry := db.ApprovalQueueItem{
+		MediaName:     "Serenity",
+		MediaType:     "movie",
+		IntegrationID: integration.ID,
+		Reason:        "test",
+		Status:        db.StatusPending,
+	}
+	if err := database.Create(&entry).Error; err != nil {
+		t.Fatalf("failed to create entry: %v", err)
+	}
+
+	// Snooze it
+	snoozedUntil, err := svc.CreateSnoozedEntry("Serenity", "movie", integration.ID, 48)
+	if err != nil {
+		t.Fatalf("CreateSnoozedEntry failed: %v", err)
+	}
+	if snoozedUntil == nil {
+		t.Fatal("expected non-nil snoozedUntil")
+	}
+
+	// Verify it was updated (not duplicated)
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("media_name = ?", "Serenity").Count(&count)
+	if count != 1 {
+		t.Errorf("expected 1 entry, got %d", count)
+	}
+
+	var updated db.ApprovalQueueItem
+	database.Where("media_name = ?", "Serenity").First(&updated)
+	if updated.Status != db.StatusRejected {
+		t.Errorf("expected status=%q, got %q", db.StatusRejected, updated.Status)
 	}
 }

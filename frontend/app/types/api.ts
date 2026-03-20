@@ -68,6 +68,7 @@ export interface PreferenceSet {
   tiebreakerMethod: string;
   deletionsEnabled: boolean;
   snoozeDurationHours: number;
+  deletionQueueDelaySeconds: number;
   checkForUpdates: boolean;
   updatedAt: string;
 }
