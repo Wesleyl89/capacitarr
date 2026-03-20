@@ -231,6 +231,15 @@ func (s *MetricsService) PruneHistory(resolution string, before time.Time) (int6
 
 // ─── Capacity forecast ──────────────────────────────────────────────────────
 
+// DiskGroupForForecast holds the disk group parameters needed for forecast computation.
+// Extracted from the route handler to avoid passing the full db.DiskGroup model.
+type DiskGroupForForecast struct {
+	ID            uint
+	ThresholdPct  float64
+	TotalCapacity int64
+	UsedCapacity  int64
+}
+
 // CapacityForecast holds projected capacity data based on linear regression of
 // recent usage history.
 type CapacityForecast struct {

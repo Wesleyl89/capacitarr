@@ -183,6 +183,7 @@ type ApprovalQueueItem struct {
 	PosterURL     string     `gorm:"not null;default:''" json:"posterUrl"`               // Poster image URL from *arr
 	IntegrationID uint       `gorm:"not null" json:"integrationId"`                      // FK to IntegrationConfig (required)
 	ExternalID    string     `gorm:"not null;default:''" json:"externalId"`              // External ID in the integration
+	DiskGroupID   *uint      `gorm:"index" json:"diskGroupId,omitempty"`                 // FK to DiskGroup (nullable — set by poller to scope queue per disk group)
 	Status        string     `gorm:"not null;default:'pending'" json:"status"`           // pending, approved, rejected
 	ForceDelete   bool       `gorm:"not null;default:false" json:"forceDelete"`          // Bypass disk threshold — delete on next engine run
 	SnoozedUntil  *time.Time `gorm:"column:snoozed_until" json:"snoozedUntil,omitempty"` // When snooze expires (rejected items)
@@ -215,6 +216,7 @@ type AuditLogEntry struct {
 	SizeBytes     int64     `gorm:"not null;default:0" json:"sizeBytes"`
 	Score         float64   `gorm:"not null;default:0" json:"score"`                      // Numeric score from engine evaluation
 	IntegrationID *uint     `json:"integrationId,omitempty" gorm:"column:integration_id"` // FK to IntegrationConfig (nullable — preserved on integration delete)
+	DiskGroupID   *uint     `gorm:"index" json:"diskGroupId,omitempty"`                   // FK to DiskGroup (nullable — set by poller to scope audit entries per disk group)
 	CreatedAt     time.Time `json:"createdAt"`
 }
 

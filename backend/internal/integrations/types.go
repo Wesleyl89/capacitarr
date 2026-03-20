@@ -33,8 +33,13 @@ const (
 // Each integration implements only the interfaces it supports. Client creation
 // uses CreateClient() via the factory registry — no switch-statement wiring.
 //
+// IMPORTANT: Only *arr integrations implement MediaSource — enrichment sources
+// (media servers, analytics, request managers) must NEVER provide media items
+// into the evaluation pool. MediaSource implies the integration also implements
+// MediaDeleter and DiskReporter (i.e., it authoritatively manages content).
+//
 // Sonarr, Radarr, Lidarr, Readarr: Connectable + MediaSource + DiskReporter + MediaDeleter + RuleValueFetcher
-// Plex:                             Connectable + MediaSource + WatchDataProvider + WatchlistProvider
+// Plex:                             Connectable + WatchDataProvider + WatchlistProvider
 // Tautulli:                         Connectable + WatchDataProvider
 // Seerr:                            Connectable + RequestProvider
 // Jellyfin, Emby:                   Connectable + WatchDataProvider + WatchlistProvider

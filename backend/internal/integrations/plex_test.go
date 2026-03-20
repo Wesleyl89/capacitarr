@@ -56,7 +56,18 @@ func TestPlexClient_TestConnection_ServerError(t *testing.T) {
 	}
 }
 
-func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
+// TestPlexClient_NotMediaSource verifies that PlexClient does NOT implement MediaSource.
+// This is a design invariant: only *arr integrations should provide media items
+// to the evaluation pool. If this test fails, someone added GetMediaItems() back.
+func TestPlexClient_NotMediaSource(t *testing.T) {
+	client := NewPlexClient("http://localhost", "token")
+	var iface interface{} = client
+	if _, ok := iface.(MediaSource); ok {
+		t.Fatal("PlexClient must NOT implement MediaSource — only *arr integrations should")
+	}
+}
+
+func TestPlexClient_getMediaItems_Movies(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -128,9 +139,9 @@ func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
 	defer srv.Close()
 
 	client := NewPlexClient(srv.URL, "test-token")
-	items, err := client.GetMediaItems()
+	items, err := client.getMediaItems()
 	if err != nil {
-		t.Fatalf("GetMediaItems should succeed: %v", err)
+		t.Fatalf("getMediaItems should succeed: %v", err)
 	}
 
 	if len(items) != 2 {
@@ -180,7 +191,7 @@ func TestPlexClient_GetMediaItems_Movies(t *testing.T) {
 	}
 }
 
-func TestPlexClient_GetMediaItems_ShowLibrary(t *testing.T) {
+func TestPlexClient_getMediaItems_ShowLibrary(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -217,9 +228,9 @@ func TestPlexClient_GetMediaItems_ShowLibrary(t *testing.T) {
 	defer srv.Close()
 
 	client := NewPlexClient(srv.URL, "test-token")
-	items, err := client.GetMediaItems()
+	items, err := client.getMediaItems()
 	if err != nil {
-		t.Fatalf("GetMediaItems should succeed: %v", err)
+		t.Fatalf("getMediaItems should succeed: %v", err)
 	}
 
 	if len(items) != 1 {
@@ -234,7 +245,7 @@ func TestPlexClient_GetMediaItems_ShowLibrary(t *testing.T) {
 	}
 }
 
-func TestPlexClient_GetMediaItems_SkipsNonMediaLibraries(t *testing.T) {
+func TestPlexClient_getMediaItems_SkipsNonMediaLibraries(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -258,9 +269,9 @@ func TestPlexClient_GetMediaItems_SkipsNonMediaLibraries(t *testing.T) {
 	defer srv.Close()
 
 	client := NewPlexClient(srv.URL, "test-token")
-	items, err := client.GetMediaItems()
+	items, err := client.getMediaItems()
 	if err != nil {
-		t.Fatalf("GetMediaItems should succeed with non-media libraries: %v", err)
+		t.Fatalf("getMediaItems should succeed with non-media libraries: %v", err)
 	}
 
 	if len(items) != 0 {
@@ -268,7 +279,7 @@ func TestPlexClient_GetMediaItems_SkipsNonMediaLibraries(t *testing.T) {
 	}
 }
 
-func TestPlexClient_GetMediaItems_EmptyLibrary(t *testing.T) {
+func TestPlexClient_getMediaItems_EmptyLibrary(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -281,16 +292,16 @@ func TestPlexClient_GetMediaItems_EmptyLibrary(t *testing.T) {
 	defer srv.Close()
 
 	client := NewPlexClient(srv.URL, "test-token")
-	items, err := client.GetMediaItems()
+	items, err := client.getMediaItems()
 	if err != nil {
-		t.Fatalf("GetMediaItems should succeed with empty library: %v", err)
+		t.Fatalf("getMediaItems should succeed with empty library: %v", err)
 	}
 	if len(items) != 0 {
 		t.Errorf("Expected 0 items from empty library, got %d", len(items))
 	}
 }
 
-func TestPlexClient_GetMediaItems_MalformedJSON(t *testing.T) {
+func TestPlexClient_getMediaItems_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == testPlexPathSections {
@@ -302,7 +313,7 @@ func TestPlexClient_GetMediaItems_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	client := NewPlexClient(srv.URL, "test-token")
-	_, err := client.GetMediaItems()
+	_, err := client.getMediaItems()
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
 	}
@@ -793,6 +804,109 @@ func TestPlexClient_GetOnDeckItems_APIError(t *testing.T) {
 
 	client := NewPlexClient(srv.URL, "test-token")
 	_, err := client.GetOnDeckItems()
+	if err == nil {
+		t.Fatal("Expected error for API failure")
+	}
+}
+
+func TestPlexClient_GetCollectionNames(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case testPlexPathSections:
+			resp := plexLibraryResponse{}
+			resp.MediaContainer.Directory = []struct {
+				Key   string `json:"key"`
+				Title string `json:"title"`
+				Type  string `json:"type"`
+			}{
+				{Key: "1", Title: "Movies", Type: "movie"},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathMoviesAll:
+			resp := plexMediaResponse{}
+			resp.MediaContainer.Metadata = []plexMetadata{
+				{
+					RatingKey: "101",
+					Title:     "Serenity",
+					Type:      "movie",
+					Collection: []struct {
+						Tag string `json:"tag"`
+					}{{Tag: "Joss Whedon"}, {Tag: "Sci-Fi Classics"}},
+				},
+				{
+					RatingKey: "102",
+					Title:     "Firefly: The Movie",
+					Type:      "movie",
+					Collection: []struct {
+						Tag string `json:"tag"`
+					}{{Tag: "Joss Whedon"}, {Tag: "Space Westerns"}},
+				},
+				{
+					RatingKey: "103",
+					Title:     "No Collections Movie",
+					Type:      "movie",
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	names, err := client.GetCollectionNames()
+	if err != nil {
+		t.Fatalf("GetCollectionNames should succeed: %v", err)
+	}
+
+	// Should be sorted and deduplicated
+	expected := []string{"Joss Whedon", "Sci-Fi Classics", "Space Westerns"}
+	if len(names) != len(expected) {
+		t.Fatalf("Expected %d collection names, got %d: %v", len(expected), len(names), names)
+	}
+	for i, name := range names {
+		if name != expected[i] {
+			t.Errorf("Expected names[%d]=%q, got %q", i, expected[i], name)
+		}
+	}
+}
+
+func TestPlexClient_GetCollectionNames_Empty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case testPlexPathSections:
+			_, _ = w.Write([]byte(`{"MediaContainer":{"Directory":[]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	names, err := client.GetCollectionNames()
+	if err != nil {
+		t.Fatalf("GetCollectionNames should succeed with empty library: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("Expected 0 collection names, got %d", len(names))
+	}
+}
+
+func TestPlexClient_GetCollectionNames_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	_, err := client.GetCollectionNames()
 	if err == nil {
 		t.Fatal("Expected error for API failure")
 	}

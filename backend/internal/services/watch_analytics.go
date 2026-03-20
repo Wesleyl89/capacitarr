@@ -15,8 +15,9 @@ import (
 // stale content). Requires enrichment data from a media server — items
 // without enrichment are excluded to avoid false positives.
 type WatchAnalyticsService struct {
-	preview PreviewDataSource
-	rules   RulesSource
+	preview    PreviewDataSource
+	rules      RulesSource
+	diskGroups DiskGroupLister
 }
 
 // NewWatchAnalyticsService creates a new WatchAnalyticsService.
@@ -28,6 +29,32 @@ func NewWatchAnalyticsService(preview PreviewDataSource) *WatchAnalyticsService 
 // Called by Registry after construction to avoid circular initialization.
 func (s *WatchAnalyticsService) SetRulesSource(rules RulesSource) {
 	s.rules = rules
+}
+
+// SetDiskGroupLister sets the disk group dependency for path-based filtering.
+// Called by Registry after construction to avoid circular initialization.
+func (s *WatchAnalyticsService) SetDiskGroupLister(dg DiskGroupLister) {
+	s.diskGroups = dg
+}
+
+// filterItemsByDiskGroup filters items by disk group mount path.
+// Returns all items if diskGroupID is nil.
+func (s *WatchAnalyticsService) filterItemsByDiskGroup(items []integrations.MediaItem, diskGroupID *uint) []integrations.MediaItem {
+	if diskGroupID == nil || s.diskGroups == nil {
+		return items
+	}
+	group, err := s.diskGroups.GetByID(*diskGroupID)
+	if err != nil {
+		return items
+	}
+	mount := strings.TrimRight(group.MountPath, "/") + "/"
+	filtered := make([]integrations.MediaItem, 0, len(items)/2)
+	for _, item := range items {
+		if strings.HasPrefix(item.Path, mount) || strings.HasPrefix(item.Path, group.MountPath) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 // ─── Dead content ───────────────────────────────────────────────────────────
@@ -52,8 +79,8 @@ type DeadContentReport struct {
 // GetDeadContent returns items with PlayCount == 0, not on watchlist,
 // and added more than minAgeDays ago. Items with always_keep protection
 // are excluded and counted separately.
-func (s *WatchAnalyticsService) GetDeadContent(minAgeDays int) *DeadContentReport {
-	items := s.preview.GetCachedItems()
+func (s *WatchAnalyticsService) GetDeadContent(minAgeDays int, diskGroupID *uint) *DeadContentReport {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 	enabledRules := s.getEnabledRules()
 	now := time.Now()
 	minAge := time.Duration(minAgeDays) * 24 * time.Hour
@@ -130,8 +157,8 @@ type StaleContentReport struct {
 
 // GetStaleContent returns items where LastPlayed > staleDays ago and PlayCount > 0.
 // Items with always_keep protection are excluded and counted separately.
-func (s *WatchAnalyticsService) GetStaleContent(staleDays int) *StaleContentReport {
-	items := s.preview.GetCachedItems()
+func (s *WatchAnalyticsService) GetStaleContent(staleDays int, diskGroupID *uint) *StaleContentReport {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 	enabledRules := s.getEnabledRules()
 	now := time.Now()
 	staleDuration := time.Duration(staleDays) * 24 * time.Hour
@@ -231,8 +258,8 @@ type TreeNode struct {
 //
 // Items of type "show" are skipped (seasons carry the storage data).
 // Items without enrichment data are excluded entirely.
-func (s *WatchAnalyticsService) GetLibraryStatusBreakdown() *StatusBreakdown {
-	items := s.preview.GetCachedItems()
+func (s *WatchAnalyticsService) GetLibraryStatusBreakdown(diskGroupID *uint) *StatusBreakdown {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 	enabledRules := s.getEnabledRules()
 	now := time.Now()
 

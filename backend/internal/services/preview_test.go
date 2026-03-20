@@ -16,7 +16,7 @@ type mockApprovalQueueReader struct {
 	items map[string][]db.ApprovalQueueItem // status → items
 }
 
-func (m *mockApprovalQueueReader) ListQueue(status string, _ int) ([]db.ApprovalQueueItem, error) {
+func (m *mockApprovalQueueReader) ListQueue(status string, _ int, _ *uint) ([]db.ApprovalQueueItem, error) {
 	return m.items[status], nil
 }
 

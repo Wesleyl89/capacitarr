@@ -3,6 +3,7 @@ package services
 import (
 	"math"
 	"sort"
+	"strings"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/engine"
@@ -26,8 +27,9 @@ type RulesSource interface {
 // AnalyticsService provides library composition and quality analytics.
 // All computations run over the in-memory preview cache — no DB queries needed.
 type AnalyticsService struct {
-	preview PreviewDataSource
-	rules   RulesSource
+	preview    PreviewDataSource
+	rules      RulesSource
+	diskGroups DiskGroupLister
 }
 
 // NewAnalyticsService creates a new AnalyticsService.
@@ -39,6 +41,34 @@ func NewAnalyticsService(preview PreviewDataSource) *AnalyticsService {
 // Called by Registry after construction to avoid circular initialization.
 func (s *AnalyticsService) SetRulesSource(rules RulesSource) {
 	s.rules = rules
+}
+
+// SetDiskGroupLister sets the disk group dependency for path-based filtering.
+// Called by Registry after construction to avoid circular initialization.
+func (s *AnalyticsService) SetDiskGroupLister(dg DiskGroupLister) {
+	s.diskGroups = dg
+}
+
+// filterItemsByDiskGroup returns all items if diskGroupID is nil, otherwise
+// filters to items whose Path falls under the disk group's mount path.
+func (s *AnalyticsService) filterItemsByDiskGroup(items []integrations.MediaItem, diskGroupID *uint) []integrations.MediaItem {
+	if diskGroupID == nil || s.diskGroups == nil {
+		return items
+	}
+
+	group, err := s.diskGroups.GetByID(*diskGroupID)
+	if err != nil {
+		return items // Fall back to all items if lookup fails
+	}
+
+	mount := strings.TrimRight(group.MountPath, "/") + "/"
+	filtered := make([]integrations.MediaItem, 0, len(items)/2)
+	for _, item := range items {
+		if strings.HasPrefix(item.Path, mount) || strings.HasPrefix(item.Path, group.MountPath) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 // ─── Quality analytics ──────────────────────────────────────────────────────
@@ -56,8 +86,9 @@ type QualityProfile struct {
 }
 
 // GetQualityDistribution returns detailed quality profile breakdown.
-func (s *AnalyticsService) GetQualityDistribution() *QualityDistribution {
-	items := s.preview.GetCachedItems()
+// When diskGroupID is non-nil, only items on that disk group are included.
+func (s *AnalyticsService) GetQualityDistribution(diskGroupID *uint) *QualityDistribution {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 	profileMap := make(map[string]*QualityProfile)
 
 	for _, item := range items {
@@ -111,8 +142,8 @@ type groupKey struct {
 // GetSizeAnomalies returns items that are > 2x the median size for their
 // (qualityProfile, mediaType) group. Items with always_keep protection are
 // excluded and counted separately.
-func (s *AnalyticsService) GetSizeAnomalies() *SizeAnomalyReport {
-	items := s.preview.GetCachedItems()
+func (s *AnalyticsService) GetSizeAnomalies(diskGroupID *uint) *SizeAnomalyReport {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 	enabledRules := s.getEnabledRules()
 
 	// Group sizes by (qualityProfile, mediaType)
@@ -202,8 +233,8 @@ type SunburstNode struct {
 // Structure: root → [movies, seasons, artists, books, ...] → [quality profiles]
 // Shows are excluded because their SizeBytes is the sum of all seasons —
 // including both would double-count TV storage.
-func (s *AnalyticsService) GetStorageSunburst() []SunburstNode {
-	items := s.preview.GetCachedItems()
+func (s *AnalyticsService) GetStorageSunburst(diskGroupID *uint) []SunburstNode {
+	items := s.filterItemsByDiskGroup(s.preview.GetCachedItems(), diskGroupID)
 
 	// First level: media type → second level: quality profile → size
 	type profileData struct {

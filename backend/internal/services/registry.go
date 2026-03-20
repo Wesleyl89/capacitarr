@@ -110,6 +110,10 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	reg.Analytics.SetRulesSource(reg.Rules)
 	reg.WatchAnalytics.SetRulesSource(reg.Rules)
 
+	// Wire analytics services' disk group lister for per-disk-group filtering
+	reg.Analytics.SetDiskGroupLister(diskGroupSvc)
+	reg.WatchAnalytics.SetDiskGroupLister(diskGroupSvc)
+
 	// Wire DataService's preview dependency for cache clearing on data reset
 	reg.Data.SetPreviewService(previewSvc)
 

@@ -70,7 +70,7 @@ func sampleItems() []integrations.MediaItem {
 func TestAnalyticsService_GetQualityDistribution(t *testing.T) {
 	svc := NewAnalyticsService(&mockPreviewSource{items: sampleItems()})
 
-	data := svc.GetQualityDistribution()
+	data := svc.GetQualityDistribution(nil)
 	if len(data.Profiles) == 0 {
 		t.Error("expected non-empty profiles")
 	}
@@ -93,7 +93,7 @@ func TestAnalyticsService_GetSizeAnomalies(t *testing.T) {
 	}
 
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 
 	if len(report.Items) == 0 {
 		t.Error("expected at least one size anomaly")
@@ -122,7 +122,7 @@ func TestAnalyticsService_GetSizeAnomaliesGroupsByType(t *testing.T) {
 	}
 
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 
 	// No anomalies expected: within each (profile, type) group, no item is > 2x median
 	if len(report.Items) != 0 {
@@ -135,7 +135,7 @@ func TestAnalyticsService_GetSizeAnomaliesGroupsByType(t *testing.T) {
 
 func TestAnalyticsService_GetSizeAnomaliesEmpty(t *testing.T) {
 	svc := NewAnalyticsService(&mockPreviewSource{items: nil})
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 	if len(report.Items) != 0 {
 		t.Errorf("expected 0 anomalies for empty cache, got %d", len(report.Items))
 	}
@@ -156,7 +156,7 @@ func TestAnalyticsService_GetSizeAnomaliesExcludesProtected(t *testing.T) {
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 	if report.ProtectedCount != 1 {
 		t.Errorf("expected 1 protected item, got %d", report.ProtectedCount)
 	}
@@ -186,7 +186,7 @@ func TestAnalyticsService_GetSizeAnomaliesIncludesNonAbsoluteProtection(t *testi
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("prefer_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -204,7 +204,7 @@ func TestAnalyticsService_GetSizeAnomaliesIncludesNonAbsoluteProtection(t *testi
 
 	// Also verify lean_keep
 	rules[0].Effect = "lean_keep"
-	report = svc.GetSizeAnomalies()
+	report = svc.GetSizeAnomalies(nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("lean_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -226,7 +226,7 @@ func TestAnalyticsService_GetSizeAnomaliesIncludesNonAbsoluteProtection(t *testi
 func TestAnalyticsService_GetStorageSunburst(t *testing.T) {
 	svc := NewAnalyticsService(&mockPreviewSource{items: sampleItems()})
 
-	nodes := svc.GetStorageSunburst()
+	nodes := svc.GetStorageSunburst(nil)
 	if len(nodes) == 0 {
 		t.Fatal("expected non-empty sunburst data")
 	}
@@ -249,7 +249,7 @@ func TestAnalyticsService_GetStorageSunburst(t *testing.T) {
 
 func TestAnalyticsService_GetStorageSunburstEmpty(t *testing.T) {
 	svc := NewAnalyticsService(&mockPreviewSource{items: nil})
-	nodes := svc.GetStorageSunburst()
+	nodes := svc.GetStorageSunburst(nil)
 	if len(nodes) != 0 {
 		t.Errorf("expected 0 nodes for empty cache, got %d", len(nodes))
 	}
@@ -263,7 +263,7 @@ func TestAnalyticsService_GetStorageSunburstChildren(t *testing.T) {
 	}
 
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
-	nodes := svc.GetStorageSunburst()
+	nodes := svc.GetStorageSunburst(nil)
 
 	// Only movie type should appear — shows are excluded
 	if len(nodes) != 1 {
@@ -290,7 +290,7 @@ func TestAnalyticsService_GetStorageSunburstExcludesShows(t *testing.T) {
 	}
 
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
-	nodes := svc.GetStorageSunburst()
+	nodes := svc.GetStorageSunburst(nil)
 
 	for _, node := range nodes {
 		if node.Name == "show" {
@@ -325,7 +325,7 @@ func TestAnalyticsService_GetSizeAnomaliesExcludesShows(t *testing.T) {
 	}
 
 	svc := NewAnalyticsService(&mockPreviewSource{items: items})
-	report := svc.GetSizeAnomalies()
+	report := svc.GetSizeAnomalies(nil)
 
 	for _, a := range report.Items {
 		if a.MediaType == "show" {
@@ -340,7 +340,7 @@ func TestWatchAnalyticsService_GetDeadContent(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: sampleItems()})
 
 	// Firefly: PlayCount=0, not on watchlist, added 1 year ago — should be "dead"
-	report := svc.GetDeadContent(90)
+	report := svc.GetDeadContent(90, nil)
 
 	if report.TotalCount == 0 {
 		t.Error("expected at least one dead content item")
@@ -366,7 +366,7 @@ func TestWatchAnalyticsService_GetDeadContentExcludesProtected(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: sampleItems()})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetDeadContent(90)
+	report := svc.GetDeadContent(90, nil)
 
 	// Firefly is protected — should be excluded
 	for _, item := range report.Items {
@@ -402,7 +402,7 @@ func TestWatchAnalyticsService_GetDeadContentIncludesNonAbsoluteProtection(t *te
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: items})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetDeadContent(90)
+	report := svc.GetDeadContent(90, nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("prefer_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -420,7 +420,7 @@ func TestWatchAnalyticsService_GetDeadContentIncludesNonAbsoluteProtection(t *te
 
 	// Also verify lean_keep
 	rules[0].Effect = "lean_keep"
-	report = svc.GetDeadContent(90)
+	report = svc.GetDeadContent(90, nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("lean_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -440,7 +440,7 @@ func TestWatchAnalyticsService_GetDeadContentIncludesNonAbsoluteProtection(t *te
 func TestWatchAnalyticsService_GetStaleContent(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: sampleItems()})
 
-	report := svc.GetStaleContent(90)
+	report := svc.GetStaleContent(90, nil)
 
 	// Serenity and The Expanse were watched 180 days ago — stale if threshold is 90 days
 	if report.TotalCount == 0 {
@@ -456,7 +456,7 @@ func TestWatchAnalyticsService_GetStaleContentExcludesProtected(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: sampleItems()})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetStaleContent(90)
+	report := svc.GetStaleContent(90, nil)
 
 	for _, item := range report.Items {
 		if item.Title == "Serenity" {
@@ -491,7 +491,7 @@ func TestWatchAnalyticsService_GetStaleContentIncludesNonAbsoluteProtection(t *t
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: items})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	report := svc.GetStaleContent(90)
+	report := svc.GetStaleContent(90, nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("prefer_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -509,7 +509,7 @@ func TestWatchAnalyticsService_GetStaleContentIncludesNonAbsoluteProtection(t *t
 
 	// Also verify lean_keep
 	rules[0].Effect = "lean_keep"
-	report = svc.GetStaleContent(90)
+	report = svc.GetStaleContent(90, nil)
 	if report.ProtectedCount != 0 {
 		t.Errorf("lean_keep should not increment protectedCount, got %d", report.ProtectedCount)
 	}
@@ -528,7 +528,7 @@ func TestWatchAnalyticsService_GetStaleContentIncludesNonAbsoluteProtection(t *t
 
 func TestWatchAnalyticsService_GetDeadContentEmpty(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: nil})
-	report := svc.GetDeadContent(90)
+	report := svc.GetDeadContent(90, nil)
 	if report.TotalCount != 0 {
 		t.Errorf("expected 0 dead items for empty cache, got %d", report.TotalCount)
 	}
@@ -584,7 +584,7 @@ func statusBreakdownItems() []integrations.MediaItem {
 func TestWatchAnalyticsService_GetLibraryStatusBreakdown(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: statusBreakdownItems()})
 
-	result := svc.GetLibraryStatusBreakdown()
+	result := svc.GetLibraryStatusBreakdown(nil)
 
 	if len(result.Statuses) != 4 {
 		t.Fatalf("expected 4 status groups, got %d", len(result.Statuses))
@@ -647,7 +647,7 @@ func TestWatchAnalyticsService_GetLibraryStatusBreakdownPriority(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: items})
 	svc.SetRulesSource(&mockRulesSource{rules: rules})
 
-	result := svc.GetLibraryStatusBreakdown()
+	result := svc.GetLibraryStatusBreakdown(nil)
 
 	statusMap := make(map[string]*StatusGroup)
 	for i := range result.Statuses {
@@ -678,7 +678,7 @@ func TestWatchAnalyticsService_GetLibraryStatusBreakdownSkipsShows(t *testing.T)
 	}
 
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: items})
-	result := svc.GetLibraryStatusBreakdown()
+	result := svc.GetLibraryStatusBreakdown(nil)
 
 	totalItems := 0
 	for _, s := range result.Statuses {
@@ -691,7 +691,7 @@ func TestWatchAnalyticsService_GetLibraryStatusBreakdownSkipsShows(t *testing.T)
 
 func TestWatchAnalyticsService_GetLibraryStatusBreakdownEmpty(t *testing.T) {
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: nil})
-	result := svc.GetLibraryStatusBreakdown()
+	result := svc.GetLibraryStatusBreakdown(nil)
 
 	if len(result.Statuses) != 4 {
 		t.Fatalf("expected 4 status groups even with empty data, got %d", len(result.Statuses))
@@ -730,7 +730,7 @@ func TestWatchAnalyticsService_GetLibraryStatusBreakdownMediaTypeGrouping(t *tes
 	}
 
 	svc := NewWatchAnalyticsService(&mockPreviewSource{items: items})
-	result := svc.GetLibraryStatusBreakdown()
+	result := svc.GetLibraryStatusBreakdown(nil)
 
 	statusMap := make(map[string]*StatusGroup)
 	for i := range result.Statuses {

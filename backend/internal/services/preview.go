@@ -30,14 +30,16 @@ type RulesProvider interface {
 
 // DiskGroupLister provides read access to disk groups.
 // Defined here to avoid import cycles between PreviewService and DiskGroupService.
+// Used by PreviewService (List), AnalyticsService, and WatchAnalyticsService (GetByID).
 type DiskGroupLister interface {
 	List() ([]db.DiskGroup, error)
+	GetByID(id uint) (*db.DiskGroup, error)
 }
 
 // ApprovalQueueReader provides read access to approval queue items.
 // Defined here to avoid import cycles between PreviewService and ApprovalService.
 type ApprovalQueueReader interface {
-	ListQueue(status string, limit int) ([]db.ApprovalQueueItem, error)
+	ListQueue(status string, limit int, diskGroupID *uint) ([]db.ApprovalQueueItem, error)
 }
 
 // DeletionStateReader provides read access to the current deletion state.
@@ -329,7 +331,7 @@ func (s *PreviewService) EnrichWithQueueStatus(items []engine.EvaluatedItem) {
 
 	if s.approvalQueue != nil {
 		// Fetch pending items
-		pending, err := s.approvalQueue.ListQueue(db.StatusPending, 10000)
+		pending, err := s.approvalQueue.ListQueue(db.StatusPending, 10000, nil)
 		if err != nil {
 			slog.Warn("Failed to fetch pending approval queue for enrichment", "component", "preview", "error", err)
 		} else {
@@ -340,7 +342,7 @@ func (s *PreviewService) EnrichWithQueueStatus(items []engine.EvaluatedItem) {
 		}
 
 		// Fetch approved items
-		approved, err := s.approvalQueue.ListQueue(db.StatusApproved, 10000)
+		approved, err := s.approvalQueue.ListQueue(db.StatusApproved, 10000, nil)
 		if err != nil {
 			slog.Warn("Failed to fetch approved approval queue for enrichment", "component", "preview", "error", err)
 		} else {

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -73,6 +72,7 @@ func (s *IntegrationService) CloseCache() {
 
 // FetchCollectionValues returns collection names from all enabled Plex integrations.
 // Results are cached with the standard TTL. The returned slice is sorted alphabetically.
+// Uses PlexClient.GetCollectionNames() which handles deduplication and sorting internally.
 func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, error) {
 	const cacheKey = "global:collections"
 
@@ -87,6 +87,7 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 		return nil, fmt.Errorf("failed to list enabled integrations: %w", err)
 	}
 
+	// Collect unique collection names across all Plex integrations.
 	seen := make(map[string]bool)
 	for _, cfg := range configs {
 		if cfg.Type != string(integrations.IntegrationTypePlex) {
@@ -94,20 +95,15 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 		}
 
 		client := integrations.NewPlexClient(cfg.URL, cfg.APIKey)
-		items, fetchErr := client.GetMediaItems()
+		names, fetchErr := client.GetCollectionNames()
 		if fetchErr != nil {
-			slog.Warn("Failed to fetch Plex items for collection values",
+			slog.Warn("Failed to fetch Plex collection names",
 				"component", "integration_service", "integrationId", cfg.ID, "error", fetchErr)
 			continue
 		}
 
-		for _, item := range items {
-			for _, col := range item.Collections {
-				name := strings.TrimSpace(col)
-				if name != "" {
-					seen[name] = true
-				}
-			}
+		for _, name := range names {
+			seen[name] = true
 		}
 	}
 

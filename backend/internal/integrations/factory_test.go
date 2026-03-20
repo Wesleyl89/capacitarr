@@ -94,8 +94,8 @@ func TestCreateClient_PlexCapabilities(t *testing.T) {
 	if _, ok := client.(WatchlistProvider); !ok {
 		t.Error("plex client should implement WatchlistProvider")
 	}
-	if _, ok := client.(MediaSource); !ok {
-		t.Error("plex client should implement MediaSource")
+	if _, ok := client.(MediaSource); ok {
+		t.Error("plex client must NOT implement MediaSource — only *arr integrations should")
 	}
 }
 
