@@ -175,12 +175,15 @@ func TestApprovalDedup_SingleEntry(t *testing.T) {
 	}
 }
 
-// TestEvaluateAndCleanDisk_BelowThreshold_ClearsQueue verifies that when disk
-// usage is below the threshold, evaluateAndCleanDisk clears pending and rejected
+// TestBelowThreshold_ClearsQueue verifies that when ALL disk groups are below
+// threshold, the orchestration-level ClearQueue removes pending and rejected
 // approval queue items but preserves approved items (mid-deletion).
-func TestEvaluateAndCleanDisk_BelowThreshold_ClearsQueue(t *testing.T) {
+// ClearQueue is called at the orchestration level (poll loop), NOT inside
+// evaluateAndCleanDisk, to avoid cross-contamination when multiple disk groups
+// have different threshold states.
+func TestBelowThreshold_ClearsQueue(t *testing.T) {
 	database, reg := setupEvaluateTestDB(t)
-	p := New(reg)
+	_ = New(reg)
 
 	integrationID := uint(1)
 
@@ -213,22 +216,18 @@ func TestEvaluateAndCleanDisk_BelowThreshold_ClearsQueue(t *testing.T) {
 		t.Fatalf("Failed to create approved item: %v", err)
 	}
 
-	// Create a disk group that is BELOW threshold (50% used, 80% threshold)
-	group := db.DiskGroup{
-		MountPath:    "/data",
-		TotalBytes:   100000,
-		UsedBytes:    50000,
-		ThresholdPct: 80.0,
-		TargetPct:    70.0,
+	// Simulate the orchestration-level ClearQueue that runs when all disks
+	// are below threshold (moved OUT of evaluateAndCleanDisk to prevent
+	// cross-contamination between disk groups)
+	cleared, err := reg.Approval.ClearQueue()
+	if err != nil {
+		t.Fatalf("ClearQueue failed: %v", err)
+	}
+	if cleared != 2 {
+		t.Errorf("expected 2 items cleared (pending + rejected), got %d", cleared)
 	}
 
-	// Call evaluateAndCleanDisk — should trigger ClearQueue since below threshold
-	result := p.evaluateAndCleanDisk(group, nil, nil, 0, db.PreferenceSet{}, nil)
-	if result != 0 {
-		t.Errorf("expected 0 deletions queued, got %d", result)
-	}
-
-	// Verify: pending and rejected items are deleted
+	// Verify: pending and rejected items are deleted, approved preserved
 	var remaining []db.ApprovalQueueItem
 	database.Find(&remaining)
 	if len(remaining) != 1 {
@@ -239,6 +238,52 @@ func TestEvaluateAndCleanDisk_BelowThreshold_ClearsQueue(t *testing.T) {
 	}
 	if remaining[0].MediaName != "Firefly - Season 1" {
 		t.Errorf("expected remaining item to be 'Firefly - Season 1', got %q", remaining[0].MediaName)
+	}
+}
+
+// TestEvaluateAndCleanDisk_BelowThreshold_NoLongerClearsQueue verifies that
+// evaluateAndCleanDisk does NOT call ClearQueue when a disk group is below
+// threshold. Queue clearing is now handled at the orchestration level to prevent
+// cross-contamination between disk groups.
+func TestEvaluateAndCleanDisk_BelowThreshold_NoLongerClearsQueue(t *testing.T) {
+	database, reg := setupEvaluateTestDB(t)
+	p := New(reg)
+
+	integrationID := uint(1)
+
+	// Seed a pending approval queue item
+	pending := db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", Reason: "Score: 0.85",
+		SizeBytes: 5000, IntegrationID: integrationID, ExternalID: "1",
+		Status: db.StatusPending,
+	}
+	if err := database.Create(&pending).Error; err != nil {
+		t.Fatalf("Failed to create pending item: %v", err)
+	}
+
+	// Create a disk group that is BELOW threshold (50% used, 80% threshold)
+	group := db.DiskGroup{
+		MountPath:    "/data",
+		TotalBytes:   100000,
+		UsedBytes:    50000,
+		ThresholdPct: 80.0,
+		TargetPct:    70.0,
+	}
+
+	// Call evaluateAndCleanDisk — should NOT clear the queue
+	result := p.evaluateAndCleanDisk(group, nil, nil, 0, db.PreferenceSet{}, nil)
+	if result != 0 {
+		t.Errorf("expected 0 deletions queued, got %d", result)
+	}
+
+	// Verify: pending item is PRESERVED (not cleared)
+	var remaining []db.ApprovalQueueItem
+	database.Find(&remaining)
+	if len(remaining) != 1 {
+		t.Fatalf("expected 1 item preserved (queue not cleared per-disk-group), got %d", len(remaining))
+	}
+	if remaining[0].MediaName != "Firefly" {
+		t.Errorf("expected preserved item to be 'Firefly', got %q", remaining[0].MediaName)
 	}
 }
 

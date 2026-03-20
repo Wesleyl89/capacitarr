@@ -25,6 +25,7 @@ import (
 	"capacitarr/internal/config"
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
+	"capacitarr/internal/integrations"
 	"capacitarr/internal/jobs"
 	"capacitarr/internal/logger"
 	"capacitarr/internal/migration"
@@ -244,6 +245,12 @@ func main() {
 	sseBroadcaster.Start()
 
 	slog.Info("Event bus started (partial)", "component", "main", "subscribers", "sse_broadcaster")
+
+	// ─── Integration Factories ────────────────────────────────────────────
+	// Register factories early so they're available for both the startup
+	// self-test (which calls CreateClient directly) and the poller's
+	// BuildIntegrationRegistry. RegisterAllFactories is idempotent.
+	integrations.RegisterAllFactories()
 
 	// ─── Service Registry ──────────────────────────────────────────────────
 	reg := services.NewRegistry(database, bus, cfg)

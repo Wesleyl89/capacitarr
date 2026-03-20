@@ -178,10 +178,27 @@ func (p *Poller) poll() {
 	mediaMounts := findMediaMounts(fetched.diskMap, fetched.rootFolders)
 
 	// Update DiskGroups and record history only for media mounts
+	slog.Info("Processing disk groups", "component", "poller",
+		"mediaMounts", len(mediaMounts), "executionMode", prefs.ExecutionMode)
+
 	var totalDeletionsQueued int
+	anyThresholdBreached := false
 	for mountPath := range mediaMounts {
 		disk := fetched.diskMap[mountPath]
 		usedBytes := disk.TotalBytes - disk.FreeBytes
+
+		effectiveTotal := disk.TotalBytes
+		usedPct := float64(0)
+		if effectiveTotal > 0 {
+			usedPct = float64(usedBytes) / float64(effectiveTotal) * 100
+		}
+
+		slog.Info("Evaluating disk group", "component", "poller",
+			"mount", mountPath,
+			"totalBytes", disk.TotalBytes,
+			"usedBytes", usedBytes,
+			"usedPct", fmt.Sprintf("%.1f%%", usedPct),
+			"freeBytes", disk.FreeBytes)
 
 		// Upsert DiskGroup via service
 		group, upsertErr := p.reg.DiskGroup.Upsert(disk)
@@ -192,6 +209,15 @@ func (p *Poller) poll() {
 		// Ensure local struct has latest values for threshold check
 		group.TotalBytes = disk.TotalBytes
 		group.UsedBytes = usedBytes
+
+		// Track threshold breaches across all disk groups
+		groupEffective := group.EffectiveTotalBytes()
+		if groupEffective > 0 {
+			groupPct := float64(group.UsedBytes) / float64(groupEffective) * 100
+			if groupPct >= group.ThresholdPct {
+				anyThresholdBreached = true
+			}
+		}
 
 		// Sync integration links for this disk group
 		if intIDs, ok := fetched.mountIntegrations[mountPath]; ok {
@@ -209,6 +235,19 @@ func (p *Poller) poll() {
 
 		// Evaluate and trigger cleanup if threshold breached
 		totalDeletionsQueued += p.evaluateAndCleanDisk(*group, fetched.allItems, fetched.registry, runStatsID, prefs, rules)
+	}
+
+	// Clear the approval queue only when ALL disk groups are below threshold.
+	// Previously, ClearQueue was called per-disk-group inside evaluateAndCleanDisk,
+	// which could wipe items added by an above-threshold disk group when a different
+	// below-threshold disk group was processed afterward (map iteration is unordered).
+	if !anyThresholdBreached && len(mediaMounts) > 0 {
+		if cleared, err := p.reg.Approval.ClearQueue(); err != nil {
+			slog.Error("Failed to clear approval queue", "component", "poller", "error", err)
+		} else if cleared > 0 {
+			slog.Info("Approval queue cleared (all disks below threshold)",
+				"component", "poller", "clearedCount", cleared)
+		}
 	}
 
 	// Clean up orphaned disk groups that are no longer media mounts.

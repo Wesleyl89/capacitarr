@@ -21,6 +21,9 @@ import (
 func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integrations.MediaItem, registry *integrations.IntegrationRegistry, runStatsID uint, prefs db.PreferenceSet, rules []db.CustomRule) int {
 	effectiveTotal := group.EffectiveTotalBytes()
 	if effectiveTotal == 0 {
+		slog.Warn("Disk group effective total is 0, skipping evaluation",
+			"component", "poller", "mount", group.MountPath,
+			"totalBytes", group.TotalBytes, "override", group.TotalBytesOverride)
 		return 0
 	}
 	currentPct := float64(group.UsedBytes) / float64(effectiveTotal) * 100
@@ -28,13 +31,6 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 		slog.Debug("Disk within threshold, no action needed", "component", "poller",
 			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
 			"threshold", group.ThresholdPct)
-
-		// Clear all pending and rejected items when below threshold — the queue
-		// should only contain current, actionable candidates. Approved items
-		// (mid-deletion) and force-delete items are preserved.
-		if _, err := p.reg.Approval.ClearQueue(); err != nil {
-			slog.Error("Failed to clear approval queue", "component", "poller", "error", err)
-		}
 
 		// Process any force-delete items even when below threshold
 		forceQueued := p.processForceDeletes(registry, runStatsID)
@@ -61,6 +57,22 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 		}
 	}
 
+	if len(diskItems) == 0 {
+		slog.Warn("No items matched disk mount path — approval queue cannot be populated",
+			"component", "poller", "mount", group.MountPath,
+			"normalizedMount", normalizedMount, "totalItems", len(allItems))
+		if len(allItems) > 0 {
+			sampleCount := 3
+			if len(allItems) < sampleCount {
+				sampleCount = len(allItems)
+			}
+			for i := 0; i < sampleCount; i++ {
+				slog.Debug("Sample item path for mount mismatch diagnosis",
+					"component", "poller", "itemPath", normalizePath(allItems[i].Path),
+					"mount", normalizedMount)
+			}
+		}
+	}
 	slog.Debug("Items on disk mount", "component", "poller",
 		"mount", group.MountPath, "itemCount", len(diskItems))
 
@@ -78,11 +90,23 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 
 	targetBytesToFree := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
 	if targetBytesToFree <= 0 {
+		slog.Warn("Target bytes to free is zero or negative, skipping evaluation",
+			"component", "poller", "mount", group.MountPath,
+			"currentPct", fmt.Sprintf("%.1f", currentPct),
+			"targetPct", group.TargetPct,
+			"targetBytesToFree", targetBytesToFree)
 		return 0
 	}
 
 	// Get deletion candidates from the evaluator result
 	candidates := evalResult.CandidatesForDeletion(targetBytesToFree)
+
+	slog.Info("Candidate selection for approval/deletion", "component", "poller",
+		"mount", group.MountPath,
+		"executionMode", prefs.ExecutionMode,
+		"totalCandidates", len(evalResult.Candidates),
+		"selectedCandidates", len(candidates),
+		"targetBytesToFree", targetBytesToFree)
 
 	// Pre-build set of shows that have season-level entries in the candidates.
 	// When season entries exist, prefer them over show-level entries so each season
@@ -96,12 +120,16 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 
 	var bytesFreed int64
 	var deletionsQueued int
+	var skippedZeroScore int
+	var skippedDedup int
+	var skippedSnoozed int
 
 	for _, ev := range candidates {
 		if bytesFreed >= targetBytesToFree {
 			break
 		}
 		if ev.IsProtected || ev.Score <= 0 {
+			skippedZeroScore++
 			continue
 		}
 
@@ -109,6 +137,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 		// Season entries allow granular per-season approval and deletion.
 		if ev.Item.Type == integrations.MediaTypeShow {
 			if showsWithSeasons[ev.Item.Title] {
+				skippedDedup++
 				continue
 			}
 		}
@@ -143,6 +172,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 		} else if prefs.ExecutionMode == "approval" {
 			// Skip items that are currently snoozed (rejected with an active snooze window)
 			if p.reg.Approval.IsSnoozed(ev.Item.Title, string(ev.Item.Type)) {
+				skippedSnoozed++
 				slog.Debug("Skipping snoozed item", "component", "poller", "media", ev.Item.Title)
 				continue
 			}
@@ -203,6 +233,18 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 		atomic.AddInt64(&p.lastRunFreedBytes, ev.Item.SizeBytes)
 		slog.Info("Engine action taken", "component", "poller",
 			"media", ev.Item.Title, "action", db.ActionDryRun, "score", ev.Score, "freed", ev.Item.SizeBytes)
+	}
+
+	// Diagnostic summary: log when candidates were found but all were skipped
+	if len(candidates) > 0 && deletionsQueued == 0 && atomic.LoadInt64(&p.lastRunFlagged) == 0 {
+		slog.Warn("All candidates were skipped — nothing flagged for approval/deletion",
+			"component", "poller", "mount", group.MountPath,
+			"executionMode", prefs.ExecutionMode,
+			"candidates", len(candidates),
+			"skippedZeroScore", skippedZeroScore,
+			"skippedDedup", skippedDedup,
+			"skippedSnoozed", skippedSnoozed,
+			"bytesFreedSoFar", bytesFreed)
 	}
 
 	return deletionsQueued
