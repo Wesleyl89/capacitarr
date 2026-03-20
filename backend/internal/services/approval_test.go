@@ -545,7 +545,7 @@ func TestApprovalService_BulkUnsnooze(t *testing.T) {
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
 
-	count, err := svc.BulkUnsnooze()
+	count, err := svc.BulkUnsnooze(nil)
 	if err != nil {
 		t.Fatalf("BulkUnsnooze returned error: %v", err)
 	}
@@ -576,7 +576,7 @@ func TestApprovalService_BulkUnsnooze_NoSnoozed(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewApprovalService(database, bus)
 
-	count, err := svc.BulkUnsnooze()
+	count, err := svc.BulkUnsnooze(nil)
 	if err != nil {
 		t.Fatalf("BulkUnsnooze returned error: %v", err)
 	}
@@ -699,7 +699,7 @@ func TestApprovalService_ListQueue(t *testing.T) {
 	})
 
 	// All items
-	items, err := svc.ListQueue("", 100)
+	items, err := svc.ListQueue("", 100, nil)
 	if err != nil {
 		t.Fatalf("ListQueue returned error: %v", err)
 	}
@@ -708,7 +708,7 @@ func TestApprovalService_ListQueue(t *testing.T) {
 	}
 
 	// Filter by status
-	pendingItems, err := svc.ListQueue("pending", 100)
+	pendingItems, err := svc.ListQueue("pending", 100, nil)
 	if err != nil {
 		t.Fatalf("ListQueue(pending) returned error: %v", err)
 	}
@@ -731,7 +731,7 @@ func TestApprovalService_ListQueue_Limit(t *testing.T) {
 		})
 	}
 
-	items, err := svc.ListQueue("", 3)
+	items, err := svc.ListQueue("", 3, nil)
 	if err != nil {
 		t.Fatalf("ListQueue returned error: %v", err)
 	}

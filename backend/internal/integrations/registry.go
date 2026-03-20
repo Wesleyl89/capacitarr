@@ -38,6 +38,11 @@ func NewIntegrationRegistry() *IntegrationRegistry {
 
 // Register adds an integration client to the registry, automatically detecting
 // which capability interfaces it implements. The integrationID is the DB primary key.
+//
+// INVARIANT: If a client implements MediaSource, it should also implement MediaDeleter
+// and DiskReporter. A MediaSource without MediaDeleter means items enter the evaluation
+// pool but can never be deleted — this is a misconfiguration. Only *arr integrations
+// (Sonarr, Radarr, Lidarr, Readarr) should implement MediaSource.
 func (r *IntegrationRegistry) Register(integrationID uint, client interface{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -49,6 +54,11 @@ func (r *IntegrationRegistry) Register(integrationID uint, client interface{}) {
 		registered++
 	}
 	if c, ok := client.(MediaSource); ok {
+		// Warn if a MediaSource doesn't also implement MediaDeleter — likely a bug.
+		if _, hasDeleter := client.(MediaDeleter); !hasDeleter {
+			slog.Warn("Integration implements MediaSource but not MediaDeleter — items will enter evaluation but cannot be deleted",
+				"component", "registry", "integrationID", integrationID)
+		}
 		r.mediaSources[integrationID] = c
 		registered++
 	}

@@ -174,6 +174,7 @@ func (s *ApprovalService) UpsertPending(item db.ApprovalQueueItem) (bool, error)
 			"poster_url":     item.PosterURL,
 			"integration_id": item.IntegrationID,
 			"external_id":    item.ExternalID,
+			"disk_group_id":  item.DiskGroupID,
 			"updated_at":     now,
 		}).Error; err != nil {
 			return false, fmt.Errorf("failed to update pending entry: %w", err)
@@ -191,25 +192,35 @@ func (s *ApprovalService) UpsertPending(item db.ApprovalQueueItem) (bool, error)
 }
 
 // IsSnoozed checks if a media item is currently snoozed (rejected with an active snooze window).
-func (s *ApprovalService) IsSnoozed(mediaName, mediaType string) bool {
+// When diskGroupID is non-nil, the check is scoped to that specific disk group.
+func (s *ApprovalService) IsSnoozed(mediaName, mediaType string, diskGroupID ...uint) bool {
 	var count int64
-	s.db.Model(&db.ApprovalQueueItem{}).Where(
+	query := s.db.Model(&db.ApprovalQueueItem{}).Where(
 		"media_name = ? AND media_type = ? AND status = ? AND snoozed_until IS NOT NULL AND snoozed_until > ?",
 		mediaName, mediaType, db.StatusRejected, time.Now().UTC(),
-	).Count(&count)
+	)
+	if len(diskGroupID) > 0 {
+		query = query.Where("disk_group_id = ?", diskGroupID[0])
+	}
+	query.Count(&count)
 	return count > 0
 }
 
 // BulkUnsnooze clears all active snoozes and resets items to pending.
-// This is called when disk usage drops below threshold.
-func (s *ApprovalService) BulkUnsnooze() (int, error) {
-	result := s.db.Model(&db.ApprovalQueueItem{}).
-		Where("status = ? AND snoozed_until IS NOT NULL", db.StatusRejected).
-		Updates(map[string]any{
-			"status":        db.StatusPending,
-			"snoozed_until": nil,
-			"updated_at":    time.Now().UTC(),
-		})
+// When diskGroupID is non-nil, only items for that disk group are unsnoozed.
+func (s *ApprovalService) BulkUnsnooze(diskGroupID *uint) (int, error) {
+	query := s.db.Model(&db.ApprovalQueueItem{}).
+		Where("status = ? AND snoozed_until IS NOT NULL", db.StatusRejected)
+
+	if diskGroupID != nil {
+		query = query.Where("disk_group_id = ?", *diskGroupID)
+	}
+
+	result := query.Updates(map[string]any{
+		"status":        db.StatusPending,
+		"snoozed_until": nil,
+		"updated_at":    time.Now().UTC(),
+	})
 
 	if result.Error != nil {
 		return 0, fmt.Errorf("failed to bulk unsnooze: %w", result.Error)
@@ -273,13 +284,41 @@ func (s *ApprovalService) ClearQueue() (int, error) {
 	return count, nil
 }
 
-// ListQueue returns approval queue items filtered by optional status and capped to limit.
-func (s *ApprovalService) ListQueue(status string, limit int) ([]db.ApprovalQueueItem, error) {
+// ClearQueueForDiskGroup removes pending and rejected items for a specific disk group.
+// Like ClearQueue, approved items and force-delete items are preserved.
+func (s *ApprovalService) ClearQueueForDiskGroup(diskGroupID uint) (int, error) {
+	result := s.db.Where(
+		"status IN ? AND force_delete = ? AND disk_group_id = ?",
+		[]string{string(db.StatusPending), string(db.StatusRejected)},
+		false,
+		diskGroupID,
+	).Delete(&db.ApprovalQueueItem{})
+
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to clear approval queue for disk group %d: %w", diskGroupID, result.Error)
+	}
+
+	count := int(result.RowsAffected)
+	if count > 0 {
+		s.bus.Publish(events.ApprovalQueueClearedEvent{Count: count})
+		slog.Info("Approval queue cleared for disk group (disk below threshold)",
+			"component", "services", "diskGroupID", diskGroupID, "count", count)
+	}
+
+	return count, nil
+}
+
+// ListQueue returns approval queue items filtered by optional status and disk group,
+// capped to limit. Pass diskGroupID=nil to list across all disk groups.
+func (s *ApprovalService) ListQueue(status string, limit int, diskGroupID *uint) ([]db.ApprovalQueueItem, error) {
 	items := make([]db.ApprovalQueueItem, 0, limit)
 	query := s.db.Model(&db.ApprovalQueueItem{})
 
 	if status != "" {
 		query = query.Where("status = ?", status)
+	}
+	if diskGroupID != nil {
+		query = query.Where("disk_group_id = ?", *diskGroupID)
 	}
 
 	if err := query.Order("created_at desc").Limit(limit).Find(&items).Error; err != nil {

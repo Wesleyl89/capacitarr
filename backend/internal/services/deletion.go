@@ -24,8 +24,9 @@ type DeleteJob struct {
 	Reason      string
 	Score       float64
 	Factors     []engine.ScoreFactor
-	RunStatsID  uint // Engine run stats row to increment Deleted counter
-	ForceDryRun bool // When true, skip actual deletion even if DeletionsEnabled=true
+	RunStatsID  uint  // Engine run stats row to increment Deleted counter
+	DiskGroupID *uint // Disk group that triggered this deletion (nil for force-deletes)
+	ForceDryRun bool  // When true, skip actual deletion even if DeletionsEnabled=true
 }
 
 // DeleteJobSummary is a serialisable snapshot of a queued deletion job,
@@ -221,11 +222,12 @@ func (s *DeletionService) processJob(job DeleteJob) {
 		s.batchSucceeded.Add(1)
 
 		logEntry := db.AuditLogEntry{
-			MediaName: job.Item.Title,
-			MediaType: string(job.Item.Type),
-			Reason:    "Cancelled by user",
-			Action:    db.ActionCancelled,
-			SizeBytes: job.Item.SizeBytes,
+			MediaName:   job.Item.Title,
+			MediaType:   string(job.Item.Type),
+			Reason:      "Cancelled by user",
+			Action:      db.ActionCancelled,
+			SizeBytes:   job.Item.SizeBytes,
+			DiskGroupID: job.DiskGroupID,
 		}
 		if err := s.auditLog.Create(logEntry); err != nil {
 			slog.Error("Failed to create audit log entry", "component", "services", "error", err)
@@ -267,6 +269,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 			Action:       db.ActionDryDelete,
 			SizeBytes:    job.Item.SizeBytes,
 			Score:        job.Score,
+			DiskGroupID:  job.DiskGroupID,
 		}
 		if err := s.auditLog.Create(logEntry); err != nil {
 			slog.Error("Failed to create audit log entry", "component", "services", "error", err)
@@ -321,6 +324,7 @@ func (s *DeletionService) processJob(job DeleteJob) {
 		Action:       db.ActionDeleted,
 		SizeBytes:    job.Item.SizeBytes,
 		Score:        job.Score,
+		DiskGroupID:  job.DiskGroupID,
 	}
 	if err := s.auditLog.Create(logEntry); err != nil {
 		slog.Error("Failed to create audit log entry", "component", "services", "error", err)

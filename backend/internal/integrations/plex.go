@@ -3,11 +3,14 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
 
-// PlexClient implements Connectable, MediaSource, WatchDataProvider, and WatchlistProvider for Plex Media Server.
+// PlexClient implements Connectable, WatchDataProvider, and WatchlistProvider for Plex Media Server.
+// PlexClient intentionally does NOT implement MediaSource — only *arr integrations (which also
+// implement MediaDeleter and DiskReporter) should provide media items to the evaluation pool.
 type PlexClient struct {
 	URL   string
 	Token string `json:"-"` // X-Plex-Token
@@ -83,8 +86,11 @@ type plexMetadata struct {
 	LeafCount int `json:"leafCount,omitempty"` // episode count (for shows/seasons)
 }
 
-// GetMediaItems fetches all movies, shows, and seasons from all Plex libraries.
-func (p *PlexClient) GetMediaItems() ([]MediaItem, error) {
+// getMediaItems fetches all movies, shows, and seasons from all Plex libraries.
+// This method is unexported to prevent PlexClient from satisfying the MediaSource interface.
+// Only *arr integrations should implement MediaSource. Internal callers (GetBulkWatchData,
+// GetCollectionNames) use this method for enrichment data extraction.
+func (p *PlexClient) getMediaItems() ([]MediaItem, error) {
 	// 1. Get all library sections
 	body, err := p.doRequest("/library/sections")
 	if err != nil {
@@ -243,7 +249,7 @@ type PlexLibrarySection struct {
 // a map from normalized (lowercase) title to watch data. This allows enriching
 // *arr items with Plex watch history by title matching.
 func (p *PlexClient) GetBulkWatchData() (map[string]*WatchData, error) {
-	items, err := p.GetMediaItems()
+	items, err := p.getMediaItems()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Plex items: %w", err)
 	}
@@ -300,13 +306,41 @@ func (p *PlexClient) GetOnDeckItems() (map[string]bool, error) {
 	return result, nil
 }
 
+// GetCollectionNames returns a sorted, deduplicated list of collection names
+// from all Plex libraries. This is used by FetchCollectionValues() to provide
+// autocomplete options for collection-based rules without exposing GetMediaItems
+// (which would make PlexClient satisfy MediaSource).
+func (p *PlexClient) GetCollectionNames() ([]string, error) {
+	items, err := p.getMediaItems()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Plex items for collections: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	for _, item := range items {
+		for _, col := range item.Collections {
+			name := strings.TrimSpace(col)
+			if name != "" {
+				seen[name] = true
+			}
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 // GetWatchlistItems implements WatchlistProvider by returning Plex on-deck items.
 func (p *PlexClient) GetWatchlistItems() (map[string]bool, error) {
 	return p.GetOnDeckItems()
 }
 
 // Verify PlexClient satisfies capability interfaces at compile time.
+// Note: PlexClient intentionally does NOT implement MediaSource — only *arr integrations should.
 var _ Connectable = (*PlexClient)(nil)
-var _ MediaSource = (*PlexClient)(nil)
 var _ WatchDataProvider = (*PlexClient)(nil)
 var _ WatchlistProvider = (*PlexClient)(nil)

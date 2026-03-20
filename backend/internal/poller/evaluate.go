@@ -155,13 +155,15 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 			}
 
 			// Queue for background deletion via DeletionService
+			diskGroupID := group.ID
 			if err := p.reg.Deletion.QueueDeletion(services.DeleteJob{
-				Client:     deleter,
-				Item:       ev.Item,
-				Reason:     ev.Reason,
-				Score:      ev.Score,
-				Factors:    ev.Factors,
-				RunStatsID: runStatsID,
+				Client:      deleter,
+				Item:        ev.Item,
+				Reason:      ev.Reason,
+				Score:       ev.Score,
+				Factors:     ev.Factors,
+				RunStatsID:  runStatsID,
+				DiskGroupID: &diskGroupID,
 			}); err != nil {
 				slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", ev.Item.Title)
 				continue
@@ -171,7 +173,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 			continue // Skip the synchronous DB insert below, worker handles it
 		} else if prefs.ExecutionMode == "approval" {
 			// Skip items that are currently snoozed (rejected with an active snooze window)
-			if p.reg.Approval.IsSnoozed(ev.Item.Title, string(ev.Item.Type)) {
+			if p.reg.Approval.IsSnoozed(ev.Item.Title, string(ev.Item.Type), group.ID) {
 				skippedSnoozed++
 				slog.Debug("Skipping snoozed item", "component", "poller", "media", ev.Item.Title)
 				continue
@@ -183,6 +185,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				slog.Error("Failed to marshal score factors", "component", "poller", "error", marshalErr)
 				factorsJSON = []byte("[]")
 			}
+			diskGroupID := group.ID
 			if _, err := p.reg.Approval.UpsertPending(db.ApprovalQueueItem{
 				MediaName:     ev.Item.Title,
 				MediaType:     string(ev.Item.Type),
@@ -193,6 +196,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				PosterURL:     ev.Item.PosterURL,
 				IntegrationID: ev.Item.IntegrationID,
 				ExternalID:    ev.Item.ExternalID,
+				DiskGroupID:   &diskGroupID,
 			}); err != nil {
 				slog.Error("Failed to upsert approval queue item", "component", "poller", "media", ev.Item.Title, "error", err)
 				continue
@@ -213,6 +217,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 			factorsJSON = []byte("[]")
 		}
 		integrationID := ev.Item.IntegrationID
+		diskGroupID := group.ID
 		logEntry := db.AuditLogEntry{
 			MediaName:     ev.Item.Title,
 			MediaType:     string(ev.Item.Type),
@@ -222,6 +227,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 			SizeBytes:     ev.Item.SizeBytes,
 			Score:         ev.Score,
 			IntegrationID: &integrationID,
+			DiskGroupID:   &diskGroupID,
 		}
 
 		if err := p.reg.AuditLog.UpsertDryRun(logEntry); err != nil {

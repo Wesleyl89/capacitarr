@@ -80,7 +80,7 @@ func BenchmarkAnalyticsService_GetQualityDistribution_10K(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		svc.GetQualityDistribution()
+		svc.GetQualityDistribution(nil)
 	}
 }
 
@@ -92,7 +92,7 @@ func BenchmarkAnalyticsService_GetSizeAnomalies_10K(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		svc.GetSizeAnomalies()
+		svc.GetSizeAnomalies(nil)
 	}
 }
 
@@ -104,7 +104,7 @@ func BenchmarkWatchAnalytics_GetDeadContent_10K(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		svc.GetDeadContent(90)
+		svc.GetDeadContent(90, nil)
 	}
 }
 
@@ -116,7 +116,7 @@ func BenchmarkWatchAnalytics_GetStaleContent_10K(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		svc.GetStaleContent(180)
+		svc.GetStaleContent(180, nil)
 	}
 }
 
@@ -129,10 +129,10 @@ func BenchmarkAnalytics_AllEndpoints_10K(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		analytics.GetQualityDistribution()
-		analytics.GetSizeAnomalies()
-		watchAnalytics.GetDeadContent(90)
-		watchAnalytics.GetStaleContent(180)
+		analytics.GetQualityDistribution(nil)
+		analytics.GetSizeAnomalies(nil)
+		watchAnalytics.GetDeadContent(90, nil)
+		watchAnalytics.GetStaleContent(180, nil)
 	}
 }
 
@@ -145,10 +145,10 @@ func TestAnalytics_Performance_10K(t *testing.T) {
 
 	start := time.Now()
 
-	analytics.GetQualityDistribution()
-	analytics.GetSizeAnomalies()
-	watchAnalytics.GetDeadContent(90)
-	watchAnalytics.GetStaleContent(180)
+	analytics.GetQualityDistribution(nil)
+	analytics.GetSizeAnomalies(nil)
+	watchAnalytics.GetDeadContent(90, nil)
+	watchAnalytics.GetStaleContent(180, nil)
 
 	elapsed := time.Since(start)
 	if elapsed > 1*time.Second {
@@ -165,10 +165,10 @@ func TestAnalytics_Performance_1K(t *testing.T) {
 
 	start := time.Now()
 
-	analytics.GetQualityDistribution()
-	analytics.GetSizeAnomalies()
-	watchAnalytics.GetDeadContent(90)
-	watchAnalytics.GetStaleContent(180)
+	analytics.GetQualityDistribution(nil)
+	analytics.GetSizeAnomalies(nil)
+	watchAnalytics.GetDeadContent(90, nil)
+	watchAnalytics.GetStaleContent(180, nil)
 
 	elapsed := time.Since(start)
 	if elapsed > 500*time.Millisecond {

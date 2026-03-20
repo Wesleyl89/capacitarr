@@ -9,6 +9,18 @@ import (
 	"capacitarr/internal/services"
 )
 
+// parseDiskGroupID extracts an optional disk_group_id query parameter.
+// Returns nil if not provided or invalid.
+func parseDiskGroupID(c echo.Context) *uint {
+	if dgStr := c.QueryParam("disk_group_id"); dgStr != "" {
+		if parsed, err := strconv.ParseUint(dgStr, 10, 64); err == nil {
+			dgID := uint(parsed)
+			return &dgID
+		}
+	}
+	return nil
+}
+
 // RegisterAnalyticsRoutes registers all analytics-related endpoints.
 func RegisterAnalyticsRoutes(g *echo.Group, reg *services.Registry) {
 	g.GET("/analytics/quality", analyticsQualityHandler(reg))
@@ -22,14 +34,14 @@ func RegisterAnalyticsRoutes(g *echo.Group, reg *services.Registry) {
 
 func analyticsQualityHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		data := reg.Analytics.GetQualityDistribution()
+		data := reg.Analytics.GetQualityDistribution(parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }
 
 func analyticsBloatHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		data := reg.Analytics.GetSizeAnomalies()
+		data := reg.Analytics.GetSizeAnomalies(parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }
@@ -42,7 +54,7 @@ func analyticsDeadContentHandler(reg *services.Registry) echo.HandlerFunc {
 				minDays = parsed
 			}
 		}
-		data := reg.WatchAnalytics.GetDeadContent(minDays)
+		data := reg.WatchAnalytics.GetDeadContent(minDays, parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }
@@ -55,14 +67,14 @@ func analyticsStaleContentHandler(reg *services.Registry) echo.HandlerFunc {
 				staleDays = parsed
 			}
 		}
-		data := reg.WatchAnalytics.GetStaleContent(staleDays)
+		data := reg.WatchAnalytics.GetStaleContent(staleDays, parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }
 
 // analyticsForecastHandler returns capacity forecast data based on linear
-// regression of recent usage history. Uses the first disk group's settings
-// for threshold and capacity values.
+// regression of recent usage history. Accepts an optional disk_group_id
+// query parameter; defaults to the most degraded (highest usage %) disk group.
 func analyticsForecastHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		groups, err := reg.DiskGroup.List()
@@ -78,12 +90,49 @@ func analyticsForecastHandler(reg *services.Registry) echo.HandlerFunc {
 			})
 		}
 
-		// Use the first disk group for threshold and capacity
-		group := groups[0]
-		totalCapacity := group.EffectiveTotalBytes()
-		usedCapacity := group.UsedBytes
+		// Determine which disk group to use for forecast
+		var group *services.DiskGroupForForecast
+		if dgID := parseDiskGroupID(c); dgID != nil {
+			// Use the specified disk group
+			for i := range groups {
+				if groups[i].ID == *dgID {
+					eff := groups[i].EffectiveTotalBytes()
+					group = &services.DiskGroupForForecast{
+						ID:            groups[i].ID,
+						ThresholdPct:  groups[i].ThresholdPct,
+						TotalCapacity: eff,
+						UsedCapacity:  groups[i].UsedBytes,
+					}
+					break
+				}
+			}
+			if group == nil {
+				return apiError(c, http.StatusNotFound, "Disk group not found")
+			}
+		} else {
+			// Default to the most degraded group (highest usage percentage)
+			bestIdx := 0
+			bestPct := 0.0
+			for i, g := range groups {
+				eff := g.EffectiveTotalBytes()
+				if eff > 0 {
+					pct := float64(g.UsedBytes) / float64(eff) * 100
+					if pct > bestPct {
+						bestPct = pct
+						bestIdx = i
+					}
+				}
+			}
+			eff := groups[bestIdx].EffectiveTotalBytes()
+			group = &services.DiskGroupForForecast{
+				ID:            groups[bestIdx].ID,
+				ThresholdPct:  groups[bestIdx].ThresholdPct,
+				TotalCapacity: eff,
+				UsedCapacity:  groups[bestIdx].UsedBytes,
+			}
+		}
 
-		forecast, err := reg.Metrics.GetCapacityForecast(group.ThresholdPct, totalCapacity, usedCapacity)
+		forecast, err := reg.Metrics.GetCapacityForecast(group.ThresholdPct, group.TotalCapacity, group.UsedCapacity)
 		if err != nil {
 			return apiError(c, http.StatusInternalServerError, "Failed to compute forecast")
 		}
@@ -96,7 +145,7 @@ func analyticsForecastHandler(reg *services.Registry) echo.HandlerFunc {
 // sunburst chart: media type → quality profile → size.
 func analyticsStorageBreakdownHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		data := reg.Analytics.GetStorageSunburst()
+		data := reg.Analytics.GetStorageSunburst(parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }
@@ -105,7 +154,7 @@ func analyticsStorageBreakdownHandler(reg *services.Registry) echo.HandlerFunc {
 // status (dead, stale, protected, active), grouped by media type within each bucket.
 func analyticsStatusBreakdownHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		data := reg.WatchAnalytics.GetLibraryStatusBreakdown()
+		data := reg.WatchAnalytics.GetLibraryStatusBreakdown(parseDiskGroupID(c))
 		return c.JSON(http.StatusOK, data)
 	}
 }

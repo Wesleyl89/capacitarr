@@ -27,7 +27,17 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		status := c.QueryParam("status")
-		items, err := reg.Approval.ListQueue(status, limit)
+
+		// Optional disk group filter
+		var diskGroupID *uint
+		if dgStr := c.QueryParam("disk_group_id"); dgStr != "" {
+			if parsed, err := strconv.ParseUint(dgStr, 10, 64); err == nil {
+				dgID := uint(parsed)
+				diskGroupID = &dgID
+			}
+		}
+
+		items, err := reg.Approval.ListQueue(status, limit, diskGroupID)
 		if err != nil {
 			return apiError(c, http.StatusInternalServerError, "Failed to fetch approval queue")
 		}

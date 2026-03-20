@@ -176,6 +176,7 @@ CREATE TABLE approval_queue (
     poster_url     TEXT    NOT NULL DEFAULT '',             -- Poster image URL from *arr
     integration_id INTEGER NOT NULL REFERENCES integration_configs(id) ON DELETE CASCADE,
     external_id    TEXT    NOT NULL DEFAULT '',
+    disk_group_id  INTEGER REFERENCES disk_groups(id) ON DELETE SET NULL,
     status         TEXT    NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
     force_delete   INTEGER NOT NULL DEFAULT 0,             -- Bypass disk threshold — delete on next engine run
     snoozed_until  DATETIME,
@@ -184,6 +185,7 @@ CREATE TABLE approval_queue (
 );
 CREATE INDEX idx_approval_queue_status ON approval_queue(status);
 CREATE INDEX idx_approval_queue_media ON approval_queue(media_name, media_type);
+CREATE INDEX idx_approval_queue_disk_group_id ON approval_queue(disk_group_id);
 CREATE INDEX idx_approval_queue_snoozed ON approval_queue(snoozed_until)
     WHERE snoozed_until IS NOT NULL;
 
@@ -201,11 +203,13 @@ CREATE TABLE audit_log (
     size_bytes     INTEGER NOT NULL DEFAULT 0,
     score          REAL    NOT NULL DEFAULT 0,
     integration_id INTEGER REFERENCES integration_configs(id) ON DELETE SET NULL,
+    disk_group_id  INTEGER REFERENCES disk_groups(id) ON DELETE SET NULL,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_audit_log_media_name ON audit_log(media_name);
 CREATE INDEX idx_audit_log_action ON audit_log(action);
 CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+CREATE INDEX idx_audit_log_disk_group_id ON audit_log(disk_group_id);
 
 -- ============================================================================
 -- Engine Run Stats
