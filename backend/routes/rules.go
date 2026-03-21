@@ -35,6 +35,24 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 		return c.JSON(http.StatusOK, impact)
 	})
 
+	// Rule context — combined data for the rule editor (fields + values + rule)
+	protected.GET("/custom-rules/:id/context", func(c echo.Context) error {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			return apiError(c, http.StatusBadRequest, "Invalid ID")
+		}
+
+		ctx, err := reg.Rules.GetRuleContext(uint(id))
+		if err != nil {
+			if errors.Is(err, services.ErrRuleNotFound) {
+				return apiError(c, http.StatusNotFound, "Rule not found")
+			}
+			slog.Error("Failed to get rule context", "component", "api", "id", id, "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to get rule context")
+		}
+		return c.JSON(http.StatusOK, ctx)
+	})
+
 	// ---------------------------------------------------------
 	// CUSTOM RULES (protection/targeting)
 	// ---------------------------------------------------------

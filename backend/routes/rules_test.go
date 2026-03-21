@@ -325,6 +325,56 @@ func TestUpdateProtection_ValidationError(t *testing.T) {
 	}
 }
 
+// ---------- GET /api/custom-rules/:id/context ----------
+
+func TestGetRuleContext_Success(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	rule := seedRule(t, database, "title", "contains", "Firefly", "always_keep", 0)
+
+	path := fmt.Sprintf("/api/custom-rules/%d/context", rule.ID)
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Should always have the rule
+	ruleData, ok := result["rule"].(map[string]any)
+	if !ok {
+		t.Fatal("Expected 'rule' object in response")
+	}
+	if ruleData["value"] != "Firefly" {
+		t.Errorf("Expected rule value 'Firefly', got %v", ruleData["value"])
+	}
+
+	// Fields should be present (may be empty if no integration provider, but field should exist)
+	if _, ok := result["fields"]; !ok {
+		t.Error("Expected 'fields' key in response")
+	}
+}
+
+func TestGetRuleContext_NotFound(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	req := testutil.AuthenticatedRequest(t, http.MethodGet, "/api/custom-rules/99999/context", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // ---------- DELETE /api/custom-rules/:id ----------
 
 func TestDeleteProtection_Existing(t *testing.T) {

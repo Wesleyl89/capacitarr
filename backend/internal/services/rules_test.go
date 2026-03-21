@@ -536,3 +536,60 @@ func TestRulesService_GetFieldDefinitions_UnfilteredWithoutSonarr(t *testing.T) 
 		}
 	}
 }
+
+// ---------- GetRuleContext ----------
+
+func TestRulesService_GetRuleContext_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	_, err := svc.GetRuleContext(99999)
+	if err == nil {
+		t.Error("Expected error for non-existent rule")
+	}
+	if !errors.Is(err, ErrRuleNotFound) {
+		t.Errorf("Expected ErrRuleNotFound, got: %v", err)
+	}
+}
+
+func TestRulesService_GetRuleContext_NoIntegrationProvider(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+	// Don't call SetIntegrationProvider — it's nil
+
+	// Create a rule without an integration ID (nil) so no FK constraint issues
+	rule := db.CustomRule{Field: "title", Operator: "contains", Value: "Firefly", Effect: "always_keep", Enabled: true}
+	database.Create(&rule)
+
+	ctx, err := svc.GetRuleContext(rule.ID)
+	if err != nil {
+		t.Fatalf("GetRuleContext returned error: %v", err)
+	}
+	if ctx.Rule.ID != rule.ID {
+		t.Errorf("Expected rule ID %d, got %d", rule.ID, ctx.Rule.ID)
+	}
+	// Fields and values should be empty since integration is nil
+	if len(ctx.Fields) != 0 {
+		t.Errorf("Expected 0 fields without integration, got %d", len(ctx.Fields))
+	}
+}
+
+func TestRulesService_GetRuleContext_NilIntegrationID(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	// Rule with nil integration ID
+	rule := db.CustomRule{Field: "title", Operator: "contains", Value: "Firefly", Effect: "always_keep", Enabled: true}
+	database.Create(&rule)
+
+	ctx, err := svc.GetRuleContext(rule.ID)
+	if err != nil {
+		t.Fatalf("GetRuleContext returned error: %v", err)
+	}
+	if ctx.Rule.Value != "Firefly" {
+		t.Errorf("Expected value 'Firefly', got %q", ctx.Rule.Value)
+	}
+}
