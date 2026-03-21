@@ -18,11 +18,21 @@ var ErrRuleNotFound = errors.New("rule not found")
 // ErrRuleValidation is returned when a rule fails input validation.
 var ErrRuleValidation = errors.New("rule validation failed")
 
+// IntegrationContextProvider provides integration metadata needed for
+// building rule context (field definitions + value options). Defined here
+// to avoid import cycles between RulesService and IntegrationService.
+type IntegrationContextProvider interface {
+	GetByID(id uint) (*db.IntegrationConfig, error)
+	DetectEnrichment() EnrichmentPresence
+	FetchRuleValues(integrationID uint, action string) (any, error)
+}
+
 // RulesService manages custom rule CRUD and reordering.
 type RulesService struct {
-	db      *gorm.DB
-	bus     *events.EventBus
-	preview PreviewDataSource // optional, for rule impact preview
+	db           *gorm.DB
+	bus          *events.EventBus
+	preview      PreviewDataSource          // optional, for rule impact preview
+	integrations IntegrationContextProvider // optional, for rule context endpoint
 }
 
 // NewRulesService creates a new RulesService.
@@ -33,6 +43,12 @@ func NewRulesService(database *gorm.DB, bus *events.EventBus) *RulesService {
 // SetPreviewSource sets the preview data source for rule impact calculations.
 func (s *RulesService) SetPreviewSource(preview PreviewDataSource) {
 	s.preview = preview
+}
+
+// SetIntegrationProvider wires the integration context provider for
+// GetRuleContext(). Called from NewRegistry() after both services are created.
+func (s *RulesService) SetIntegrationProvider(provider IntegrationContextProvider) {
+	s.integrations = provider
 }
 
 // List returns all custom rules ordered by sort_order ASC, id ASC.
@@ -293,4 +309,59 @@ func appendEnrichmentFieldDefs(fields []FieldDef, p EnrichmentPresence) []FieldD
 		)
 	}
 	return fields
+}
+
+// RuleContext contains all data needed to prepopulate the rule editor for
+// an existing rule. Returns field definitions, value options, and the rule
+// itself in a single response to minimize round-trips.
+type RuleContext struct {
+	Rule   db.CustomRule `json:"rule"`
+	Fields []FieldDef    `json:"fields"`
+	Values any           `json:"values,omitempty"`
+}
+
+// GetRuleContext returns the rule, its available field definitions, and value
+// options/suggestions for the rule's current field. This provides all data the
+// frontend needs to prepopulate the rule editor in a single round-trip.
+func (s *RulesService) GetRuleContext(id uint) (*RuleContext, error) {
+	var rule db.CustomRule
+	if err := s.db.First(&rule, id).Error; err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRuleNotFound, err)
+	}
+
+	if s.integrations == nil || rule.IntegrationID == nil {
+		// No integration provider wired or rule has no integration — return rule with empty fields/values
+		return &RuleContext{Rule: rule}, nil
+	}
+
+	integrationID := *rule.IntegrationID
+
+	// Look up the integration to determine the service type
+	config, err := s.integrations.GetByID(integrationID)
+	if err != nil {
+		slog.Warn("Failed to get integration for rule context", "ruleId", id, "integrationId", integrationID, "error", err)
+		// Still return the rule — fields/values are nice-to-have
+		return &RuleContext{Rule: rule}, nil
+	}
+
+	enrichment := s.integrations.DetectEnrichment()
+	fields := s.GetFieldDefinitions(config.Type, enrichment)
+
+	// Fetch value options for the current field
+	var values any
+	if rule.Field != "" {
+		ruleValues, valErr := s.integrations.FetchRuleValues(integrationID, rule.Field)
+		if valErr != nil {
+			slog.Warn("Failed to fetch rule values for context", "ruleId", id, "field", rule.Field, "error", valErr)
+			// Non-fatal — values are nice-to-have for prepopulation
+		} else {
+			values = ruleValues
+		}
+	}
+
+	return &RuleContext{
+		Rule:   rule,
+		Fields: fields,
+		Values: values,
+	}, nil
 }
