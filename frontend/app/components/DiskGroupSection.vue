@@ -5,79 +5,113 @@
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
     class="overflow-hidden"
   >
-    <!-- Header with progress -->
-    <UiCardContent class="pt-5 pb-0">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <div
-            class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-            :class="statusBgColor"
-          >
-            <component :is="HardDriveIcon" class="w-5 h-5 text-white" />
+    <UiCardContent class="pt-5 pb-4">
+      <!-- Top row: icon + path + badges -->
+      <div class="flex items-start gap-3 mb-4">
+        <div
+          class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+          :class="statusBgColor"
+        >
+          <component :is="HardDriveIcon" class="w-5 h-5 text-white" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h3 class="font-semibold text-sm truncate" :title="group.mountPath">
+              {{ group.mountPath }}
+            </h3>
+            <UiBadge
+              v-for="integ in group.integrations || []"
+              :key="integ.id"
+              variant="outline"
+              class="text-[10px] px-1.5 py-0"
+            >
+              {{ integ.type }}
+            </UiBadge>
           </div>
-          <div>
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <h3 class="font-semibold text-sm truncate" :title="group.mountPath">
-                {{ group.mountPath }}
-              </h3>
-              <UiBadge
-                v-for="integ in group.integrations || []"
-                :key="integ.id"
-                variant="outline"
-                class="text-[10px] px-1.5 py-0"
-              >
-                {{ integ.type }}
-              </UiBadge>
-            </div>
-            <span class="text-xs text-muted-foreground">
-              {{ formatBytes(group.usedBytes) }} / {{ formatBytes(effectiveTotalBytes) }}
-              <UiBadge
-                v-if="hasOverride"
-                variant="outline"
-                class="ml-1 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600"
-                :title="`Detected: ${formatBytes(group.totalBytes)}, Custom: ${formatBytes(effectiveTotalBytes)}`"
-              >
-                📌 Custom
-              </UiBadge>
+          <span class="text-xs text-muted-foreground">
+            {{ formatBytes(group.usedBytes) }} / {{ formatBytes(effectiveTotalBytes) }}
+            <UiBadge
+              v-if="hasOverride"
+              variant="outline"
+              class="ml-1 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600"
+              :title="`Detected: ${formatBytes(group.totalBytes)}, Custom: ${formatBytes(effectiveTotalBytes)}`"
+            >
+              📌 Custom
+            </UiBadge>
+          </span>
+        </div>
+      </div>
+
+      <!-- Gauge + Stats layout -->
+      <div class="flex items-center gap-4">
+        <!-- ECharts Gauge Arc -->
+        <div
+          class="shrink-0"
+          :class="{ 'gauge-critical': rawUsagePct >= (group.thresholdPct || 85) }"
+          style="width: 160px; height: 120px"
+        >
+          <ClientOnly>
+            <VChart :option="gaugeOption" :autoresize="true" class="h-full w-full" />
+          </ClientOnly>
+        </div>
+
+        <!-- Stats panel (right side) -->
+        <div class="flex-1 min-w-0 space-y-2">
+          <!-- Free space -->
+          <div class="flex items-center gap-2">
+            <component :is="HardDriveIcon" class="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span class="text-sm text-muted-foreground">
+              {{ formatBytes(effectiveTotalBytes - group.usedBytes) }} free
             </span>
           </div>
-        </div>
-        <span class="text-2xl font-bold tabular-nums" :class="statusTextColor">
-          {{ usagePercent }}%
-        </span>
-      </div>
-    </UiCardContent>
 
-    <!-- Dual-Grid Chart: Bar + Sparkline -->
-    <UiCardContent class="pt-3 pb-3">
-      <div
-        :class="{ 'thermometer-critical': rawUsagePct >= (group.thresholdPct || 85) }"
-        :style="{ height: historyData.length > 0 ? '120px' : '48px' }"
-      >
-        <ClientOnly>
-          <VChart :option="chartOption" :autoresize="true" class="h-full w-full" />
-        </ClientOnly>
-      </div>
+          <!-- Growth rate -->
+          <div
+            v-if="forecastData && forecastData.growthRatePerDay !== 0"
+            class="flex items-center gap-2"
+          >
+            <component
+              :is="forecastData.growthRatePerDay > 0 ? TrendingUpIcon : TrendingDownIcon"
+              class="w-3.5 h-3.5 shrink-0"
+              :class="forecastData.growthRatePerDay > 0 ? 'text-destructive' : 'text-emerald-500'"
+            />
+            <span class="text-sm text-muted-foreground">
+              {{ forecastData.growthRatePerDay > 0 ? '+' : ''
+              }}{{ formatBytes(Math.abs(forecastData.growthRatePerDay)) }}/day
+            </span>
+          </div>
 
-      <!-- Free space -->
-      <div class="flex items-center justify-between mt-1">
-        <span class="text-xs text-muted-foreground">
-          {{ formatBytes(effectiveTotalBytes - group.usedBytes) }} free
-          <span v-if="hasOverride" class="ml-1 text-muted-foreground/50">
+          <!-- Days until full -->
+          <div
+            v-if="forecastData && forecastData.daysUntilFull > 0"
+            class="flex items-center gap-2"
+          >
+            <component :is="ClockIcon" class="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span
+              class="text-sm"
+              :class="
+                forecastData.daysUntilFull <= 7
+                  ? 'text-destructive font-medium'
+                  : 'text-muted-foreground'
+              "
+            >
+              Full in ~{{ forecastData.daysUntilFull }}d
+            </span>
+          </div>
+
+          <!-- Override note -->
+          <div v-if="hasOverride" class="text-[10px] text-muted-foreground/50">
             (detected: {{ formatBytes(group.totalBytes) }})
-          </span>
-        </span>
-        <span v-if="historyData.length > 0" class="text-[10px] text-muted-foreground/50">
-          {{ dateRangeLabel }}
-        </span>
+          </div>
+        </div>
       </div>
     </UiCardContent>
   </UiCard>
 </template>
 
 <script setup lang="ts">
-import { HardDriveIcon } from 'lucide-vue-next';
-import { formatBytes, diskStatusBgClass, diskStatusTextClass } from '~/utils/format';
+import { HardDriveIcon, TrendingUpIcon, TrendingDownIcon, ClockIcon } from 'lucide-vue-next';
+import { formatBytes, diskStatusBgClass } from '~/utils/format';
 import type { DiskGroup } from '~/types/api';
 
 const props = defineProps<{
@@ -88,8 +122,7 @@ const props = defineProps<{
 
 const api = useApi();
 
-const { successColor, destructiveColor, tooltipConfig, colorAlpha, glowLineStyle, gradientArea } =
-  useEChartsDefaults();
+const { destructiveColor, successColor, colorAlpha } = useEChartsDefaults();
 
 /** Effective total bytes — override if set, otherwise API-detected. */
 const effectiveTotalBytes = computed(() => {
@@ -109,18 +142,11 @@ const rawUsagePct = computed(() => {
   return (props.group.usedBytes / effectiveTotalBytes.value) * 100;
 });
 
-/** Rounded display percentage. */
-const usagePercent = computed(() => Math.round(rawUsagePct.value));
-
 const statusBgColor = computed(() =>
   diskStatusBgClass(rawUsagePct.value, props.group.targetPct, props.group.thresholdPct),
 );
 
-const statusTextColor = computed(() =>
-  diskStatusTextClass(rawUsagePct.value, props.group.targetPct, props.group.thresholdPct),
-);
-
-// --- Forecast data for tooltip ---
+// --- Forecast data ---
 interface CapacityForecast {
   currentUsedPct: number;
   growthRatePerDay: number;
@@ -138,80 +164,19 @@ async function fetchForecast() {
       `/api/v1/analytics/forecast?disk_group_id=${props.group.id}`,
     )) as CapacityForecast;
   } catch {
-    // Non-critical — tooltip will just show usage without forecast
-  }
-}
-
-// --- Historical usage data for sparkline ---
-interface HistoryEntry {
-  timestamp: string;
-  totalCapacity: number;
-  usedCapacity: number;
-}
-
-const historyData = ref<HistoryEntry[]>([]);
-
-/** Map date range to appropriate API resolution */
-function historyResolution(range: string): string {
-  switch (range) {
-    case '1h':
-    case '6h':
-      return 'raw';
-    case '24h':
-    case '7d':
-      return 'hourly';
-    case '30d':
-      return 'daily';
-    default:
-      return 'daily';
-  }
-}
-
-/** Human-readable label for the current date range */
-const dateRangeLabel = computed(() => {
-  const range = props.dateRange ?? '24h';
-  const labels: Record<string, string> = {
-    '1h': 'last 1h',
-    '6h': 'last 6h',
-    '24h': 'last 24h',
-    '7d': 'last 7d',
-    '30d': 'last 30d',
-    all: 'all time',
-  };
-  return labels[range] ?? range;
-});
-
-async function fetchHistory() {
-  const range = props.dateRange ?? '24h';
-  const resolution = historyResolution(range);
-  try {
-    const url =
-      range === 'all'
-        ? `/api/v1/metrics/history?disk_group_id=${props.group.id}&resolution=${resolution}`
-        : `/api/v1/metrics/history?disk_group_id=${props.group.id}&resolution=${resolution}&since=${range}`;
-    const resp = (await api(url)) as { data: HistoryEntry[] };
-    historyData.value = resp.data ?? [];
-  } catch {
-    // Non-critical — chart will show bar only without sparkline
+    // Non-critical
   }
 }
 
 onMounted(() => {
   fetchForecast();
-  fetchHistory();
 });
-
-// Re-fetch history when date range changes
-watch(
-  () => props.dateRange,
-  () => fetchHistory(),
-);
 
 // --- Zone colors ---
 const targetPct = computed(() => props.group.targetPct || 75);
 const thresholdPct = computed(() => props.group.thresholdPct || 85);
 
-/** Determine the zone color pair (lighter, saturated) for the gradient fill. */
+/** Determine the zone color pair for the gradient fill. */
 const zoneGradient = computed(() => {
   const pct = rawUsagePct.value;
   if (pct >= thresholdPct.value) {
@@ -235,261 +200,124 @@ const zoneGradient = computed(() => {
   };
 });
 
-/** Sparkline data: usage % over time */
-const sparklineData = computed(() =>
-  historyData.value.map((h) => {
-    const total = h.totalCapacity > 0 ? h.totalCapacity : 1;
-    return [new Date(h.timestamp).getTime(), (h.usedCapacity / total) * 100];
-  }),
-);
-
-/**
- * Adaptive y-axis range for the sparkline.
- * Instead of fixed 0–100, compute a range that shows meaningful variation.
- * Includes target/threshold lines and adds 5% padding on each side.
- */
-const sparklineYRange = computed(() => {
-  const data = sparklineData.value;
-  if (data.length === 0) return { min: 0, max: 100 };
-
-  const values = data.map((d) => d[1] as number);
-  const dataMin = Math.min(...values);
-  const dataMax = Math.max(...values);
-  const tgt = targetPct.value;
-  const thr = thresholdPct.value;
-
-  // Include target and threshold in the visible range
-  const rangeMin = Math.min(dataMin, tgt, thr);
-  const rangeMax = Math.max(dataMax, tgt, thr);
-
-  // Add 5% padding (at least 2 percentage points)
-  const span = rangeMax - rangeMin;
-  const padding = Math.max(span * 0.15, 2);
-
-  return {
-    min: Math.max(0, Math.floor(rangeMin - padding)),
-    max: Math.min(100, Math.ceil(rangeMax + padding)),
-  };
-});
-
-// --- ECharts dual-grid option ---
-const chartOption = computed(() => {
+// --- ECharts Gauge Option ---
+const gaugeOption = computed(() => {
   const usage = Math.round(rawUsagePct.value * 10) / 10;
   const tgtPct = targetPct.value;
   const thrPct = thresholdPct.value;
   const grad = zoneGradient.value;
-  const usedBytes = props.group.usedBytes;
-  const totalBytes = effectiveTotalBytes.value;
-  const forecast = forecastData.value;
-  const hasHistory = sparklineData.value.length > 0;
-
-  // Build tooltip content for bar
-  const barTooltipFormatter = () => {
-    let html = `<div style="font-size:12px">`;
-    html += `<strong>${formatBytes(usedBytes)} / ${formatBytes(totalBytes)}</strong> · ${usage}%`;
-    if (forecast) {
-      if (forecast.growthRatePerDay > 0) {
-        html += `<br/><span style="opacity:0.7">Growth: +${formatBytes(forecast.growthRatePerDay)}/day</span>`;
-      } else if (forecast.growthRatePerDay < 0) {
-        html += `<br/><span style="opacity:0.7">Shrinking: ${formatBytes(Math.abs(forecast.growthRatePerDay))}/day</span>`;
-      }
-      if (forecast.daysUntilFull > 0) {
-        html += `<br/><span style="opacity:0.7">Full in ~${forecast.daysUntilFull} days</span>`;
-      }
-    }
-    html += `</div>`;
-    return html;
-  };
-
-  const grids = hasHistory
-    ? [
-        { top: 4, height: 20, left: 16, right: 16 }, // Bar
-        { top: 36, bottom: 4, left: 16, right: 16 }, // Sparkline
-      ]
-    : [{ top: 10, bottom: 10, left: 16, right: 16 }]; // Bar only
-
-  const xAxes = hasHistory
-    ? [
-        { gridIndex: 0, type: 'value' as const, min: 0, max: 100, show: false },
-        { gridIndex: 1, type: 'time' as const, show: false },
-      ]
-    : [{ gridIndex: 0, type: 'value' as const, min: 0, max: 100, show: false }];
-
-  const yRange = sparklineYRange.value;
-  const yAxes = hasHistory
-    ? [
-        { gridIndex: 0, type: 'category' as const, data: ['usage'], show: false },
-        {
-          gridIndex: 1,
-          type: 'value' as const,
-          min: yRange.min,
-          max: yRange.max,
-          show: false,
-        },
-      ]
-    : [{ gridIndex: 0, type: 'category' as const, data: ['usage'], show: false }];
-
-  // Bar series (always present)
-  const barSeries = [
-    // Zone backgrounds
-    {
-      name: 'zones',
-      type: 'bar',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      stack: 'bg',
-      barWidth: hasHistory ? 16 : 24,
-      silent: true,
-      barGap: '-100%',
-      z: 1,
-      data: [tgtPct],
-      itemStyle: { color: colorAlpha('#10b981', 0.08), borderRadius: [0, 0, 0, 0] },
-    },
-    {
-      name: 'zones-amber',
-      type: 'bar',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      stack: 'bg',
-      barWidth: hasHistory ? 16 : 24,
-      silent: true,
-      barGap: '-100%',
-      z: 1,
-      data: [thrPct - tgtPct],
-      itemStyle: { color: colorAlpha('#f59e0b', 0.08), borderRadius: [0, 0, 0, 0] },
-    },
-    {
-      name: 'zones-red',
-      type: 'bar',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      stack: 'bg',
-      barWidth: hasHistory ? 16 : 24,
-      silent: true,
-      barGap: '-100%',
-      z: 1,
-      data: [100 - thrPct],
-      itemStyle: { color: colorAlpha('#ef4444', 0.08), borderRadius: [0, 6, 6, 0] },
-    },
-    // Usage fill bar — no markLine (thresholds are on the sparkline now)
-    {
-      name: 'usage',
-      type: 'bar',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      barWidth: hasHistory ? 16 : 24,
-      z: 2,
-      data: [usage],
-      itemStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 1,
-          y2: 0,
-          colorStops: [
-            { offset: 0, color: grad.light },
-            { offset: 1, color: grad.saturated },
-          ],
-        },
-        borderRadius: [0, 6, 6, 0],
-        shadowBlur: 12,
-        shadowColor: colorAlpha(grad.glow, 0.5),
-        shadowOffsetX: 4,
-      },
-    },
-  ];
-
-  // Sparkline series (only when history data exists)
-  const sparklineSeries = hasHistory
-    ? [
-        {
-          name: 'usage-trend',
-          type: 'line',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            ...glowLineStyle(grad.saturated),
-            width: 1.5,
-          },
-          areaStyle: gradientArea(grad.saturated),
-          data: sparklineData.value,
-          markLine: {
-            silent: true,
-            symbol: 'none',
-            data: [
-              {
-                yAxis: tgtPct,
-                lineStyle: { color: '#10b981', type: 'dashed', width: 1, opacity: 0.5 },
-                label: {
-                  show: true,
-                  formatter: `Target ${tgtPct}%`,
-                  fontSize: 8,
-                  color: '#10b981',
-                  position: 'insideStartTop',
-                },
-              },
-              {
-                yAxis: thrPct,
-                lineStyle: { color: '#ef4444', type: 'dashed', width: 1, opacity: 0.5 },
-                label: {
-                  show: true,
-                  formatter: `Threshold ${thrPct}%`,
-                  fontSize: 8,
-                  color: '#ef4444',
-                  position: 'insideEndTop',
-                },
-              },
-            ],
-          },
-        },
-      ]
-    : [];
 
   return {
     animation: true,
-    animationDuration: 1500,
+    animationDuration: 2000,
     animationEasing: 'elasticOut',
-    animationDurationUpdate: 800,
+    animationDurationUpdate: 1000,
     animationEasingUpdate: 'cubicOut',
-    tooltip: [
+    series: [
       {
-        trigger: 'item' as const,
-        ...tooltipConfig(),
-        formatter: barTooltipFormatter,
-      },
-      ...(hasHistory
-        ? [
-            {
-              trigger: 'axis' as const,
-              ...tooltipConfig(),
-              axisPointer: { type: 'cross' as const, lineStyle: { opacity: 0.3 } },
+        type: 'gauge',
+        startAngle: 210,
+        endAngle: -30,
+        min: 0,
+        max: 100,
+        center: ['50%', '60%'],
+        radius: '90%',
+
+        // Background track with zone-colored segments
+        axisLine: {
+          lineStyle: {
+            width: 14,
+            color: [
+              [tgtPct / 100, colorAlpha('#10b981', 0.12)],
+              [thrPct / 100, colorAlpha('#f59e0b', 0.12)],
+              [1, colorAlpha('#ef4444', 0.12)],
+            ],
+          },
+          roundCap: true,
+        },
+
+        // Progress arc (the filled portion)
+        progress: {
+          show: true,
+          width: 14,
+          roundCap: true,
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 1,
+              y2: 0,
+              colorStops: [
+                { offset: 0, color: grad.light },
+                { offset: 1, color: grad.saturated },
+              ],
             },
-          ]
-        : []),
+            shadowBlur: 16,
+            shadowColor: colorAlpha(grad.glow, 0.6),
+          },
+        },
+
+        // No pointer
+        pointer: { show: false },
+
+        // Tick marks at target and threshold
+        axisTick: {
+          show: true,
+          splitNumber: 1,
+          distance: -18,
+          lineStyle: {
+            width: 2,
+            color: 'auto',
+          },
+          length: 6,
+        },
+
+        // Major split lines (at 0, target, threshold, 100 positions)
+        splitLine: {
+          show: false,
+        },
+
+        // Axis labels — show only at target and threshold
+        axisLabel: {
+          show: false,
+        },
+
+        // Title label (below the number)
+        title: {
+          show: false,
+        },
+
+        // Center detail: the big percentage number
+        detail: {
+          valueAnimation: true,
+          formatter: '{value}%',
+          fontSize: 24,
+          fontWeight: 'bold',
+          fontFamily: 'var(--font-geist-mono, monospace)',
+          color: grad.saturated,
+          offsetCenter: [0, '-5%'],
+        },
+
+        data: [{ value: usage }],
+      },
     ],
-    grid: grids,
-    xAxis: xAxes,
-    yAxis: yAxes,
-    series: [...barSeries, ...sparklineSeries],
   };
 });
 </script>
 
 <style scoped>
-@keyframes thermometer-pulse {
+@keyframes gauge-pulse {
   0%,
   100% {
     filter: drop-shadow(0 0 6px var(--destructive));
   }
   50% {
-    filter: drop-shadow(0 0 14px var(--destructive));
+    filter: drop-shadow(0 0 18px var(--destructive));
   }
 }
 
-.thermometer-critical {
-  animation: thermometer-pulse 2s ease-in-out infinite;
+.gauge-critical {
+  animation: gauge-pulse 2s ease-in-out infinite;
 }
 </style>
