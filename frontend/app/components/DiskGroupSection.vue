@@ -68,7 +68,7 @@
           </span>
         </span>
         <span v-if="historyData.length > 0" class="text-[10px] text-muted-foreground/50">
-          last 7d
+          {{ dateRangeLabel }}
         </span>
       </div>
     </UiCardContent>
@@ -82,6 +82,8 @@ import type { DiskGroup } from '~/types/api';
 
 const props = defineProps<{
   group: DiskGroup;
+  /** Date range from the dashboard dropdown (e.g. '1h', '6h', '24h', '7d', '30d', 'all') */
+  dateRange?: string;
 }>();
 
 const api = useApi();
@@ -149,11 +151,45 @@ interface HistoryEntry {
 
 const historyData = ref<HistoryEntry[]>([]);
 
+/** Map date range to appropriate API resolution */
+function historyResolution(range: string): string {
+  switch (range) {
+    case '1h':
+    case '6h':
+      return 'raw';
+    case '24h':
+    case '7d':
+      return 'hourly';
+    case '30d':
+      return 'daily';
+    default:
+      return 'daily';
+  }
+}
+
+/** Human-readable label for the current date range */
+const dateRangeLabel = computed(() => {
+  const range = props.dateRange ?? '24h';
+  const labels: Record<string, string> = {
+    '1h': 'last 1h',
+    '6h': 'last 6h',
+    '24h': 'last 24h',
+    '7d': 'last 7d',
+    '30d': 'last 30d',
+    all: 'all time',
+  };
+  return labels[range] ?? range;
+});
+
 async function fetchHistory() {
+  const range = props.dateRange ?? '24h';
+  const resolution = historyResolution(range);
   try {
-    const resp = (await api(
-      `/api/v1/metrics/history?disk_group_id=${props.group.id}&resolution=hourly&since=7d`,
-    )) as { data: HistoryEntry[] };
+    const url =
+      range === 'all'
+        ? `/api/v1/metrics/history?disk_group_id=${props.group.id}&resolution=${resolution}`
+        : `/api/v1/metrics/history?disk_group_id=${props.group.id}&resolution=${resolution}&since=${range}`;
+    const resp = (await api(url)) as { data: HistoryEntry[] };
     historyData.value = resp.data ?? [];
   } catch {
     // Non-critical — chart will show bar only without sparkline
@@ -164,6 +200,12 @@ onMounted(() => {
   fetchForecast();
   fetchHistory();
 });
+
+// Re-fetch history when date range changes
+watch(
+  () => props.dateRange,
+  () => fetchHistory(),
+);
 
 // --- Zone colors ---
 const targetPct = computed(() => props.group.targetPct || 75);
@@ -200,6 +242,35 @@ const sparklineData = computed(() =>
     return [new Date(h.timestamp).getTime(), (h.usedCapacity / total) * 100];
   }),
 );
+
+/**
+ * Adaptive y-axis range for the sparkline.
+ * Instead of fixed 0–100, compute a range that shows meaningful variation.
+ * Includes target/threshold lines and adds 5% padding on each side.
+ */
+const sparklineYRange = computed(() => {
+  const data = sparklineData.value;
+  if (data.length === 0) return { min: 0, max: 100 };
+
+  const values = data.map((d) => d[1] as number);
+  const dataMin = Math.min(...values);
+  const dataMax = Math.max(...values);
+  const tgt = targetPct.value;
+  const thr = thresholdPct.value;
+
+  // Include target and threshold in the visible range
+  const rangeMin = Math.min(dataMin, tgt, thr);
+  const rangeMax = Math.max(dataMax, tgt, thr);
+
+  // Add 5% padding (at least 2 percentage points)
+  const span = rangeMax - rangeMin;
+  const padding = Math.max(span * 0.15, 2);
+
+  return {
+    min: Math.max(0, Math.floor(rangeMin - padding)),
+    max: Math.min(100, Math.ceil(rangeMax + padding)),
+  };
+});
 
 // --- ECharts dual-grid option ---
 const chartOption = computed(() => {
@@ -244,10 +315,17 @@ const chartOption = computed(() => {
       ]
     : [{ gridIndex: 0, type: 'value' as const, min: 0, max: 100, show: false }];
 
+  const yRange = sparklineYRange.value;
   const yAxes = hasHistory
     ? [
         { gridIndex: 0, type: 'category' as const, data: ['usage'], show: false },
-        { gridIndex: 1, type: 'value' as const, min: 0, max: 100, show: false },
+        {
+          gridIndex: 1,
+          type: 'value' as const,
+          min: yRange.min,
+          max: yRange.max,
+          show: false,
+        },
       ]
     : [{ gridIndex: 0, type: 'category' as const, data: ['usage'], show: false }];
 
@@ -350,7 +428,7 @@ const chartOption = computed(() => {
                   formatter: `Target ${tgtPct}%`,
                   fontSize: 8,
                   color: '#10b981',
-                  position: 'insideEndTop',
+                  position: 'insideStartTop',
                 },
               },
               {
