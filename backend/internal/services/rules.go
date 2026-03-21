@@ -198,3 +198,99 @@ func (s *RulesService) GetRuleImpact(ruleID uint) (*RuleImpact, error) {
 		TotalItems:    len(items),
 	}, nil
 }
+
+// FieldDef describes a rule field available for matching.
+type FieldDef struct {
+	Field     string   `json:"field"`
+	Label     string   `json:"label"`
+	Type      string   `json:"type"`
+	Operators []string `json:"operators"`
+}
+
+// EnrichmentPresence tracks which enrichment integration types are enabled.
+// Used by GetFieldDefinitions to conditionally include enrichment-dependent fields.
+type EnrichmentPresence struct {
+	HasTautulli bool
+	HasSeerr    bool
+	HasMedia    bool
+	HasSonarr   bool
+}
+
+// GetFieldDefinitions returns available rule fields based on the service type
+// and enrichment integrations. If serviceType is empty, returns all fields
+// (including Sonarr-specific fields if Sonarr is enabled). The enrichment
+// parameter controls which enrichment-dependent fields are included.
+func (s *RulesService) GetFieldDefinitions(serviceType string, enrichment EnrichmentPresence) []FieldDef {
+	// Base fields available for all *arr integration types
+	fields := []FieldDef{
+		{Field: "title", Label: "Title", Type: "string", Operators: []string{"==", "!=", "contains", "!contains"}},
+		{Field: "quality", Label: "Quality Profile", Type: "string", Operators: []string{"==", "!="}},
+		{Field: "tag", Label: "Tags", Type: "string", Operators: []string{"contains", "!contains"}},
+		{Field: "genre", Label: "Genre", Type: "string", Operators: []string{"==", "!=", "contains", "!contains"}},
+		{Field: "rating", Label: "Rating", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+		{Field: "sizebytes", Label: "Size (bytes)", Type: "number", Operators: []string{">", ">=", "<", "<="}},
+		{Field: "timeinlibrary", Label: "Time in Library (days)", Type: "number", Operators: []string{">", ">=", "<", "<=", "in_last", "over_ago"}},
+		{Field: "monitored", Label: "Monitored", Type: "boolean", Operators: []string{"=="}},
+		{Field: "year", Label: "Year", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+		{Field: "language", Label: "Language", Type: "string", Operators: []string{"==", "!="}},
+	}
+
+	// Sonarr-specific fields
+	sonarrFields := []FieldDef{
+		{Field: "seriesstatus", Label: "Show Status", Type: "string", Operators: []string{"==", "!="}},
+		{Field: "seasoncount", Label: "Season Count", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+		{Field: "episodecount", Label: "Episode Count", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+	}
+
+	if serviceType == "sonarr" {
+		fields = append(fields, sonarrFields...)
+	} else if serviceType == "" && enrichment.HasSonarr {
+		fields = append(fields, sonarrFields...)
+	}
+
+	// Enrichment fields — add for *arr service types or when unfiltered
+	addEnrichment := serviceType == ""
+	if !addEnrichment {
+		arrTypes := map[string]bool{"sonarr": true, "radarr": true, "lidarr": true, "readarr": true}
+		addEnrichment = arrTypes[serviceType]
+	}
+	if addEnrichment {
+		fields = appendEnrichmentFieldDefs(fields, enrichment)
+	}
+
+	// Media Type field (always available)
+	fields = append(fields, FieldDef{Field: "type", Label: "Media Type", Type: "string", Operators: []string{"==", "!="}})
+
+	return fields
+}
+
+// appendEnrichmentFieldDefs adds enrichment-dependent rule fields based on
+// which enrichment integrations are enabled.
+func appendEnrichmentFieldDefs(fields []FieldDef, p EnrichmentPresence) []FieldDef {
+	if p.HasTautulli || p.HasMedia {
+		fields = append(fields,
+			FieldDef{Field: "playcount", Label: "Play Count", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+			FieldDef{Field: "lastplayed", Label: "Last Watched", Type: "date", Operators: []string{"in_last", "over_ago", "never"}},
+		)
+	}
+	if p.HasSeerr {
+		fields = append(fields,
+			FieldDef{Field: "requested", Label: "Is Requested", Type: "boolean", Operators: []string{"=="}},
+			FieldDef{Field: "requestcount", Label: "Request Count", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
+			FieldDef{Field: "requestedby", Label: "Requested By", Type: "string", Operators: []string{"==", "!=", "contains", "!contains"}},
+		)
+	}
+	if p.HasMedia {
+		fields = append(fields,
+			FieldDef{Field: "incollection", Label: "In Collection", Type: "boolean", Operators: []string{"=="}},
+			FieldDef{Field: "watchlist", Label: "On Watchlist", Type: "boolean", Operators: []string{"=="}},
+			FieldDef{Field: "collection", Label: "Collection Name", Type: "string", Operators: []string{"==", "!=", "contains", "!contains"}},
+		)
+	}
+	if p.HasSeerr && (p.HasTautulli || p.HasMedia) {
+		fields = append(fields,
+			FieldDef{Field: "watchedbyreq", Label: "Watched by Requestor", Type: "boolean", Operators: []string{"=="}},
+		)
+	}
+	return fields
+}

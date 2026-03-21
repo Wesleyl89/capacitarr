@@ -412,3 +412,127 @@ func TestRulesService_Update_PreservesSortOrder(t *testing.T) {
 		t.Errorf("Expected value 'Serenity', got %q", result.Value)
 	}
 }
+
+// ---------- GetFieldDefinitions ----------
+
+func TestRulesService_GetFieldDefinitions_BaseFields(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	fields := svc.GetFieldDefinitions("", EnrichmentPresence{})
+	if len(fields) == 0 {
+		t.Fatal("Expected non-empty field list")
+	}
+
+	// Verify title field is present
+	found := false
+	for _, f := range fields {
+		if f.Field == "title" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'title' field in base fields")
+	}
+
+	// Verify Media Type field is always last
+	last := fields[len(fields)-1]
+	if last.Field != "type" {
+		t.Errorf("Expected last field to be 'type', got %q", last.Field)
+	}
+}
+
+func TestRulesService_GetFieldDefinitions_SonarrSpecific(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	// When serviceType == "sonarr", Sonarr fields should be included
+	fields := svc.GetFieldDefinitions("sonarr", EnrichmentPresence{})
+	hasSeries := false
+	for _, f := range fields {
+		if f.Field == "seriesstatus" {
+			hasSeries = true
+			break
+		}
+	}
+	if !hasSeries {
+		t.Error("Expected 'seriesstatus' field for Sonarr service type")
+	}
+}
+
+func TestRulesService_GetFieldDefinitions_NoSonarrForRadarr(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	// When serviceType == "radarr", Sonarr fields should NOT be included
+	fields := svc.GetFieldDefinitions("radarr", EnrichmentPresence{})
+	for _, f := range fields {
+		if f.Field == "seriesstatus" {
+			t.Error("Did NOT expect 'seriesstatus' field for Radarr service type")
+		}
+	}
+}
+
+func TestRulesService_GetFieldDefinitions_EnrichmentFields(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	enrichment := EnrichmentPresence{HasTautulli: true, HasSeerr: true, HasMedia: true}
+	fields := svc.GetFieldDefinitions("sonarr", enrichment)
+
+	expected := map[string]bool{
+		"playcount":    false,
+		"lastplayed":   false,
+		"requested":    false,
+		"incollection": false,
+		"watchedbyreq": false,
+	}
+	for _, f := range fields {
+		if _, ok := expected[f.Field]; ok {
+			expected[f.Field] = true
+		}
+	}
+	for field, found := range expected {
+		if !found {
+			t.Errorf("Expected enrichment field %q to be present", field)
+		}
+	}
+}
+
+func TestRulesService_GetFieldDefinitions_UnfilteredWithSonarr(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	// When unfiltered (serviceType == "") and HasSonarr is true, Sonarr fields should appear
+	fields := svc.GetFieldDefinitions("", EnrichmentPresence{HasSonarr: true})
+	hasSeries := false
+	for _, f := range fields {
+		if f.Field == "seriesstatus" {
+			hasSeries = true
+			break
+		}
+	}
+	if !hasSeries {
+		t.Error("Expected 'seriesstatus' in unfiltered mode when HasSonarr is true")
+	}
+}
+
+func TestRulesService_GetFieldDefinitions_UnfilteredWithoutSonarr(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewRulesService(database, bus)
+
+	// When unfiltered but HasSonarr is false, Sonarr fields should not appear
+	fields := svc.GetFieldDefinitions("", EnrichmentPresence{HasSonarr: false})
+	for _, f := range fields {
+		if f.Field == "seriesstatus" {
+			t.Error("Did NOT expect 'seriesstatus' in unfiltered mode when HasSonarr is false")
+		}
+	}
+}

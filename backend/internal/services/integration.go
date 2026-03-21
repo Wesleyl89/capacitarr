@@ -487,6 +487,27 @@ func (s *IntegrationService) ListEnabled() ([]db.IntegrationConfig, error) {
 	return configs, nil
 }
 
+// DetectEnrichment scans enabled integrations and returns which enrichment
+// services are available (Tautulli, Seerr, Plex/Jellyfin/Emby, Sonarr).
+// Used by RulesService.GetFieldDefinitions() and the rule context endpoint.
+func (s *IntegrationService) DetectEnrichment() EnrichmentPresence {
+	configs, _ := s.ListEnabled()
+	var p EnrichmentPresence
+	for _, cfg := range configs {
+		switch cfg.Type {
+		case string(integrations.IntegrationTypeTautulli):
+			p.HasTautulli = true
+		case string(integrations.IntegrationTypeSeerr):
+			p.HasSeerr = true
+		case string(integrations.IntegrationTypePlex), string(integrations.IntegrationTypeJellyfin), string(integrations.IntegrationTypeEmby):
+			p.HasMedia = true
+		case string(integrations.IntegrationTypeSonarr):
+			p.HasSonarr = true
+		}
+	}
+	return p
+}
+
 // BuildIntegrationRegistry creates an IntegrationRegistry populated with clients
 // for all enabled integrations, using the factory + capability-based pattern.
 // Clients are created via RegisterAllFactories and auto-discovered for their
