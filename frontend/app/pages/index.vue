@@ -344,7 +344,12 @@
 
     <!-- Per-Disk-Group Sections -->
     <div v-if="diskGroups.length > 0" class="space-y-5 mb-6">
-      <DiskGroupSection v-for="group in diskGroups" :key="group.id" :group="group" />
+      <DiskGroupSection
+        v-for="group in diskGroups"
+        :key="group.id"
+        :group="group"
+        :date-range="dateRange"
+      />
     </div>
 
     <!-- Skeleton Loading State -->
