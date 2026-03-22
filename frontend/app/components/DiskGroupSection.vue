@@ -329,7 +329,7 @@ const gaugeOption = computed(() => {
           icon: 'triangle',
           length: '12%',
           width: 6,
-          offsetCenter: [0, '-92%'],
+          offsetCenter: [0, '-112%'],
           itemStyle: { color: '#ef4444', opacity: 0.85 },
         },
         data: [{ value: thrPct }],
