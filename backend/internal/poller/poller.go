@@ -319,11 +319,12 @@ func (p *Poller) poll() {
 
 	// Publish engine complete event
 	bus.Publish(events.EngineCompleteEvent{
-		Evaluated:     int(evaluated),
-		Flagged:       int(flagged),
-		DurationMs:    time.Since(pollStart).Milliseconds(),
-		ExecutionMode: prefs.ExecutionMode,
-		FreedBytes:    freedBytes,
+		Evaluated:        int(evaluated),
+		Flagged:          int(flagged),
+		DurationMs:       time.Since(pollStart).Milliseconds(),
+		ExecutionMode:    prefs.ExecutionMode,
+		FreedBytes:       freedBytes,
+		CompletedAtEpoch: time.Now().UTC().Unix(),
 	})
 
 	slog.Debug("Poll cycle complete", "component", "poller",

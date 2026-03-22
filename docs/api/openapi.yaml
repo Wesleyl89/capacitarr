@@ -2701,7 +2701,7 @@ components:
         lastRunEpoch:
           type: integer
           format: int64
-          description: Unix timestamp of the last run start
+          description: Unix timestamp of the last run completion (falls back to start time for legacy data)
         currentlyDeleting:
           type: string
           description: Title of the item currently being deleted (empty if idle)

@@ -29,11 +29,12 @@ func (e EngineStartEvent) EventMessage() string {
 // from the REST endpoint (GET /worker/stats), which queries the DB where the
 // deletion worker atomically increments the counters.
 type EngineCompleteEvent struct {
-	Evaluated     int    `json:"evaluated"`
-	Flagged       int    `json:"flagged"`
-	DurationMs    int64  `json:"durationMs"`
-	ExecutionMode string `json:"executionMode"`
-	FreedBytes    int64  `json:"freedBytes"` // Potential bytes freed (approval/dry-run) or actual bytes queued (auto)
+	Evaluated        int    `json:"evaluated"`
+	Flagged          int    `json:"flagged"`
+	DurationMs       int64  `json:"durationMs"`
+	ExecutionMode    string `json:"executionMode"`
+	FreedBytes       int64  `json:"freedBytes"`       // Potential bytes freed (approval/dry-run) or actual bytes queued (auto)
+	CompletedAtEpoch int64  `json:"completedAtEpoch"` // Unix epoch seconds when the run finished
 }
 
 // EventType implements Event.
