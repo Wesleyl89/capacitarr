@@ -116,9 +116,12 @@ func TestEngineService_GetStats_WithDBRecord(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewEngineService(database, bus)
 
-	// Seed an engine run stats record
+	// Seed an engine run stats record with completed_at set
+	completedAt := time.Now().UTC()
+	runAt := completedAt.Add(-30 * time.Second) // run started 30s before completion
 	runStats := db.EngineRunStats{
-		RunAt:         time.Now().UTC(),
+		RunAt:         runAt,
+		CompletedAt:   &completedAt,
 		Evaluated:     50,
 		Flagged:       10,
 		Deleted:       3,
@@ -137,6 +140,40 @@ func TestEngineService_GetStats_WithDBRecord(t *testing.T) {
 	}
 	if stats["lastRunFreedBytes"] != int64(5000000000) {
 		t.Errorf("expected lastRunFreedBytes 5000000000, got %v", stats["lastRunFreedBytes"])
+	}
+	// lastRunEpoch should use completed_at, not run_at
+	epoch, ok := stats["lastRunEpoch"].(int64)
+	if !ok {
+		t.Fatalf("expected lastRunEpoch to be int64, got %T", stats["lastRunEpoch"])
+	}
+	if epoch != completedAt.Unix() {
+		t.Errorf("expected lastRunEpoch=%d (completed_at), got %d", completedAt.Unix(), epoch)
+	}
+}
+
+func TestEngineService_GetStats_FallsBackToRunAt(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewEngineService(database, bus)
+
+	// Seed a record WITHOUT completed_at (simulates pre-migration data)
+	runAt := time.Now().UTC()
+	runStats := db.EngineRunStats{
+		RunAt:         runAt,
+		ExecutionMode: "dry-run",
+	}
+	if err := database.Create(&runStats).Error; err != nil {
+		t.Fatalf("Failed to create engine run stats: %v", err)
+	}
+
+	stats := svc.GetStats()
+
+	epoch, ok := stats["lastRunEpoch"].(int64)
+	if !ok {
+		t.Fatalf("expected lastRunEpoch to be int64, got %T", stats["lastRunEpoch"])
+	}
+	if epoch != runAt.Unix() {
+		t.Errorf("expected lastRunEpoch=%d (run_at fallback), got %d", runAt.Unix(), epoch)
 	}
 }
 
@@ -176,6 +213,13 @@ func TestEngineService_UpdateRunStats(t *testing.T) {
 	}
 	if updated.Flagged != 15 {
 		t.Errorf("expected flagged 15, got %d", updated.Flagged)
+	}
+	if updated.CompletedAt == nil {
+		t.Fatal("expected completed_at to be set after UpdateRunStats")
+	}
+	if updated.CompletedAt.Before(updated.RunAt) {
+		t.Errorf("expected completed_at (%v) to be after run_at (%v)",
+			updated.CompletedAt, updated.RunAt)
 	}
 }
 

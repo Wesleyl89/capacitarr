@@ -89,12 +89,15 @@ func (s *EngineService) CreateRunStats(mode string) (*db.EngineRunStats, error) 
 	return &stats, nil
 }
 
-// UpdateRunStats updates a run stats entry with the final evaluation results.
+// UpdateRunStats updates a run stats entry with the final evaluation results
+// and sets completed_at to the current time.
 func (s *EngineService) UpdateRunStats(id uint, evaluated, flagged int, durationMs int64) error {
+	now := time.Now().UTC()
 	result := s.db.Model(&db.EngineRunStats{}).Where("id = ?", id).Updates(map[string]any{
-		"evaluated":   evaluated,
-		"flagged":     flagged,
-		"duration_ms": durationMs,
+		"evaluated":    evaluated,
+		"flagged":      flagged,
+		"duration_ms":  durationMs,
+		"completed_at": now,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update engine run stats: %w", result.Error)
@@ -201,12 +204,19 @@ func (s *EngineService) GetStats() map[string]any {
 		"protectedCount":   s.lastProtected.Load(),
 	}
 
-	// Get the latest run from the database
+	// Get the latest completed run from the database.
+	// Use completed_at for lastRunEpoch so the UI shows when the run finished,
+	// not when it started. Fall back to run_at for rows that predate the
+	// completed_at column (they will have NULL completed_at).
 	var latest db.EngineRunStats
 	if err := s.db.Order("run_at desc").First(&latest).Error; err == nil {
 		stats["executionMode"] = latest.ExecutionMode
 		stats["lastRunFreedBytes"] = latest.FreedBytes
-		stats["lastRunEpoch"] = latest.RunAt.Unix()
+		if latest.CompletedAt != nil {
+			stats["lastRunEpoch"] = latest.CompletedAt.Unix()
+		} else {
+			stats["lastRunEpoch"] = latest.RunAt.Unix()
+		}
 	}
 
 	return stats

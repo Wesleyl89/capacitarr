@@ -89,6 +89,7 @@ export function useEngineControl() {
         flagged?: number;
         durationMs?: number;
         executionMode?: string;
+        completedAtEpoch?: number;
       };
       const wasRunning = prevIsRunning.value;
 
@@ -103,7 +104,7 @@ export function useEngineControl() {
           isRunning: false,
           lastRunEvaluated: event.evaluated ?? workerStats.value.lastRunEvaluated,
           lastRunFlagged: event.flagged ?? workerStats.value.lastRunFlagged,
-          lastRunEpoch: Math.floor(Date.now() / 1000),
+          lastRunEpoch: event.completedAtEpoch || Math.floor(Date.now() / 1000),
           executionMode: event.executionMode || workerStats.value.executionMode,
         };
       }

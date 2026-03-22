@@ -223,6 +223,7 @@ CREATE INDEX idx_audit_log_disk_group_id ON audit_log(disk_group_id);
 CREATE TABLE engine_run_stats (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at   DATETIME,
     evaluated      INTEGER  NOT NULL DEFAULT 0,
     flagged        INTEGER  NOT NULL DEFAULT 0,
     deleted        INTEGER  NOT NULL DEFAULT 0,

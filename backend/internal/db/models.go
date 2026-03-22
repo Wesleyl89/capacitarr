@@ -233,15 +233,16 @@ func (AuditLogEntry) TableName() string {
 // EngineRunStats stores one row per engine evaluation cycle, persisting metrics
 // across container restarts so the UI always shows the latest run's stats.
 type EngineRunStats struct {
-	ID            uint      `gorm:"primarykey" json:"id"`
-	RunAt         time.Time `gorm:"index;not null" json:"runAt"`
-	Evaluated     int       `gorm:"not null;default:0" json:"evaluated"`
-	Flagged       int       `gorm:"not null;default:0" json:"flagged"`
-	Deleted       int       `gorm:"not null;default:0" json:"deleted"`
-	FreedBytes    int64     `gorm:"not null;default:0" json:"freedBytes"`
-	ExecutionMode string    `gorm:"not null;default:'dry-run'" json:"executionMode"`
-	DurationMs    int64     `gorm:"not null;default:0" json:"durationMs"`
-	ErrorMessage  string    `json:"errorMessage,omitempty"`
+	ID            uint       `gorm:"primarykey" json:"id"`
+	RunAt         time.Time  `gorm:"index;not null" json:"runAt"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+	Evaluated     int        `gorm:"not null;default:0" json:"evaluated"`
+	Flagged       int        `gorm:"not null;default:0" json:"flagged"`
+	Deleted       int        `gorm:"not null;default:0" json:"deleted"`
+	FreedBytes    int64      `gorm:"not null;default:0" json:"freedBytes"`
+	ExecutionMode string     `gorm:"not null;default:'dry-run'" json:"executionMode"`
+	DurationMs    int64      `gorm:"not null;default:0" json:"durationMs"`
+	ErrorMessage  string     `json:"errorMessage,omitempty"`
 }
 
 // LifetimeStats stores cumulative counters that persist across container restarts
