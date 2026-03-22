@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // doRequestFunc is the function signature used by all *arr clients for GET requests.
@@ -53,15 +54,18 @@ type arrLanguage struct {
 
 // arrExtractPosterURL finds the poster URL from an *arr images array.
 // Prefers remoteUrl (external CDN) over url (local *arr path).
+// When only a local relative path is available (e.g. "/MediaCover/123/poster.jpg"),
+// the baseURL of the *arr integration is prepended to produce an absolute URL that
+// the browser can load directly.
 // Checks for coverType "poster" first, then "cover" (used by Readarr for book covers).
-func arrExtractPosterURL(images []arrImage) string {
+func arrExtractPosterURL(images []arrImage, baseURL string) string {
 	// First pass: look for "poster" (movies, shows, artists)
 	for _, img := range images {
 		if img.CoverType == "poster" {
 			if img.RemoteURL != "" {
 				return img.RemoteURL
 			}
-			return img.URL
+			return resolveArrImageURL(img.URL, baseURL)
 		}
 	}
 	// Second pass: look for "cover" (books in Readarr)
@@ -70,10 +74,21 @@ func arrExtractPosterURL(images []arrImage) string {
 			if img.RemoteURL != "" {
 				return img.RemoteURL
 			}
-			return img.URL
+			return resolveArrImageURL(img.URL, baseURL)
 		}
 	}
 	return ""
+}
+
+// resolveArrImageURL turns a potentially relative *arr image path into an
+// absolute URL by prepending the integration's base URL. If the path is
+// already absolute (starts with "http") or empty, it is returned as-is.
+func resolveArrImageURL(path, baseURL string) string {
+	if path == "" || strings.HasPrefix(path, "http") {
+		return path
+	}
+	// Ensure no double slashes when joining
+	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
 // --- Shared *arr fetch helpers ---

@@ -518,6 +518,7 @@ export interface DeletionQueueItem {
   sizeBytes: number;
   integrationId: number;
   score: number;
+  posterUrl?: string;
 }
 
 export interface DeletionCompletedItem {

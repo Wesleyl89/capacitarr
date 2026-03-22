@@ -131,7 +131,7 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 			AddedAt:        addedAt,
 			Monitored:      b.Monitored,
 			Path:           b.Path,
-			PosterURL:      arrExtractPosterURL(b.Images),
+			PosterURL:      arrExtractPosterURL(b.Images, r.URL),
 			Rating:         rating,
 			Genre:          genre,
 			Tags:           tagNames,

@@ -388,15 +388,16 @@ func main() {
 			// scripts (theme/splash loader, Nuxt runtime config) while blocking
 			// any injected inline scripts. 'unsafe-inline' for style-src is
 			// required by Vue/Nuxt runtime styles. img-src allows data: URIs
-			// (inline SVGs, base64 favicons) and https: (poster images from
-			// TMDB/TVDB). connect-src 'self' covers API calls and SSE.
+			// (inline SVGs, base64 favicons), https: (poster images from
+			// TMDB/TVDB CDNs), and http: (poster images proxied through local
+			// *arr integrations). connect-src 'self' covers API calls and SSE.
 			nonce := generateCSPNonce()
 			c.Set("cspNonce", nonce)
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+
 					"script-src 'self' 'nonce-"+nonce+"'; "+
 					"style-src 'self' 'unsafe-inline'; "+
-					"img-src 'self' data: https:; "+
+					"img-src 'self' data: https: http:; "+
 					"font-src 'self'; "+
 					"connect-src 'self'; "+
 					"frame-ancestors 'none'; "+

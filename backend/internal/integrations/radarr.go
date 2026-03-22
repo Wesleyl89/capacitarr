@@ -122,7 +122,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 			TMDbID:         m.TmdbID,
 			SizeBytes:      m.SizeOnDisk,
 			Path:           m.Path,
-			PosterURL:      arrExtractPosterURL(m.Images),
+			PosterURL:      arrExtractPosterURL(m.Images, r.URL),
 			QualityProfile: profileMap[m.QualityProfileID],
 			Rating:         rating,
 			Genre:          strings.Join(m.Genres, ", "),

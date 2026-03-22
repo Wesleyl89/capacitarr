@@ -120,7 +120,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			}
 		}
 
-		posterURL := arrExtractPosterURL(show.Images)
+		posterURL := arrExtractPosterURL(show.Images, s.URL)
 
 		// Emit each season as a separate scoreable item
 		for _, season := range show.Seasons {

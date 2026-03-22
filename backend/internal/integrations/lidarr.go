@@ -114,7 +114,7 @@ func (l *LidarrClient) GetMediaItems() ([]MediaItem, error) {
 			Title:          a.ArtistName,
 			SizeBytes:      a.Statistics.SizeOnDisk,
 			Path:           a.Path,
-			PosterURL:      arrExtractPosterURL(a.Images),
+			PosterURL:      arrExtractPosterURL(a.Images, l.URL),
 			QualityProfile: profileMap[a.QualityProfileID],
 			Rating:         rating,
 			Genre:          strings.Join(a.Genres, ", "),

@@ -40,6 +40,7 @@ type DeleteJobSummary struct {
 	SizeBytes     int64   `json:"sizeBytes"`
 	IntegrationID uint    `json:"integrationId"`
 	Score         float64 `json:"score"`
+	PosterURL     string  `json:"posterUrl,omitempty"`
 }
 
 // DeletionService manages the background deletion worker and queue.
@@ -711,6 +712,7 @@ func (s *DeletionService) FindQueuedItem(mediaName, mediaType string) *DeleteJob
 				SizeBytes:     job.Item.SizeBytes,
 				IntegrationID: job.Item.IntegrationID,
 				Score:         job.Score,
+				PosterURL:     job.Item.PosterURL,
 			}
 		}
 	}
@@ -731,6 +733,7 @@ func (s *DeletionService) ListQueuedItems() []DeleteJobSummary {
 			SizeBytes:     job.Item.SizeBytes,
 			IntegrationID: job.Item.IntegrationID,
 			Score:         job.Score,
+			PosterURL:     job.Item.PosterURL,
 		})
 	}
 	return out
