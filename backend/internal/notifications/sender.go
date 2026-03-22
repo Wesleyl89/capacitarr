@@ -31,8 +31,9 @@ type CycleDigest struct {
 	DurationMs    int64   `json:"durationMs"`
 	DiskUsagePct  float64 `json:"diskUsagePct"`
 	DiskThreshold float64 `json:"diskThreshold"`
-	DiskTargetPct float64 `json:"diskTargetPct"`
-	Version       string  `json:"version"`
+	DiskTargetPct      float64 `json:"diskTargetPct"`
+	CollectionsDeleted int     `json:"collectionsDeleted"` // Number of distinct collections that triggered group deletions
+	Version            string  `json:"version"`
 
 	// Update information — populated when a newer version is available.
 	UpdateAvailable bool   `json:"updateAvailable"`
@@ -207,6 +208,9 @@ func digestDescription(d CycleDigest) string {
 	case ModeAuto:
 		desc := fmt.Sprintf("Deleted **%d** of **%d** evaluated items\nin **%.1fs**, freeing **%s**",
 			d.Deleted, d.Evaluated, durSec, HumanSize(d.FreedBytes))
+		if d.CollectionsDeleted > 0 {
+			desc += fmt.Sprintf("\n📦 Included **%d** collection group deletion(s)", d.CollectionsDeleted)
+		}
 		if d.Failed > 0 {
 			desc += fmt.Sprintf("\n⚠️ %d deletion(s) failed", d.Failed)
 		}

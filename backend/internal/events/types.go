@@ -460,10 +460,11 @@ func (e ApprovalReturnedToPendingEvent) EventMessage() string {
 
 // DeletionSuccessEvent is published when a media item is successfully deleted.
 type DeletionSuccessEvent struct {
-	MediaName     string `json:"mediaName"`
-	MediaType     string `json:"mediaType"`
-	SizeBytes     int64  `json:"sizeBytes"`
-	IntegrationID uint   `json:"integrationId"`
+	MediaName       string `json:"mediaName"`
+	MediaType       string `json:"mediaType"`
+	SizeBytes       int64  `json:"sizeBytes"`
+	IntegrationID   uint   `json:"integrationId"`
+	CollectionGroup string `json:"collectionGroup,omitempty"` // Non-empty if part of a collection deletion
 }
 
 // EventType implements Event.

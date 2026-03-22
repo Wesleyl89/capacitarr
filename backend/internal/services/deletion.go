@@ -552,10 +552,11 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	}
 
 	s.bus.Publish(events.DeletionSuccessEvent{
-		MediaName:     job.Item.Title,
-		MediaType:     string(job.Item.Type),
-		SizeBytes:     job.Item.SizeBytes,
-		IntegrationID: job.Item.IntegrationID,
+		MediaName:       job.Item.Title,
+		MediaType:       string(job.Item.Type),
+		SizeBytes:       job.Item.SizeBytes,
+		IntegrationID:   job.Item.IntegrationID,
+		CollectionGroup: job.CollectionGroup,
 	})
 	s.publishProgress()
 

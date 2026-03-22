@@ -163,6 +163,9 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 		if s.accumulator != nil {
 			s.accumulator.deletedCount++
 			s.accumulator.totalFreedBytes += e.SizeBytes
+			if e.CollectionGroup != "" {
+				s.accumulator.collectionGroups[e.CollectionGroup] = true
+			}
 		}
 		s.mu.Unlock()
 
@@ -447,23 +450,28 @@ type cycleAccumulator struct {
 	deletedCount    int
 	failedCount     int
 	totalFreedBytes int64
+
+	// Collection tracking: distinct collection groups seen in this cycle
+	collectionGroups map[string]bool
 }
 
 func newCycleAccumulator(executionMode string) *cycleAccumulator {
 	return &cycleAccumulator{
-		executionMode: executionMode,
+		executionMode:    executionMode,
+		collectionGroups: make(map[string]bool),
 	}
 }
 
 func (a *cycleAccumulator) buildDigest(version string) notifications.CycleDigest {
 	return notifications.CycleDigest{
-		ExecutionMode: a.executionMode,
-		Evaluated:     a.evaluated,
-		Flagged:       a.flagged,
-		Deleted:       a.deletedCount,
-		Failed:        a.failedCount,
-		FreedBytes:    a.totalFreedBytes,
-		DurationMs:    a.durationMs,
-		Version:       version,
+		ExecutionMode:      a.executionMode,
+		Evaluated:          a.evaluated,
+		Flagged:            a.flagged,
+		Deleted:            a.deletedCount,
+		Failed:             a.failedCount,
+		FreedBytes:         a.totalFreedBytes,
+		DurationMs:         a.durationMs,
+		CollectionsDeleted: len(a.collectionGroups),
+		Version:            version,
 	}
 }
