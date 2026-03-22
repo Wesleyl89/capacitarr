@@ -83,31 +83,51 @@
         </div>
       </UiCardHeader>
       <UiCardContent class="space-y-4">
-        <!-- File upload area -->
-        <div
-          class="relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-muted-foreground/50 cursor-pointer"
-          :class="{ 'border-primary bg-primary/5': isDragOver }"
-          @click="fileInputRef?.click()"
-          @dragover.prevent="isDragOver = true"
-          @dragleave="isDragOver = false"
-          @drop.prevent="onFileDrop"
-        >
-          <component :is="UploadIcon" class="w-8 h-8 text-muted-foreground/50" />
-          <p class="text-sm text-muted-foreground">
-            {{ $t('settings.importDragDrop') }}
-          </p>
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept=".json"
-            class="hidden"
-            @change="onFileSelected"
-          />
+        <!-- Step indicator -->
+        <div v-if="importStep > 0" class="flex items-center gap-2 text-xs text-muted-foreground">
+          <template v-for="s in totalSteps" :key="s">
+            <div
+              class="flex items-center justify-center rounded-full w-6 h-6 text-xs font-medium border"
+              :class="{
+                'bg-primary text-primary-foreground border-primary': s === importStep,
+                'bg-muted text-muted-foreground border-border': s !== importStep && s > importStep,
+                'bg-primary/20 text-primary border-primary/40': s < importStep,
+              }"
+            >
+              {{ s }}
+            </div>
+            <div
+              v-if="s < totalSteps"
+              class="flex-1 h-px"
+              :class="s < importStep ? 'bg-primary/40' : 'bg-border'"
+            />
+          </template>
         </div>
 
-        <!-- Preview after file is loaded -->
-        <template v-if="parsedPayload">
-          <UiCard class="bg-muted/30">
+        <!-- Step 1: Upload -->
+        <template v-if="importStep === 0 || importStep === 1">
+          <div
+            class="relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-muted-foreground/50 cursor-pointer"
+            :class="{ 'border-primary bg-primary/5': isDragOver }"
+            @click="fileInputRef?.click()"
+            @dragover.prevent="isDragOver = true"
+            @dragleave="isDragOver = false"
+            @drop.prevent="onFileDrop"
+          >
+            <component :is="UploadIcon" class="w-8 h-8 text-muted-foreground/50" />
+            <p class="text-sm text-muted-foreground">
+              {{ $t('settings.importDragDrop') }}
+            </p>
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept=".json"
+              class="hidden"
+              @change="onFileSelected"
+            />
+          </div>
+
+          <UiCard v-if="parsedPayload" class="bg-muted/30">
             <UiCardHeader class="pb-3">
               <UiCardTitle class="text-sm">{{ $t('settings.importPreview') }}</UiCardTitle>
             </UiCardHeader>
@@ -156,8 +176,21 @@
             </UiCardContent>
           </UiCard>
 
-          <!-- Import section checkboxes -->
-          <UiLabel class="text-sm font-medium">{{ $t('settings.sectionsToImport') }}</UiLabel>
+          <div v-if="parsedPayload" class="flex items-center gap-3 pt-2">
+            <UiButton @click="importStep = 2">
+              {{ $t('common.next') }}
+            </UiButton>
+            <UiButton variant="outline" @click="clearImport">
+              {{ $t('common.cancel') }}
+            </UiButton>
+          </div>
+        </template>
+
+        <!-- Step 2: Select Sections & Mode -->
+        <template v-if="importStep === 2 && parsedPayload">
+          <UiLabel class="text-sm font-medium">
+            {{ $t('settings.sectionsToImport') }}
+          </UiLabel>
           <div class="space-y-3">
             <div v-if="parsedPayload.preferences" class="flex items-center gap-3">
               <UiCheckbox id="import-preferences" v-model="importSections.preferences" />
@@ -191,9 +224,10 @@
             </div>
           </div>
 
-          <!-- Import mode selector -->
           <div class="space-y-2">
-            <UiLabel class="text-sm font-medium">{{ $t('settings.importModeLabel') }}</UiLabel>
+            <UiLabel class="text-sm font-medium">
+              {{ $t('settings.importModeLabel') }}
+            </UiLabel>
             <UiRadioGroup v-model="importMode" class="space-y-2">
               <div class="flex items-start gap-3">
                 <UiRadioGroupItem id="mode-merge" value="merge" />
@@ -220,7 +254,6 @@
             </UiRadioGroup>
           </div>
 
-          <!-- Sync mode warning -->
           <UiAlert v-if="importMode === 'sync'" variant="destructive">
             <component :is="AlertTriangleIcon" class="w-4 h-4" />
             <UiAlertTitle>{{ $t('common.warning') }}</UiAlertTitle>
@@ -229,7 +262,6 @@
             </UiAlertDescription>
           </UiAlert>
 
-          <!-- Credential warning -->
           <UiAlert variant="default">
             <component :is="AlertTriangleIcon" class="w-4 h-4" />
             <UiAlertTitle>{{ $t('common.warning') }}</UiAlertTitle>
@@ -238,11 +270,12 @@
             </UiAlertDescription>
           </UiAlert>
 
-          <!-- Import button -->
-          <div class="flex items-center gap-3">
-            <UiButton :disabled="!anyImportSelected || importing" @click="doImport">
-              <component :is="UploadIcon" class="w-4 h-4" />
-              {{ importing ? $t('common.loading') : $t('settings.importButton') }}
+          <div class="flex items-center gap-3 pt-2">
+            <UiButton @click="importStep = 1">
+              {{ $t('common.back') }}
+            </UiButton>
+            <UiButton :disabled="!anyImportSelected || loadingPreview" @click="loadPreview">
+              {{ loadingPreview ? $t('common.loading') : $t('settings.importReviewChanges') }}
             </UiButton>
             <UiButton variant="outline" @click="clearImport">
               {{ $t('common.cancel') }}
@@ -250,123 +283,140 @@
           </div>
         </template>
 
-        <!-- Import result -->
-        <UiAlert v-if="importResult" variant="default">
-          <component :is="CheckCircleIcon" class="w-4 h-4" />
-          <UiAlertTitle>{{ $t('settings.importResult') }}</UiAlertTitle>
-          <UiAlertDescription class="space-y-1">
-            <p v-if="importResult.preferencesImported">
-              ✓ {{ $t('settings.importResultPreferences') }}
-            </p>
-            <p v-if="importResult.rulesImported > 0">
-              ✓
-              {{
-                $t(
-                  'settings.importResultRules',
-                  { count: importResult.rulesImported },
-                  importResult.rulesImported,
-                )
-              }}
-            </p>
-            <p v-if="importResult.integrationsImported > 0">
-              ✓
-              {{
-                $t(
-                  'settings.importResultIntegrations',
-                  { count: importResult.integrationsImported },
-                  importResult.integrationsImported,
-                )
-              }}
-            </p>
-            <p v-if="importResult.diskGroupsImported > 0">
-              ✓
-              {{
-                $t(
-                  'settings.importResultDiskGroups',
-                  { count: importResult.diskGroupsImported },
-                  importResult.diskGroupsImported,
-                )
-              }}
-            </p>
-            <p v-if="importResult.notificationChannelsImported > 0">
-              ✓
-              {{
-                $t(
-                  'settings.importResultNotifications',
-                  { count: importResult.notificationChannelsImported },
-                  importResult.notificationChannelsImported,
-                )
-              }}
-            </p>
-          </UiAlertDescription>
-        </UiAlert>
+        <!-- Step 3: Review Changes (Diff) -->
+        <template v-if="importStep === 3 && importPreviewData">
+          <SettingsImportDiff
+            :preview="importPreviewData"
+            @update:overrides="ruleOverrides = $event"
+          />
 
-        <!-- Items deleted in sync mode -->
-        <UiAlert v-if="importResult && importResult.itemsDeleted > 0" variant="default">
-          <component :is="AlertTriangleIcon" class="w-4 h-4" />
-          <UiAlertDescription>
-            {{
-              $t(
-                'settings.importResultItemsDeleted',
-                { count: importResult.itemsDeleted },
-                importResult.itemsDeleted,
-              )
-            }}
-          </UiAlertDescription>
-        </UiAlert>
+          <div class="flex items-center gap-3 pt-2">
+            <UiButton @click="importStep = 2">
+              {{ $t('common.back') }}
+            </UiButton>
+            <UiButton :disabled="importing" @click="doConfirmImport">
+              <component :is="UploadIcon" class="w-4 h-4" />
+              {{ importing ? $t('common.loading') : $t('settings.importConfirmButton') }}
+            </UiButton>
+            <UiButton variant="outline" @click="clearImport">
+              {{ $t('common.cancel') }}
+            </UiButton>
+          </div>
+        </template>
 
-        <!-- Unmatched rules warning -->
-        <UiAlert v-if="importResult && importResult.rulesUnmatched > 0" variant="destructive">
-          <component :is="AlertTriangleIcon" class="w-4 h-4" />
-          <UiAlertDescription>
-            {{
-              $t(
-                'settings.importResultRulesUnmatched',
-                { count: importResult.rulesUnmatched },
-                importResult.rulesUnmatched,
-              )
-            }}
-          </UiAlertDescription>
-        </UiAlert>
+        <!-- Step 4: Results -->
+        <template v-if="importStep === 4 && importResult">
+          <UiAlert variant="default">
+            <component :is="CheckCircleIcon" class="w-4 h-4" />
+            <UiAlertTitle>{{ $t('settings.importResult') }}</UiAlertTitle>
+            <UiAlertDescription class="space-y-1">
+              <p v-if="importResult.preferencesImported">
+                ✓ {{ $t('settings.importResultPreferences') }}
+              </p>
+              <p v-if="importResult.rulesImported > 0">
+                ✓
+                {{
+                  $t(
+                    'settings.importResultRules',
+                    { count: importResult.rulesImported },
+                    importResult.rulesImported,
+                  )
+                }}
+              </p>
+              <p v-if="importResult.integrationsImported > 0">
+                ✓
+                {{
+                  $t(
+                    'settings.importResultIntegrations',
+                    { count: importResult.integrationsImported },
+                    importResult.integrationsImported,
+                  )
+                }}
+              </p>
+              <p v-if="importResult.diskGroupsImported > 0">
+                ✓
+                {{
+                  $t(
+                    'settings.importResultDiskGroups',
+                    { count: importResult.diskGroupsImported },
+                    importResult.diskGroupsImported,
+                  )
+                }}
+              </p>
+              <p v-if="importResult.notificationChannelsImported > 0">
+                ✓
+                {{
+                  $t(
+                    'settings.importResultNotifications',
+                    { count: importResult.notificationChannelsImported },
+                    importResult.notificationChannelsImported,
+                  )
+                }}
+              </p>
+            </UiAlertDescription>
+          </UiAlert>
 
-        <!-- Pre-import snapshot download (merge mode — manual link) -->
-        <div
-          v-if="importResult && importResult.preImportSnapshot && !autoDownloadedSnapshot"
-          class="flex items-center gap-2"
-        >
-          <UiButton
-            variant="outline"
-            size="sm"
-            @click="downloadSnapshot(importResult.preImportSnapshot!)"
+          <UiAlert v-if="importResult.itemsDeleted > 0" variant="default">
+            <component :is="AlertTriangleIcon" class="w-4 h-4" />
+            <UiAlertDescription>
+              {{
+                $t(
+                  'settings.importResultItemsDeleted',
+                  { count: importResult.itemsDeleted },
+                  importResult.itemsDeleted,
+                )
+              }}
+            </UiAlertDescription>
+          </UiAlert>
+
+          <UiAlert v-if="importResult.rulesUnmatched > 0" variant="destructive">
+            <component :is="AlertTriangleIcon" class="w-4 h-4" />
+            <UiAlertDescription>
+              {{
+                $t(
+                  'settings.importResultRulesUnmatched',
+                  { count: importResult.rulesUnmatched },
+                  importResult.rulesUnmatched,
+                )
+              }}
+            </UiAlertDescription>
+          </UiAlert>
+
+          <div
+            v-if="importResult.preImportSnapshot && !autoDownloadedSnapshot"
+            class="flex items-center gap-2"
           >
-            <component :is="DownloadIcon" class="w-4 h-4" />
-            {{ $t('settings.importDownloadBackup') }}
+            <UiButton
+              variant="outline"
+              size="sm"
+              @click="downloadSnapshot(importResult.preImportSnapshot!)"
+            >
+              <component :is="DownloadIcon" class="w-4 h-4" />
+              {{ $t('settings.importDownloadBackup') }}
+            </UiButton>
+            <span class="text-xs text-muted-foreground">
+              {{ $t('settings.importDownloadBackupHint') }}
+            </span>
+          </div>
+
+          <UiButton variant="outline" @click="clearImport">
+            {{ $t('common.done') }}
           </UiButton>
-          <span class="text-xs text-muted-foreground">
-            {{ $t('settings.importDownloadBackupHint') }}
-          </span>
-        </div>
+        </template>
       </UiCardContent>
     </UiCard>
-
-    <!-- Resolution Dialog -->
-    <SettingsImportResolution
-      v-model:open="showResolutionDialog"
-      :resolutions="previewResolutions"
-      @confirm="onResolutionConfirmed"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { DownloadIcon, UploadIcon, AlertTriangleIcon, CheckCircleIcon } from 'lucide-vue-next';
+import SettingsImportDiff from '~/components/settings/SettingsImportDiff.vue';
 import type {
   SettingsExportEnvelope,
   ExportSections,
   ImportSections,
   ImportResult,
   ImportPreview,
-  RuleResolution,
   RuleOverride,
 } from '~/types/api';
 
@@ -380,7 +430,6 @@ const route = useRoute();
 
 const exporting = ref(false);
 
-// Pre-select sections based on query param (e.g., ?section=rules from Custom Rules page)
 const preselectedSection = route.query.section as string | undefined;
 
 const exportSections = reactive<ExportSections>({
@@ -413,7 +462,9 @@ async function doExport() {
     const query = sectionParams.join(',');
     const data = (await api(`/api/v1/settings/export?sections=${query}`)) as SettingsExportEnvelope;
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json',
+    });
     const url = URL.createObjectURL(blob);
     const date = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
@@ -432,13 +483,18 @@ async function doExport() {
 
 // ─── Import State ────────────────────────────────────────────────────────────
 
+const totalSteps = 4;
+const importStep = ref(0); // 0=hidden, 1=upload, 2=sections, 3=review, 4=results
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const parsedPayload = ref<SettingsExportEnvelope | null>(null);
 const importing = ref(false);
+const loadingPreview = ref(false);
 const isDragOver = ref(false);
 const importResult = ref<ImportResult | null>(null);
 const importMode = ref<'merge' | 'sync'>('merge');
 const autoDownloadedSnapshot = ref(false);
+const importPreviewData = ref<ImportPreview | null>(null);
+const ruleOverrides = ref<RuleOverride[]>([]);
 
 const importSections = reactive<ImportSections>({
   preferences: false,
@@ -457,12 +513,6 @@ const anyImportSelected = computed(
     importSections.notificationChannels,
 );
 
-// ─── Resolution Dialog State ─────────────────────────────────────────────────
-
-const showResolutionDialog = ref(false);
-const previewResolutions = ref<RuleResolution[]>([]);
-const pendingPayload = ref<SettingsExportEnvelope | null>(null);
-
 function onFileSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -480,6 +530,7 @@ function onFileDrop(event: DragEvent) {
 
 function parseFile(file: File) {
   importResult.value = null;
+  importPreviewData.value = null;
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -496,8 +547,9 @@ function parseFile(file: File) {
       }
 
       parsedPayload.value = data;
+      importStep.value = 1;
 
-      // Pre-check sections based on what's in the file
+      // Pre-check sections
       importSections.preferences = !!data.preferences;
       importSections.rules = (data.rules?.length ?? 0) > 0;
       importSections.integrations = (data.integrations?.length ?? 0) > 0;
@@ -513,12 +565,17 @@ function parseFile(file: File) {
 function clearImport() {
   parsedPayload.value = null;
   importResult.value = null;
+  importPreviewData.value = null;
+  ruleOverrides.value = [];
   importMode.value = 'merge';
   autoDownloadedSnapshot.value = false;
+  importStep.value = 0;
 }
 
 function downloadSnapshot(snapshot: SettingsExportEnvelope) {
-  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+    type: 'application/json',
+  });
   const url = URL.createObjectURL(blob);
   const date = new Date().toISOString().slice(0, 10);
   const a = document.createElement('a');
@@ -528,57 +585,40 @@ function downloadSnapshot(snapshot: SettingsExportEnvelope) {
   URL.revokeObjectURL(url);
 }
 
-async function doImport() {
+async function loadPreview() {
   if (!parsedPayload.value) return;
+  loadingPreview.value = true;
+  try {
+    const preview = (await api('/api/v1/settings/import/preview', {
+      method: 'POST',
+      body: {
+        payload: parsedPayload.value,
+        sections: { ...importSections, mode: importMode.value },
+      },
+    })) as ImportPreview;
 
-  // If rules are being imported, run preview first to check for unmatched rules
-  if (importSections.rules && (parsedPayload.value.rules?.length ?? 0) > 0) {
-    importing.value = true;
-    try {
-      const preview = (await api('/api/v1/settings/import/preview', {
-        method: 'POST',
-        body: {
-          payload: parsedPayload.value,
-          sections: { ...importSections, mode: importMode.value },
-        },
-      })) as ImportPreview;
-
-      const hasUnresolved = preview.rules.some(
-        (r) => r.resolution === 'unmatched' || r.resolution === 'type_fallback',
-      );
-
-      if (hasUnresolved) {
-        // Show resolution dialog
-        previewResolutions.value = preview.rules;
-        pendingPayload.value = parsedPayload.value;
-        showResolutionDialog.value = true;
-        importing.value = false;
-        return;
-      }
-
-      // All rules matched — proceed with direct import (no overrides needed)
-    } catch {
-      addToast(t('settings.importError'), 'error');
-      importing.value = false;
-      return;
-    }
+    importPreviewData.value = preview;
+    ruleOverrides.value = [];
+    importStep.value = 3;
+  } catch {
+    addToast(t('settings.importError'), 'error');
+  } finally {
+    loadingPreview.value = false;
   }
-
-  // Direct import (no resolution needed)
-  await executeImport();
 }
 
-async function executeImport(overrides?: RuleOverride[]) {
+async function doConfirmImport() {
   if (!parsedPayload.value) return;
   importing.value = true;
   try {
-    const endpoint = overrides ? '/api/v1/settings/import/commit' : '/api/v1/settings/import';
+    const hasOverrides = ruleOverrides.value.length > 0;
+    const endpoint = hasOverrides ? '/api/v1/settings/import/commit' : '/api/v1/settings/import';
     const body: Record<string, unknown> = {
       payload: parsedPayload.value,
       sections: { ...importSections, mode: importMode.value },
     };
-    if (overrides) {
-      body.overrides = overrides;
+    if (hasOverrides) {
+      body.overrides = ruleOverrides.value;
     }
 
     const result = (await api(endpoint, {
@@ -588,6 +628,7 @@ async function executeImport(overrides?: RuleOverride[]) {
 
     importResult.value = result;
     parsedPayload.value = null;
+    importStep.value = 4;
 
     // Auto-download safety backup in sync mode
     if (importMode.value === 'sync' && result.preImportSnapshot) {
@@ -602,12 +643,5 @@ async function executeImport(overrides?: RuleOverride[]) {
   } finally {
     importing.value = false;
   }
-}
-
-function onResolutionConfirmed(overrides: RuleOverride[]) {
-  if (pendingPayload.value) {
-    parsedPayload.value = pendingPayload.value;
-  }
-  executeImport(overrides);
 }
 </script>
