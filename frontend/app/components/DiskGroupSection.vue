@@ -278,7 +278,7 @@ const gaugeOption = computed(() => {
 
         data: [{ value: usage }],
       },
-      // Target marker: thin pointer at target %
+      // Target caret: small triangle on inner edge (green, pointing outward)
       {
         type: 'gauge',
         startAngle: 210,
@@ -292,30 +292,21 @@ const gaugeOption = computed(() => {
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { show: false },
+        detail: { show: false },
+        title: { show: false },
         pointer: {
           show: true,
-          length: '110%',
-          width: 2,
-          offsetCenter: [0, 0],
-          itemStyle: {
-            color: '#10b981',
-            opacity: 0.7,
-          },
+          icon: 'triangle',
+          length: '12%',
+          width: 8,
+          offsetCenter: [0, '-68%'],
+          itemStyle: { color: '#10b981', opacity: 0.8 },
         },
-        detail: {
-          show: true,
-          formatter: `${tgtPct}%`,
-          fontSize: 8,
-          color: '#10b981',
-          offsetCenter: [0, '75%'],
-          fontFamily: 'var(--font-geist-mono, monospace)',
-        },
-        title: { show: false },
-        data: [{ value: tgtPct, name: 'Target' }],
+        data: [{ value: tgtPct }],
         animation: false,
         silent: true,
       },
-      // Threshold marker: thin pointer at threshold %
+      // Threshold caret: small triangle on outer edge (red, pointing inward)
       {
         type: 'gauge',
         startAngle: 210,
@@ -329,26 +320,17 @@ const gaugeOption = computed(() => {
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { show: false },
+        detail: { show: false },
+        title: { show: false },
         pointer: {
           show: true,
-          length: '110%',
-          width: 2,
-          offsetCenter: [0, 0],
-          itemStyle: {
-            color: '#ef4444',
-            opacity: 0.7,
-          },
+          icon: 'triangle',
+          length: '12%',
+          width: 8,
+          offsetCenter: [0, '-92%'],
+          itemStyle: { color: '#ef4444', opacity: 0.8 },
         },
-        detail: {
-          show: true,
-          formatter: `${thrPct}%`,
-          fontSize: 8,
-          color: '#ef4444',
-          offsetCenter: [0, '90%'],
-          fontFamily: 'var(--font-geist-mono, monospace)',
-        },
-        title: { show: false },
-        data: [{ value: thrPct, name: 'Threshold' }],
+        data: [{ value: thrPct }],
         animation: false,
         silent: true,
       },
