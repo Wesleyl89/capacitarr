@@ -505,7 +505,9 @@ const tableColumns = computed(() => [
                   :size-bytes="getEntry(vRow.index * gridCols + (col - 1)).item.sizeBytes"
                   :is-protected="getEntry(vRow.index * gridCols + (col - 1)).isProtected"
                   :queue-status="getEntry(vRow.index * gridCols + (col - 1)).queueStatus"
-                  :collection-name="getEntry(vRow.index * gridCols + (col - 1)).item.collections?.[0]"
+                  :collection-name="
+                    getEntry(vRow.index * gridCols + (col - 1)).item.collections?.[0]
+                  "
                   :selectable="selectionMode"
                   :selected="selectedIds.has(itemKey(getEntry(vRow.index * gridCols + (col - 1))))"
                   @click="

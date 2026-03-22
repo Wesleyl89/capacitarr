@@ -512,8 +512,8 @@
             <span class="font-medium text-foreground">What it does:</span> When enabled on an
             integration, deleting any item that belongs to a collection automatically deletes
             <em>all other items</em> in that collection. For example, if "Serenity" is part of the
-            "Firefly Collection" and gets selected for deletion, all movies in the Firefly Collection
-            are deleted together.
+            "Firefly Collection" and gets selected for deletion, all movies in the Firefly
+            Collection are deleted together.
           </p>
 
           <div class="space-y-2">
@@ -530,8 +530,8 @@
                 may group unrelated media — use with caution.
               </li>
               <li>
-                <span class="text-foreground font-medium">Jellyfin</span> — Uses Box Sets. These
-                are groups of related movies that were auto-detected or manually organized.
+                <span class="text-foreground font-medium">Jellyfin</span> — Uses Box Sets. These are
+                groups of related movies that were auto-detected or manually organized.
               </li>
               <li>
                 <span class="text-foreground font-medium">Emby</span> — Uses Box Sets, same as
@@ -559,8 +559,8 @@
                 "Family Movie Night" collection might group otherwise unrelated movies.
               </li>
               <li>
-                <span class="text-foreground font-medium">Protected members:</span> If any item in
-                a collection has an "always keep" rule, the entire collection is protected.
+                <span class="text-foreground font-medium">Protected members:</span> If any item in a
+                collection has an "always keep" rule, the entire collection is protected.
               </li>
               <li>
                 <span class="text-foreground font-medium">Snoozed members:</span> If any item in a

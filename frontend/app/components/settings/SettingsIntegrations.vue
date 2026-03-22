@@ -302,16 +302,24 @@ const editingIntegration = ref<IntegrationConfig | null>(null);
 const saving = ref(false);
 const formError = ref('');
 
-const formState = reactive({ type: 'sonarr', name: '', url: '', apiKey: '', collectionDeletion: false });
+const formState = reactive({
+  type: 'sonarr',
+  name: '',
+  url: '',
+  apiKey: '',
+  collectionDeletion: false,
+});
 
 /** Integration types that support collection deletion */
 const collectionDeletionTypes = new Set(['radarr', 'plex', 'jellyfin', 'emby']);
 
 /** Description text for the collection deletion toggle per integration type */
 const collectionDeletionDescriptions: Record<string, string> = {
-  radarr: 'Uses TMDb movie collections — curated franchise groupings like "The Lord of the Rings Collection".',
+  radarr:
+    'Uses TMDb movie collections — curated franchise groupings like "The Lord of the Rings Collection".',
   plex: 'Uses Plex library collections. Includes automatic and user-created collections. Custom collections can group unrelated media.',
-  jellyfin: 'Uses Jellyfin Box Sets — groups of related movies that were auto-detected or manually organized.',
+  jellyfin:
+    'Uses Jellyfin Box Sets — groups of related movies that were auto-detected or manually organized.',
   emby: 'Uses Emby Box Sets — groups of related movies that were auto-detected or manually organized.',
 };
 
@@ -386,7 +394,13 @@ async function fetchIntegrations(showSpinner = true) {
 
 function openAddModal() {
   editingIntegration.value = null;
-  Object.assign(formState, { type: 'sonarr', name: '', url: '', apiKey: '', collectionDeletion: false });
+  Object.assign(formState, {
+    type: 'sonarr',
+    name: '',
+    url: '',
+    apiKey: '',
+    collectionDeletion: false,
+  });
   formError.value = '';
   showModal.value = true;
 }

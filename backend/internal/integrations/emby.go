@@ -284,11 +284,9 @@ func (e *EmbyClient) GetWatchlistItems() (map[int]bool, error) {
 	return merged, nil
 }
 
-// Verify EmbyClient satisfies capability interfaces at compile time.
-// GetCollectionMemberships implements CollectionDataProvider by fetching all
-// Box Sets from Emby, then fetching their child items to build a
-// TMDb ID → box set name mapping. Emby's API is structurally identical to
-// Jellyfin (forked codebase).
+// GetCollectionMemberships fetches all Box Sets from Emby, then fetches their
+// child items to build a TMDb ID → box set name mapping. Emby's API is
+// structurally identical to Jellyfin (forked codebase). Implements CollectionDataProvider.
 func (e *EmbyClient) GetCollectionMemberships() (map[int][]string, error) {
 	// Find an admin user for API queries
 	users, err := e.getAllUsers()

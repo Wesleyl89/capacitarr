@@ -12,14 +12,14 @@ import (
 type IntegrationRegistry struct {
 	mu sync.RWMutex
 
-	connectors          map[uint]Connectable
-	mediaSources        map[uint]MediaSource
-	diskReporters       map[uint]DiskReporter
-	deleters            map[uint]MediaDeleter
-	watchProviders      map[uint]WatchDataProvider
-	requestProviders    map[uint]RequestProvider
-	watchlistProviders  map[uint]WatchlistProvider
-	ruleValueFetchers   map[uint]RuleValueFetcher
+	connectors              map[uint]Connectable
+	mediaSources            map[uint]MediaSource
+	diskReporters           map[uint]DiskReporter
+	deleters                map[uint]MediaDeleter
+	watchProviders          map[uint]WatchDataProvider
+	requestProviders        map[uint]RequestProvider
+	watchlistProviders      map[uint]WatchlistProvider
+	ruleValueFetchers       map[uint]RuleValueFetcher
 	collectionResolvers     map[uint]CollectionResolver
 	collectionDataProviders map[uint]CollectionDataProvider
 }
@@ -27,14 +27,14 @@ type IntegrationRegistry struct {
 // NewIntegrationRegistry creates an empty registry.
 func NewIntegrationRegistry() *IntegrationRegistry {
 	return &IntegrationRegistry{
-		connectors:         make(map[uint]Connectable),
-		mediaSources:       make(map[uint]MediaSource),
-		diskReporters:      make(map[uint]DiskReporter),
-		deleters:           make(map[uint]MediaDeleter),
-		watchProviders:     make(map[uint]WatchDataProvider),
-		requestProviders:   make(map[uint]RequestProvider),
-		watchlistProviders: make(map[uint]WatchlistProvider),
-		ruleValueFetchers:   make(map[uint]RuleValueFetcher),
+		connectors:              make(map[uint]Connectable),
+		mediaSources:            make(map[uint]MediaSource),
+		diskReporters:           make(map[uint]DiskReporter),
+		deleters:                make(map[uint]MediaDeleter),
+		watchProviders:          make(map[uint]WatchDataProvider),
+		requestProviders:        make(map[uint]RequestProvider),
+		watchlistProviders:      make(map[uint]WatchlistProvider),
+		ruleValueFetchers:       make(map[uint]RuleValueFetcher),
 		collectionResolvers:     make(map[uint]CollectionResolver),
 		collectionDataProviders: make(map[uint]CollectionDataProvider),
 	}

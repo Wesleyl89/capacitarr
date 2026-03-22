@@ -273,7 +273,8 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 
 		// ── Process all items (single item or expanded collection) ────────
 		for _, pi := range itemsToProcess {
-			if prefs.ExecutionMode == "auto" {
+			switch prefs.ExecutionMode {
+			case "auto":
 				deleter, err := registry.Deleter(pi.item.IntegrationID)
 				if err != nil {
 					slog.Error("Integration not registered as MediaDeleter", "component", "poller",
@@ -298,7 +299,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				}
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
-			} else if prefs.ExecutionMode == "approval" {
+			case "approval":
 				// Collect for batch upsert after the loop.
 				factorsJSON, marshalErr := json.Marshal(pi.factors)
 				if marshalErr != nil {
@@ -329,7 +330,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				slog.Info("Engine action taken", "component", "poller",
 					"media", pi.item.Title, "action", "queued_for_approval", "score", pi.score, "freed", pi.item.SizeBytes,
 					"collectionGroup", pi.collectionGroup)
-			} else {
+			default:
 				// Dry-run mode: queue through DeletionService with ForceDryRun + UpsertAudit
 				diskGroupID := group.ID
 				if err := p.reg.Deletion.QueueDeletion(services.DeleteJob{

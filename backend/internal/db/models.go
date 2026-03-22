@@ -61,20 +61,20 @@ type Library struct {
 // machine. If the database file is compromised, the attacker already has
 // access to the host. Ensure the DB file permissions are restrictive (0600).
 type IntegrationConfig struct {
-	ID             uint       `gorm:"primarykey" json:"id"`
-	Type           string     `gorm:"not null;index" json:"type"` // plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby
-	Name           string     `gorm:"not null" json:"name"`       // User-friendly name
-	URL            string     `gorm:"not null" json:"url"`
-	APIKey         string     `gorm:"not null" json:"apiKey"` // API key or Plex token
-	Enabled        bool       `gorm:"default:true" json:"enabled"`
-	LibraryID      *uint      `gorm:"index" json:"libraryId,omitempty"` // FK to Library (ON DELETE SET NULL)
-	MediaSizeBytes int64      `json:"mediaSizeBytes"`                   // Total media file size
-	MediaCount     int        `json:"mediaCount"`                       // Number of media items
-	LastSync       *time.Time `json:"lastSync,omitempty"`
-	LastError           string     `json:"lastError,omitempty"`
-	CollectionDeletion  bool       `gorm:"default:false" json:"collectionDeletion"`  // When enabled, deleting one collection member deletes all
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	ID                 uint       `gorm:"primarykey" json:"id"`
+	Type               string     `gorm:"not null;index" json:"type"` // plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby
+	Name               string     `gorm:"not null" json:"name"`       // User-friendly name
+	URL                string     `gorm:"not null" json:"url"`
+	APIKey             string     `gorm:"not null" json:"apiKey"` // API key or Plex token
+	Enabled            bool       `gorm:"default:true" json:"enabled"`
+	LibraryID          *uint      `gorm:"index" json:"libraryId,omitempty"` // FK to Library (ON DELETE SET NULL)
+	MediaSizeBytes     int64      `json:"mediaSizeBytes"`                   // Total media file size
+	MediaCount         int        `json:"mediaCount"`                       // Number of media items
+	LastSync           *time.Time `json:"lastSync,omitempty"`
+	LastError          string     `json:"lastError,omitempty"`
+	CollectionDeletion bool       `gorm:"default:false" json:"collectionDeletion"` // When enabled, deleting one collection member deletes all
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
 // DiskGroupIntegration tracks which integrations reported each disk group.
@@ -165,23 +165,23 @@ const (
 // Items with UserInitiated=true were queued by a user (via POST /delete) rather than
 // the engine poller, and are preserved when the queue is cleared on below-threshold cycles.
 type ApprovalQueueItem struct {
-	ID            uint       `gorm:"primarykey" json:"id"`
-	MediaName     string     `gorm:"index;not null" json:"mediaName"`
-	MediaType     string     `gorm:"not null" json:"mediaType"`                          // movie, show, season, episode, artist, album, book
-	ScoreDetails  string     `gorm:"type:text" json:"scoreDetails"`                      // JSON-encoded []ScoreFactor
-	SizeBytes     int64      `gorm:"not null;default:0" json:"sizeBytes"`                // File size in bytes
-	Score         float64    `gorm:"not null;default:0" json:"score"`                    // Numeric score from engine evaluation
-	PosterURL     string     `gorm:"not null;default:''" json:"posterUrl"`               // Poster image URL from *arr
-	IntegrationID uint       `gorm:"not null" json:"integrationId"`                      // FK to IntegrationConfig (required)
-	ExternalID    string     `gorm:"not null;default:''" json:"externalId"`              // External ID in the integration
-	DiskGroupID   *uint      `gorm:"index" json:"diskGroupId,omitempty"`                 // FK to DiskGroup (nullable — set by poller to scope queue per disk group)
-	Status        string     `gorm:"not null;default:'pending'" json:"status"`           // pending, approved, rejected
-	Trigger         string     `gorm:"not null;default:'engine'" json:"trigger"`              // "engine", "user"
+	ID              uint       `gorm:"primarykey" json:"id"`
+	MediaName       string     `gorm:"index;not null" json:"mediaName"`
+	MediaType       string     `gorm:"not null" json:"mediaType"`                            // movie, show, season, episode, artist, album, book
+	ScoreDetails    string     `gorm:"type:text" json:"scoreDetails"`                        // JSON-encoded []ScoreFactor
+	SizeBytes       int64      `gorm:"not null;default:0" json:"sizeBytes"`                  // File size in bytes
+	Score           float64    `gorm:"not null;default:0" json:"score"`                      // Numeric score from engine evaluation
+	PosterURL       string     `gorm:"not null;default:''" json:"posterUrl"`                 // Poster image URL from *arr
+	IntegrationID   uint       `gorm:"not null" json:"integrationId"`                        // FK to IntegrationConfig (required)
+	ExternalID      string     `gorm:"not null;default:''" json:"externalId"`                // External ID in the integration
+	DiskGroupID     *uint      `gorm:"index" json:"diskGroupId,omitempty"`                   // FK to DiskGroup (nullable — set by poller to scope queue per disk group)
+	Status          string     `gorm:"not null;default:'pending'" json:"status"`             // pending, approved, rejected
+	Trigger         string     `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user"
 	UserInitiated   bool       `gorm:"not null;default:false" json:"userInitiated"`          // True when queued by user via POST /delete (preserved on queue clear)
 	CollectionGroup string     `gorm:"not null;default:''" json:"collectionGroup,omitempty"` // Groups collection members (e.g., "Sonic the Hedgehog Collection")
 	SnoozedUntil    *time.Time `gorm:"column:snoozed_until" json:"snoozedUntil,omitempty"`   // When snooze expires (rejected items)
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
 // TableName returns the database table name for ApprovalQueueItem.
@@ -213,15 +213,15 @@ const (
 // AuditLogEntry stores a permanent record of deletions and dry-runs.
 // This table is append-only — entries are never modified after creation.
 type AuditLogEntry struct {
-	ID            uint      `gorm:"primarykey" json:"id"`
-	MediaName     string    `gorm:"index;not null" json:"mediaName"`
-	MediaType     string    `gorm:"not null" json:"mediaType"`
-	ScoreDetails  string    `gorm:"type:text" json:"scoreDetails"` // JSON-encoded []ScoreFactor
-	Action        string    `gorm:"not null" json:"action"`        // "deleted", "dry_delete", "cancelled"
-	SizeBytes     int64     `gorm:"not null;default:0" json:"sizeBytes"`
-	Score         float64   `gorm:"not null;default:0" json:"score"`                      // Numeric score from engine evaluation
-	Trigger       string    `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user", "approval"
-	DryRunReason  string    `gorm:"not null;default:''" json:"dryRunReason"`              // "deletions_disabled", "execution_mode", "" (empty if not dry-run)
+	ID              uint      `gorm:"primarykey" json:"id"`
+	MediaName       string    `gorm:"index;not null" json:"mediaName"`
+	MediaType       string    `gorm:"not null" json:"mediaType"`
+	ScoreDetails    string    `gorm:"type:text" json:"scoreDetails"` // JSON-encoded []ScoreFactor
+	Action          string    `gorm:"not null" json:"action"`        // "deleted", "dry_delete", "cancelled"
+	SizeBytes       int64     `gorm:"not null;default:0" json:"sizeBytes"`
+	Score           float64   `gorm:"not null;default:0" json:"score"`                      // Numeric score from engine evaluation
+	Trigger         string    `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user", "approval"
+	DryRunReason    string    `gorm:"not null;default:''" json:"dryRunReason"`              // "deletions_disabled", "execution_mode", "" (empty if not dry-run)
 	IntegrationID   *uint     `json:"integrationId,omitempty" gorm:"column:integration_id"` // FK to IntegrationConfig (nullable — preserved on integration delete)
 	DiskGroupID     *uint     `gorm:"index" json:"diskGroupId,omitempty"`                   // FK to DiskGroup (nullable — set by poller to scope audit entries per disk group)
 	CollectionGroup string    `gorm:"not null;default:''" json:"collectionGroup,omitempty"` // Groups collection deletions (e.g., "Sonic the Hedgehog Collection")

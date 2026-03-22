@@ -351,11 +351,9 @@ func (j *JellyfinClient) GetItemIDToTMDbIDMap() (map[string]int, error) {
 	return result, nil
 }
 
-// Verify JellyfinClient satisfies capability interfaces at compile time.
-// GetCollectionMemberships implements CollectionDataProvider by fetching all
-// Box Sets from Jellyfin, then fetching their child items to build a
-// TMDb ID → box set name mapping. This bridges Jellyfin Box Set data onto
-// *arr items via the CollectionEnricher.
+// GetCollectionMemberships fetches all Box Sets from Jellyfin, then fetches their
+// child items to build a TMDb ID → box set name mapping. This bridges Jellyfin Box
+// Set data onto *arr items via the CollectionEnricher. Implements CollectionDataProvider.
 func (j *JellyfinClient) GetCollectionMemberships() (map[int][]string, error) {
 	// Find an admin user for API queries (Box Sets may require user context)
 	users, err := j.getAllUsers()

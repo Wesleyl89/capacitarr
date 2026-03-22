@@ -22,15 +22,15 @@ type Sender interface {
 // CycleDigest contains the accumulated data for a single engine cycle
 // notification. The dispatch service builds this from event accumulation.
 type CycleDigest struct {
-	ExecutionMode string  `json:"executionMode"`
-	Evaluated     int     `json:"evaluated"`
-	Flagged       int     `json:"flagged"`
-	Deleted       int     `json:"deleted"`
-	Failed        int     `json:"failed"`
-	FreedBytes    int64   `json:"freedBytes"`
-	DurationMs    int64   `json:"durationMs"`
-	DiskUsagePct  float64 `json:"diskUsagePct"`
-	DiskThreshold float64 `json:"diskThreshold"`
+	ExecutionMode      string  `json:"executionMode"`
+	Evaluated          int     `json:"evaluated"`
+	Flagged            int     `json:"flagged"`
+	Deleted            int     `json:"deleted"`
+	Failed             int     `json:"failed"`
+	FreedBytes         int64   `json:"freedBytes"`
+	DurationMs         int64   `json:"durationMs"`
+	DiskUsagePct       float64 `json:"diskUsagePct"`
+	DiskThreshold      float64 `json:"diskThreshold"`
 	DiskTargetPct      float64 `json:"diskTargetPct"`
 	CollectionsDeleted int     `json:"collectionsDeleted"` // Number of distinct collections that triggered group deletions
 	Version            string  `json:"version"`
