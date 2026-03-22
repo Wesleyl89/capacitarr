@@ -105,6 +105,15 @@ type WatchlistProvider interface {
 	GetWatchlistItems() (map[int]bool, error)
 }
 
+// CollectionDataProvider is implemented by media server integrations (Plex,
+// Jellyfin, Emby) that can report collection/box set memberships. The returned
+// map keys are TMDb IDs and values are slices of collection names that the
+// item belongs to. This data feeds the CollectionEnricher to bridge media
+// server collection info onto *arr items.
+type CollectionDataProvider interface {
+	GetCollectionMemberships() (map[int][]string, error)
+}
+
 // CollectionResolver is implemented by integrations that can resolve which
 // other items share a collection with a given item. When collection deletion
 // is enabled on an integration, the poller calls this to expand a single

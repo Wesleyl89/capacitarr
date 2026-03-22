@@ -285,6 +285,78 @@ func (e *EmbyClient) GetWatchlistItems() (map[int]bool, error) {
 }
 
 // Verify EmbyClient satisfies capability interfaces at compile time.
+// GetCollectionMemberships implements CollectionDataProvider by fetching all
+// Box Sets from Emby, then fetching their child items to build a
+// TMDb ID → box set name mapping. Emby's API is structurally identical to
+// Jellyfin (forked codebase).
+func (e *EmbyClient) GetCollectionMemberships() (map[int][]string, error) {
+	// Find an admin user for API queries
+	users, err := e.getAllUsers()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Emby users for collection memberships: %w", err)
+	}
+	var adminUserID string
+	for _, u := range users {
+		if u.Policy.IsAdministrator {
+			adminUserID = u.ID
+			break
+		}
+	}
+	if adminUserID == "" && len(users) > 0 {
+		adminUserID = users[0].ID
+	}
+	if adminUserID == "" {
+		return nil, fmt.Errorf("no Emby users found for collection memberships")
+	}
+
+	// Fetch all Box Sets
+	endpoint := fmt.Sprintf("/Users/%s/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=ProviderIds", adminUserID)
+	body, err := e.doRequest(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Emby box sets: %w", err)
+	}
+
+	var boxSetResp struct {
+		Items []struct {
+			ID   string `json:"Id"`
+			Name string `json:"Name"`
+		} `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &boxSetResp); err != nil {
+		return nil, fmt.Errorf("failed to parse Emby box sets: %w", err)
+	}
+
+	result := make(map[int][]string)
+
+	// For each Box Set, fetch its children and map their TMDb IDs
+	for _, boxSet := range boxSetResp.Items {
+		childEndpoint := fmt.Sprintf("/Users/%s/Items?ParentId=%s&Fields=ProviderIds", adminUserID, boxSet.ID)
+		childBody, childErr := e.doRequest(childEndpoint)
+		if childErr != nil {
+			slog.Debug("Failed to fetch Emby box set children", "component", "integrations",
+				"boxSet", boxSet.Name, "error", childErr)
+			continue
+		}
+
+		var childResp struct {
+			Items []embyItem `json:"Items"`
+		}
+		if childErr := json.Unmarshal(childBody, &childResp); childErr != nil {
+			continue
+		}
+
+		for _, child := range childResp.Items {
+			tmdbID := extractTMDbID(child.ProviderIDs)
+			if tmdbID > 0 {
+				result[tmdbID] = append(result[tmdbID], boxSet.Name)
+			}
+		}
+	}
+
+	return result, nil
+}
+
 var _ Connectable = (*EmbyClient)(nil)
 var _ WatchDataProvider = (*EmbyClient)(nil)
 var _ WatchlistProvider = (*EmbyClient)(nil)
+var _ CollectionDataProvider = (*EmbyClient)(nil)

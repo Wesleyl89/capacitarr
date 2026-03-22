@@ -20,7 +20,8 @@ type IntegrationRegistry struct {
 	requestProviders    map[uint]RequestProvider
 	watchlistProviders  map[uint]WatchlistProvider
 	ruleValueFetchers   map[uint]RuleValueFetcher
-	collectionResolvers map[uint]CollectionResolver
+	collectionResolvers     map[uint]CollectionResolver
+	collectionDataProviders map[uint]CollectionDataProvider
 }
 
 // NewIntegrationRegistry creates an empty registry.
@@ -34,7 +35,8 @@ func NewIntegrationRegistry() *IntegrationRegistry {
 		requestProviders:   make(map[uint]RequestProvider),
 		watchlistProviders: make(map[uint]WatchlistProvider),
 		ruleValueFetchers:   make(map[uint]RuleValueFetcher),
-		collectionResolvers: make(map[uint]CollectionResolver),
+		collectionResolvers:     make(map[uint]CollectionResolver),
+		collectionDataProviders: make(map[uint]CollectionDataProvider),
 	}
 }
 
@@ -92,6 +94,10 @@ func (r *IntegrationRegistry) Register(integrationID uint, client interface{}) {
 		r.collectionResolvers[integrationID] = c
 		registered++
 	}
+	if c, ok := client.(CollectionDataProvider); ok {
+		r.collectionDataProviders[integrationID] = c
+		registered++
+	}
 
 	slog.Debug("Registered integration", "component", "registry",
 		"integrationID", integrationID, "capabilities", registered)
@@ -111,6 +117,7 @@ func (r *IntegrationRegistry) Unregister(integrationID uint) {
 	delete(r.watchlistProviders, integrationID)
 	delete(r.ruleValueFetchers, integrationID)
 	delete(r.collectionResolvers, integrationID)
+	delete(r.collectionDataProviders, integrationID)
 }
 
 // Clear removes all registrations.
@@ -127,6 +134,7 @@ func (r *IntegrationRegistry) Clear() {
 	r.watchlistProviders = make(map[uint]WatchlistProvider)
 	r.ruleValueFetchers = make(map[uint]RuleValueFetcher)
 	r.collectionResolvers = make(map[uint]CollectionResolver)
+	r.collectionDataProviders = make(map[uint]CollectionDataProvider)
 }
 
 // ─── Accessor methods ───────────────────────────────────────────────────────
@@ -222,6 +230,17 @@ func (r *IntegrationRegistry) CollectionResolver(id uint) (CollectionResolver, b
 	defer r.mu.RUnlock()
 	c, ok := r.collectionResolvers[id]
 	return c, ok
+}
+
+// CollectionDataProviders returns all registered CollectionDataProvider implementations with their IDs.
+func (r *IntegrationRegistry) CollectionDataProviders() map[uint]CollectionDataProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[uint]CollectionDataProvider, len(r.collectionDataProviders))
+	for k, v := range r.collectionDataProviders {
+		out[k] = v
+	}
+	return out
 }
 
 // CollectionResolvers returns all registered CollectionResolver implementations with their IDs.

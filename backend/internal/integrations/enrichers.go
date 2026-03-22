@@ -330,6 +330,62 @@ func (e *WatchlistEnricher) Enrich(items []MediaItem) error {
 // Verify WatchlistEnricher satisfies Enricher at compile time.
 var _ Enricher = (*WatchlistEnricher)(nil)
 
+// ─── CollectionEnricher ─────────────────────────────────────────────────────
+
+// CollectionEnricher enriches *arr items with collection membership data from
+// any CollectionDataProvider (Plex, Jellyfin, Emby). Matches items by TMDb ID
+// to bridge media server collection/box set data onto *arr items.
+// Only populates items that don't already have collections so native collection
+// data from *arr sources (e.g., Radarr's TMDb collections) takes precedence.
+type CollectionEnricher struct {
+	name     string
+	priority int
+	provider CollectionDataProvider
+}
+
+// NewCollectionEnricher creates an enricher wrapping a CollectionDataProvider.
+func NewCollectionEnricher(name string, priority int, provider CollectionDataProvider) *CollectionEnricher {
+	return &CollectionEnricher{name: name, priority: priority, provider: provider}
+}
+
+// Name implements Enricher.
+func (e *CollectionEnricher) Name() string { return e.name }
+
+// Priority implements Enricher.
+func (e *CollectionEnricher) Priority() int { return e.priority }
+
+// Enrich implements Enricher by fetching collection memberships and merging by TMDb ID.
+func (e *CollectionEnricher) Enrich(items []MediaItem) error {
+	collectionMap, err := e.provider.GetCollectionMemberships()
+	if err != nil {
+		return err
+	}
+	if len(collectionMap) == 0 {
+		return nil
+	}
+	matched := 0
+	for i := range items {
+		item := &items[i]
+		if item.TMDbID == 0 {
+			continue
+		}
+		// Only enrich if no higher-priority source already set collections
+		// (e.g., Radarr's native TMDb collection data)
+		if len(item.Collections) > 0 {
+			continue
+		}
+		if collections, ok := collectionMap[item.TMDbID]; ok {
+			item.Collections = collections
+			matched++
+		}
+	}
+	logEnrichmentResult(e.name, len(items), len(collectionMap), matched)
+	return nil
+}
+
+// Verify CollectionEnricher satisfies Enricher at compile time.
+var _ Enricher = (*CollectionEnricher)(nil)
+
 // ─── CrossReferenceEnricher ─────────────────────────────────────────────────
 
 // CrossReferenceEnricher runs after all other enrichers to reconcile
@@ -393,6 +449,11 @@ func BuildEnrichmentPipeline(registry *IntegrationRegistry) *EnrichmentPipeline 
 	// Watchlist enrichers (priority 40)
 	for _, provider := range registry.WatchlistProviders() {
 		pipeline.Add(NewWatchlistEnricher("Watchlist/Favorites", 40, provider))
+	}
+
+	// Collection enrichers (priority 50 — after watch data, before cross-reference)
+	for _, provider := range registry.CollectionDataProviders() {
+		pipeline.Add(NewCollectionEnricher("Collection Data", 50, provider))
 	}
 
 	// Cross-reference enricher always added last (priority 100)

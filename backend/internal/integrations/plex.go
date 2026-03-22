@@ -411,8 +411,28 @@ func (p *PlexClient) GetWatchlistItems() (map[int]bool, error) {
 	return p.GetOnDeckItems()
 }
 
+// GetCollectionMemberships implements CollectionDataProvider by scanning all
+// Plex libraries and building a TMDb ID → collection names map from metadata.
+// This bridges Plex collection data onto *arr items via the CollectionEnricher.
+func (p *PlexClient) GetCollectionMemberships() (map[int][]string, error) {
+	items, err := p.getMediaItems()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Plex items for collection memberships: %w", err)
+	}
+
+	result := make(map[int][]string)
+	for _, item := range items {
+		if item.TMDbID == 0 || len(item.Collections) == 0 {
+			continue
+		}
+		result[item.TMDbID] = item.Collections
+	}
+	return result, nil
+}
+
 // Verify PlexClient satisfies capability interfaces at compile time.
 // Note: PlexClient intentionally does NOT implement MediaSource — only *arr integrations should.
 var _ Connectable = (*PlexClient)(nil)
 var _ WatchDataProvider = (*PlexClient)(nil)
 var _ WatchlistProvider = (*PlexClient)(nil)
+var _ CollectionDataProvider = (*PlexClient)(nil)

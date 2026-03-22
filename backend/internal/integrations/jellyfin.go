@@ -352,6 +352,78 @@ func (j *JellyfinClient) GetItemIDToTMDbIDMap() (map[string]int, error) {
 }
 
 // Verify JellyfinClient satisfies capability interfaces at compile time.
+// GetCollectionMemberships implements CollectionDataProvider by fetching all
+// Box Sets from Jellyfin, then fetching their child items to build a
+// TMDb ID → box set name mapping. This bridges Jellyfin Box Set data onto
+// *arr items via the CollectionEnricher.
+func (j *JellyfinClient) GetCollectionMemberships() (map[int][]string, error) {
+	// Find an admin user for API queries (Box Sets may require user context)
+	users, err := j.getAllUsers()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Jellyfin users for collection memberships: %w", err)
+	}
+	var adminUserID string
+	for _, u := range users {
+		if u.Policy.IsAdministrator {
+			adminUserID = u.ID
+			break
+		}
+	}
+	if adminUserID == "" && len(users) > 0 {
+		adminUserID = users[0].ID // Fallback to first user
+	}
+	if adminUserID == "" {
+		return nil, fmt.Errorf("no Jellyfin users found for collection memberships")
+	}
+
+	// Fetch all Box Sets
+	endpoint := fmt.Sprintf("/Users/%s/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=ProviderIds", adminUserID)
+	body, err := j.doRequest(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Jellyfin box sets: %w", err)
+	}
+
+	var boxSetResp struct {
+		Items []struct {
+			ID   string `json:"Id"`
+			Name string `json:"Name"`
+		} `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &boxSetResp); err != nil {
+		return nil, fmt.Errorf("failed to parse Jellyfin box sets: %w", err)
+	}
+
+	result := make(map[int][]string)
+
+	// For each Box Set, fetch its children and map their TMDb IDs
+	for _, boxSet := range boxSetResp.Items {
+		childEndpoint := fmt.Sprintf("/Users/%s/Items?ParentId=%s&Fields=ProviderIds", adminUserID, boxSet.ID)
+		childBody, childErr := j.doRequest(childEndpoint)
+		if childErr != nil {
+			slog.Debug("Failed to fetch Jellyfin box set children", "component", "integrations",
+				"boxSet", boxSet.Name, "error", childErr)
+			continue
+		}
+
+		var childResp struct {
+			Items []jellyfinItem `json:"Items"`
+		}
+		if childErr := json.Unmarshal(childBody, &childResp); childErr != nil {
+			continue
+		}
+
+		for _, child := range childResp.Items {
+			tmdbID := extractTMDbID(child.ProviderIDs)
+			if tmdbID > 0 {
+				result[tmdbID] = append(result[tmdbID], boxSet.Name)
+			}
+		}
+	}
+
+	return result, nil
+}
+
 var _ Connectable = (*JellyfinClient)(nil)
 var _ WatchDataProvider = (*JellyfinClient)(nil)
 var _ WatchlistProvider = (*JellyfinClient)(nil)
+var _ CollectionDataProvider = (*JellyfinClient)(nil)
