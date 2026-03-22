@@ -343,7 +343,10 @@
     <DeletionQueueCard />
 
     <!-- Per-Disk-Group Sections -->
-    <div v-if="diskGroups.length > 0" class="space-y-5 mb-6">
+    <div
+      v-if="diskGroups.length > 0"
+      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6"
+    >
       <DiskGroupSection
         v-for="group in diskGroups"
         :key="group.id"
