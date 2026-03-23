@@ -29,7 +29,7 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	database, err := gorm.Open(gormlite.Open(cfg.Database), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(logLevel),
+		Logger: logger.NewGormLogger(0).LogMode(logLevel),
 	})
 	if err != nil {
 		slog.Error("Failed to connect to database", "component", "db", "operation", "connect", "error", err)
