@@ -496,7 +496,18 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 		runStatsID = deps.Engine.LatestRunStatsID()
 	}
 
-	// 7. Queue for background deletion
+	// 7. Determine dry-run mode from preferences. The route handler no longer
+	// needs to compute this — all business logic lives in the service layer.
+	forceDryRun := false
+	if deps.Settings != nil {
+		prefs, prefsErr := deps.Settings.GetPreferences()
+		if prefsErr != nil {
+			return approved, fmt.Errorf("failed to load preferences: %w", prefsErr)
+		}
+		forceDryRun = !prefs.DeletionsEnabled || prefs.ExecutionMode == "dry-run"
+	}
+
+	// 8. Queue for background deletion
 	if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
 		Client:          client,
 		Item:            item,
@@ -504,7 +515,7 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 		Factors:         factors,
 		Trigger:         db.TriggerApproval,
 		RunStatsID:      runStatsID,
-		ForceDryRun:     deps.ForceDryRun,
+		ForceDryRun:     forceDryRun,
 		ApprovalEntryID: approved.ID,
 	}); queueErr != nil {
 		return approved, fmt.Errorf("deletion queue is full: %w", queueErr)
@@ -520,7 +531,7 @@ type ExecuteApprovalDeps struct {
 	Integration *IntegrationService
 	Deletion    *DeletionService
 	Engine      *EngineService
-	ForceDryRun bool // When true, the queued DeleteJob will simulate deletion
+	Settings    SettingsReader // Used to determine dry-run mode from preferences
 }
 
 // ManualDeleteItem contains the data needed for a user-initiated deletion.
