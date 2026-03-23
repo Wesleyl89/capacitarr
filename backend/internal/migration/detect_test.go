@@ -84,18 +84,18 @@ func TestDetectLegacySchema_V2Database(t *testing.T) {
 func TestDetect1xBackup_NoFile(t *testing.T) {
 	dir := t.TempDir()
 	if Detect1xBackup(dir) {
-		t.Error("expected false when no .v1.bak exists")
+		t.Error("expected false when no backup exists")
 	}
 }
 
 func TestDetect1xBackup_FileExists(t *testing.T) {
 	dir := t.TempDir()
-	bakPath := filepath.Join(dir, "capacitarr.db.v1.bak")
+	bakPath := filepath.Join(dir, backupFilename)
 	if err := os.WriteFile(bakPath, []byte("fake"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	if !Detect1xBackup(dir) {
-		t.Error("expected true when .v1.bak exists")
+		t.Error("expected true when backup exists")
 	}
 }

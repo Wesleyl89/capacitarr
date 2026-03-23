@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
 
 	"gorm.io/gorm"
 
@@ -33,15 +32,15 @@ type MigrationStatus struct {
 	SourceDB  string `json:"sourceDb,omitempty"`
 }
 
-// Status checks whether a 1.x database backup (.v1.bak) exists in the config
-// directory. The backup is created during startup when a legacy schema is
-// detected — its presence means the user has not yet completed the migration
-// workflow (import settings or dismiss).
+// Status checks whether a 1.x database backup exists in the config directory.
+// The backup is created during startup when a legacy schema is detected — its
+// presence means the user has not yet completed the migration workflow (import
+// settings or dismiss).
 func (s *MigrationService) Status() MigrationStatus {
 	available := migration.Detect1xBackup(s.configDir)
 	status := MigrationStatus{Available: available}
 	if available {
-		status.SourceDB = filepath.Join(s.configDir, "capacitarr.db.v1.bak")
+		status.SourceDB = migration.BackupPath(s.configDir)
 	}
 	return status
 }
@@ -50,18 +49,18 @@ func (s *MigrationService) Status() MigrationStatus {
 type MigrationResult struct {
 	Success               bool   `json:"success"`
 	IntegrationsImported  int    `json:"integrationsImported"`
+	DiskGroupsImported    int    `json:"diskGroupsImported"`
 	RulesImported         int    `json:"rulesImported"`
 	PreferencesImported   bool   `json:"preferencesImported"`
 	NotificationsImported int    `json:"notificationsImported"`
-	AuthImported          bool   `json:"authImported"`
 	Error                 string `json:"error,omitempty"`
 }
 
-// Execute runs the 1.x → 2.0 migration from the .v1.bak backup file.
+// Execute runs the 1.x → 2.0 migration from the backup file.
 // Auth has already been auto-imported at startup, so this imports the
-// remaining configuration: integrations, rules, preferences, and notifications.
-// After successful import, the .v1.bak file is removed so the migration
-// page does not reappear.
+// remaining configuration: integrations, disk groups, rules, preferences,
+// and notifications. After successful import, the backup file is removed
+// so the migration page does not reappear.
 func (s *MigrationService) Execute() MigrationResult {
 	sourcePath := migration.BackupPath(s.configDir)
 
@@ -75,7 +74,7 @@ func (s *MigrationService) Execute() MigrationResult {
 
 	// Remove the backup file so the migration page doesn't re-appear
 	if removeErr := migration.RemoveBackup(s.configDir); removeErr != nil {
-		slog.Warn("Migration succeeded but failed to remove .v1.bak",
+		slog.Warn("Migration succeeded but failed to remove backup",
 			"component", "migration", "error", removeErr)
 	}
 
@@ -85,10 +84,10 @@ func (s *MigrationService) Execute() MigrationResult {
 			Sections: []string{"migration_1x_to_2x"},
 			Result: map[string]any{
 				"integrations":  result.IntegrationsImported,
+				"diskGroups":    result.DiskGroupsImported,
 				"rules":         result.RulesImported,
 				"notifications": result.NotificationsImported,
 				"preferences":   result.PreferencesImported,
-				"auth":          result.AuthImported,
 			},
 		})
 	}
@@ -96,10 +95,10 @@ func (s *MigrationService) Execute() MigrationResult {
 	return MigrationResult{
 		Success:               true,
 		IntegrationsImported:  result.IntegrationsImported,
+		DiskGroupsImported:    result.DiskGroupsImported,
 		RulesImported:         result.RulesImported,
 		PreferencesImported:   result.PreferencesImported,
 		NotificationsImported: result.NotificationsImported,
-		AuthImported:          result.AuthImported,
 	}
 }
 

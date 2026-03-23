@@ -32,7 +32,7 @@ func TestMigrationStatus_NoBackup(t *testing.T) {
 	}
 
 	if resp.Available {
-		t.Error("Expected available=false when no .v1.bak backup exists")
+		t.Error("Expected available=false when no 1.x backup exists")
 	}
 }
 
@@ -45,7 +45,7 @@ func TestMigrationExecute_NoBackup(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("Expected 409 (no .v1.bak backup), got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("Expected 409 (no 1.x backup), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -71,7 +71,7 @@ func TestMigrationDismiss_NoBackup(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("Expected 409 (no .v1.bak backup), got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("Expected 409 (no 1.x backup), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"capacitarr/internal/events"
+	"capacitarr/internal/migration"
 )
 
 func TestMigrationService_Status_NoBackup(t *testing.T) {
@@ -14,7 +15,7 @@ func TestMigrationService_Status_NoBackup(t *testing.T) {
 
 	status := svc.Status()
 	if status.Available {
-		t.Error("expected Available=false when no .v1.bak backup exists")
+		t.Error("expected Available=false when no backup exists")
 	}
 	if status.SourceDB != "" {
 		t.Errorf("expected empty SourceDB, got %q", status.SourceDB)
@@ -23,8 +24,8 @@ func TestMigrationService_Status_NoBackup(t *testing.T) {
 
 func TestMigrationService_Status_BackupExists(t *testing.T) {
 	dir := t.TempDir()
-	// Create a .v1.bak backup file (simulates post-detection rename)
-	bakPath := filepath.Join(dir, "capacitarr.db.v1.bak")
+	// Create a backup file (simulates post-detection rename)
+	bakPath := migration.BackupPath(dir)
 	if err := os.WriteFile(bakPath, []byte("fake"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestMigrationService_Status_BackupExists(t *testing.T) {
 	status := svc.Status()
 
 	if !status.Available {
-		t.Error("expected Available=true when .v1.bak backup exists")
+		t.Error("expected Available=true when backup exists")
 	}
 	if status.SourceDB != bakPath {
 		t.Errorf("expected SourceDB=%q, got %q", bakPath, status.SourceDB)
@@ -69,7 +70,7 @@ func TestMigrationService_Dismiss_NoBackup(t *testing.T) {
 
 func TestMigrationService_Dismiss_RemovesBackup(t *testing.T) {
 	dir := t.TempDir()
-	bakPath := filepath.Join(dir, "capacitarr.db.v1.bak")
+	bakPath := migration.BackupPath(dir)
 	if err := os.WriteFile(bakPath, []byte("fake"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -81,12 +82,22 @@ func TestMigrationService_Dismiss_RemovesBackup(t *testing.T) {
 
 	// Verify the backup file was removed
 	if _, err := os.Stat(bakPath); !os.IsNotExist(err) {
-		t.Error("expected .v1.bak to be removed after dismiss")
+		t.Error("expected backup to be removed after dismiss")
 	}
 
 	// Status should now return unavailable
 	status := svc.Status()
 	if status.Available {
 		t.Error("expected Available=false after dismiss")
+	}
+}
+
+func TestMigrationService_Status_UsesBackupPath(t *testing.T) {
+	dir := t.TempDir()
+	// Verify the backup path uses the descriptive filename
+	expectedPath := filepath.Join(dir, "capacitarr.db.v1-pre-migration-backup")
+	actualPath := migration.BackupPath(dir)
+	if actualPath != expectedPath {
+		t.Errorf("expected backup path %q, got %q", expectedPath, actualPath)
 	}
 }

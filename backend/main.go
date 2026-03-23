@@ -199,22 +199,23 @@ func main() {
 	// The 2.0 baseline migration (Goose version 1) collides with the 1.x version
 	// numbering — Goose would skip it on a 1.x database, leaving the schema
 	// unchanged while the app expects 2.0 tables. Detect this BEFORE db.Init()
-	// runs Goose, rename the 1.x file to .v1.bak, and let db.Init() create a
-	// fresh 2.0 database. Auth is auto-imported from .v1.bak so the user can
-	// log in and complete the rest of the migration via the web UI.
+	// runs Goose, rename the 1.x file to a pre-migration backup, and let
+	// db.Init() create a fresh 2.0 database. Auth is auto-imported from the
+	// backup so the user can log in and complete the rest of the migration
+	// via the web UI.
 	legacyHandled := false
 	if migration.DetectLegacySchema(cfg.Database) {
-		slog.Info("1.x database detected — renaming to .v1.bak before initializing 2.0 schema",
+		slog.Info("1.x database detected — renaming to pre-migration backup before initializing 2.0 schema",
 			"component", "main", "dbPath", cfg.Database)
 
 		configDir := filepath.Dir(cfg.Database)
 		if err := migration.BackupSourceDatabase(configDir); err != nil {
-			slog.Error("Failed to rename 1.x database to .v1.bak",
+			slog.Error("Failed to rename 1.x database to pre-migration backup",
 				"component", "main", "error", err)
 			os.Exit(1)
 		}
 		legacyHandled = true
-		slog.Info("1.x database renamed to .v1.bak",
+		slog.Info("1.x database renamed to pre-migration backup",
 			"component", "main", "backup", migration.BackupPath(configDir))
 	}
 
@@ -233,7 +234,7 @@ func main() {
 	}
 	db.SeedFactorWeights(database, factorDefaults)
 
-	// Auto-import auth from .v1.bak so the user can log in with their
+	// Auto-import auth from the 1.x backup so the user can log in with their
 	// existing credentials before deciding to import the rest of their settings.
 	if legacyHandled {
 		configDir := filepath.Dir(cfg.Database)

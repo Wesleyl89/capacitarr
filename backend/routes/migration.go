@@ -20,7 +20,7 @@ func RegisterMigrationRoutes(public *echo.Group, protected *echo.Group, reg *ser
 		return c.JSON(http.StatusOK, status)
 	})
 
-	// POST /migration/execute — protected, runs the full settings import from .v1.bak
+	// POST /migration/execute — protected, runs the full settings import from 1.x backup
 	protected.POST("/migration/execute", func(c echo.Context) error {
 		// Check availability first
 		status := reg.Migration.Status()
@@ -36,7 +36,7 @@ func RegisterMigrationRoutes(public *echo.Group, protected *echo.Group, reg *ser
 		return c.JSON(http.StatusOK, result)
 	})
 
-	// POST /migration/dismiss — protected, removes the .v1.bak file without importing
+	// POST /migration/dismiss — protected, removes the 1.x backup without importing
 	protected.POST("/migration/dismiss", func(c echo.Context) error {
 		status := reg.Migration.Status()
 		if !status.Available {

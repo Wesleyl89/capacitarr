@@ -39,10 +39,10 @@
             <UiAlertDescription>
               <ul class="list-disc list-inside mt-1 space-y-0.5 text-xs">
                 <li>{{ $t('migration.migratesIntegrations') }}</li>
+                <li>{{ $t('migration.migratesDiskGroups') }}</li>
                 <li>{{ $t('migration.migratesRules') }}</li>
                 <li>{{ $t('migration.migratesPreferences') }}</li>
                 <li>{{ $t('migration.migratesNotifications') }}</li>
-                <li>{{ $t('migration.migratesAuth') }}</li>
               </ul>
             </UiAlertDescription>
           </UiAlert>
@@ -105,6 +105,10 @@
               <span class="font-medium">{{ migrationResult.integrationsImported }}</span>
             </div>
             <div class="flex justify-between">
+              <span class="text-muted-foreground">{{ $t('migration.resultDiskGroups') }}</span>
+              <span class="font-medium">{{ migrationResult.diskGroupsImported }}</span>
+            </div>
+            <div class="flex justify-between">
               <span class="text-muted-foreground">{{ $t('migration.resultRules') }}</span>
               <span class="font-medium">{{ migrationResult.rulesImported }}</span>
             </div>
@@ -116,11 +120,14 @@
               <span class="text-muted-foreground">{{ $t('migration.resultNotifications') }}</span>
               <span class="font-medium">{{ migrationResult.notificationsImported }}</span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">{{ $t('migration.resultAuth') }}</span>
-              <span class="font-medium">{{ migrationResult.authImported ? '✓' : '—' }}</span>
-            </div>
           </div>
+
+          <UiAlert variant="default" class="mt-3">
+            <component :is="InfoIcon" class="h-4 w-4" />
+            <UiAlertDescription class="text-xs">
+              {{ $t('migration.dryRunNote') }}
+            </UiAlertDescription>
+          </UiAlert>
 
           <UiButton class="w-full mt-4" @click="goToDashboard">
             {{ $t('migration.continueToDashboard') }}
@@ -159,10 +166,10 @@ import { ofetch } from 'ofetch';
 interface MigrationResultData {
   success: boolean;
   integrationsImported: number;
+  diskGroupsImported: number;
   rulesImported: number;
   preferencesImported: boolean;
   notificationsImported: number;
-  authImported: boolean;
   error?: string;
 }
 
