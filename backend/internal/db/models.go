@@ -257,7 +257,8 @@ type EngineRunStats struct {
 	RunAt         time.Time  `gorm:"index;not null" json:"runAt"`
 	CompletedAt   *time.Time `json:"completedAt,omitempty"`
 	Evaluated     int        `gorm:"not null;default:0" json:"evaluated"`
-	Flagged       int        `gorm:"not null;default:0" json:"flagged"`
+	Candidates    int        `gorm:"not null;default:0" json:"candidates"`
+	Queued        int        `gorm:"not null;default:0" json:"queued"`
 	Deleted       int        `gorm:"not null;default:0" json:"deleted"`
 	FreedBytes    int64      `gorm:"not null;default:0" json:"freedBytes"`
 	ExecutionMode string     `gorm:"not null;default:'dry-run'" json:"executionMode"`
@@ -304,7 +305,7 @@ type NotificationConfig struct {
 type ActivityEvent struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	EventType string    `gorm:"not null;index" json:"eventType"` // "engine_start", "engine_complete", etc.
-	Message   string    `gorm:"not null" json:"message"`         // Human-readable: "Engine run completed: evaluated 97, flagged 12"
+	Message   string    `gorm:"not null" json:"message"`         // Human-readable: "Engine run completed: evaluated 97, candidates 12"
 	Metadata  string    `gorm:"type:text" json:"metadata"`       // Optional JSON for extra data
 	CreatedAt time.Time `json:"createdAt"`
 }

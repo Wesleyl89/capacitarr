@@ -22,7 +22,7 @@ func TestDiscordSender_SendDigest_Format(t *testing.T) {
 	digest := CycleDigest{
 		ExecutionMode: ModeAuto,
 		Evaluated:     42,
-		Flagged:       5,
+		Candidates:    5,
 		Deleted:       3,
 		Failed:        1,
 		FreedBytes:    1073741824, // 1 GB

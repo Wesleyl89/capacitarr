@@ -103,8 +103,8 @@ func TestEngineService_SetLastRunStats(t *testing.T) {
 	if stats["lastRunEvaluated"] != int64(100) {
 		t.Errorf("expected lastRunEvaluated=100, got %v", stats["lastRunEvaluated"])
 	}
-	if stats["lastRunFlagged"] != int64(15) {
-		t.Errorf("expected lastRunFlagged=15, got %v", stats["lastRunFlagged"])
+	if stats["lastRunCandidates"] != int64(15) {
+		t.Errorf("expected lastRunCandidates=15, got %v", stats["lastRunCandidates"])
 	}
 	if stats["protectedCount"] != int64(5) {
 		t.Errorf("expected protectedCount=5, got %v", stats["protectedCount"])
@@ -123,7 +123,8 @@ func TestEngineService_GetStats_WithDBRecord(t *testing.T) {
 		RunAt:         runAt,
 		CompletedAt:   &completedAt,
 		Evaluated:     50,
-		Flagged:       10,
+		Candidates:    10,
+		Queued:        7,
 		Deleted:       3,
 		FreedBytes:    5000000000,
 		ExecutionMode: db.ModeApproval,
@@ -201,7 +202,7 @@ func TestEngineService_UpdateRunStats(t *testing.T) {
 
 	stats, _ := svc.CreateRunStats(db.ModeDryRun)
 
-	err := svc.UpdateRunStats(stats.ID, 100, 15, 2500)
+	err := svc.UpdateRunStats(stats.ID, 100, 15, 8, 2500)
 	if err != nil {
 		t.Fatalf("UpdateRunStats error: %v", err)
 	}
@@ -211,8 +212,11 @@ func TestEngineService_UpdateRunStats(t *testing.T) {
 	if updated.Evaluated != 100 {
 		t.Errorf("expected evaluated 100, got %d", updated.Evaluated)
 	}
-	if updated.Flagged != 15 {
-		t.Errorf("expected flagged 15, got %d", updated.Flagged)
+	if updated.Candidates != 15 {
+		t.Errorf("expected candidates 15, got %d", updated.Candidates)
+	}
+	if updated.Queued != 8 {
+		t.Errorf("expected queued 8, got %d", updated.Queued)
 	}
 	if updated.CompletedAt == nil {
 		t.Fatal("expected completed_at to be set after UpdateRunStats")
@@ -249,15 +253,40 @@ func TestEngineService_GetHistory(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewEngineService(database, bus)
 
-	// Create some run stats
-	_, _ = svc.CreateRunStats(db.ModeDryRun)
-	_, _ = svc.CreateRunStats(db.ModeApproval)
+	// Create some run stats and update them
+	stats1, _ := svc.CreateRunStats(db.ModeDryRun)
+	_ = svc.UpdateRunStats(stats1.ID, 50, 10, 6, 1000)
+
+	stats2, _ := svc.CreateRunStats(db.ModeApproval)
+	_ = svc.UpdateRunStats(stats2.ID, 80, 20, 12, 1500)
 
 	points, err := svc.GetHistory(24 * time.Hour)
 	if err != nil {
 		t.Fatalf("GetHistory error: %v", err)
 	}
 	if len(points) != 2 {
-		t.Errorf("expected 2 history points, got %d", len(points))
+		t.Fatalf("expected 2 history points, got %d", len(points))
+	}
+
+	// Verify first point has candidates and queued populated
+	if points[0].Candidates != 10 {
+		t.Errorf("expected point[0].Candidates=10, got %d", points[0].Candidates)
+	}
+	if points[0].Queued != 6 {
+		t.Errorf("expected point[0].Queued=6, got %d", points[0].Queued)
+	}
+	if points[0].ExecutionMode != db.ModeDryRun {
+		t.Errorf("expected point[0].ExecutionMode=%q, got %q", db.ModeDryRun, points[0].ExecutionMode)
+	}
+
+	// Verify second point
+	if points[1].Candidates != 20 {
+		t.Errorf("expected point[1].Candidates=20, got %d", points[1].Candidates)
+	}
+	if points[1].Queued != 12 {
+		t.Errorf("expected point[1].Queued=12, got %d", points[1].Queued)
+	}
+	if points[1].ExecutionMode != db.ModeApproval {
+		t.Errorf("expected point[1].ExecutionMode=%q, got %q", db.ModeApproval, points[1].ExecutionMode)
 	}
 }

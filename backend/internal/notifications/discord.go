@@ -58,9 +58,9 @@ func (s *DiscordSender) SendDigest(config SenderConfig, digest CycleDigest) erro
 	desc := digestDescription(digest)
 
 	// Append disk usage progress bar for auto mode or all-clear
-	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Flagged == 0) {
+	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Candidates == 0) {
 		bar := ProgressBar(digest.DiskUsagePct, 20)
-		if digest.ExecutionMode == ModeAuto && digest.Flagged > 0 {
+		if digest.ExecutionMode == ModeAuto && digest.Candidates > 0 {
 			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
 		} else {
 			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)

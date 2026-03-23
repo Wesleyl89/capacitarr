@@ -20,7 +20,7 @@ type Poller struct {
 
 	// Per-run metrics (reset each engine cycle, synced to EngineService at the end)
 	lastRunEvaluated  int64
-	lastRunFlagged    int64
+	lastRunCandidates int64
 	lastRunProtected  int64
 	lastRunFreedBytes int64
 }
@@ -135,7 +135,7 @@ func (p *Poller) poll() {
 
 	// Reset per-run counters at the start of each poll cycle
 	atomic.StoreInt64(&p.lastRunEvaluated, 0)
-	atomic.StoreInt64(&p.lastRunFlagged, 0)
+	atomic.StoreInt64(&p.lastRunCandidates, 0)
 	atomic.StoreInt64(&p.lastRunProtected, 0)
 	atomic.StoreInt64(&p.lastRunFreedBytes, 0)
 
@@ -303,16 +303,16 @@ func (p *Poller) poll() {
 
 	// Update engine run stats via service
 	evaluated := atomic.LoadInt64(&p.lastRunEvaluated)
-	flagged := atomic.LoadInt64(&p.lastRunFlagged)
+	candidates := atomic.LoadInt64(&p.lastRunCandidates)
 	protected := atomic.LoadInt64(&p.lastRunProtected)
 	freedBytes := atomic.LoadInt64(&p.lastRunFreedBytes)
 
-	if err := p.reg.Engine.UpdateRunStats(runStatsID, int(evaluated), int(flagged), time.Since(pollStart).Milliseconds()); err != nil {
+	if err := p.reg.Engine.UpdateRunStats(runStatsID, int(evaluated), int(candidates), totalDeletionsQueued, time.Since(pollStart).Milliseconds()); err != nil {
 		slog.Error("Failed to update engine run stats", "component", "poller", "error", err)
 	}
 
 	// Sync per-run stats to EngineService for API consumers
-	p.reg.Engine.SetLastRunStats(int(evaluated), int(flagged), int(protected))
+	p.reg.Engine.SetLastRunStats(int(evaluated), int(candidates), int(protected))
 
 	// Populate preview cache with already-fetched and enriched items
 	p.reg.Preview.SetPreviewCache(fetched.allItems, prefs, weights, rules)
@@ -320,7 +320,7 @@ func (p *Poller) poll() {
 	// Publish engine complete event
 	bus.Publish(events.EngineCompleteEvent{
 		Evaluated:        int(evaluated),
-		Flagged:          int(flagged),
+		Candidates:       int(candidates),
 		DurationMs:       time.Since(pollStart).Milliseconds(),
 		ExecutionMode:    prefs.ExecutionMode,
 		FreedBytes:       freedBytes,
@@ -331,7 +331,7 @@ func (p *Poller) poll() {
 		"duration", time.Since(pollStart).String(),
 		"totalItems", len(fetched.allItems),
 		"evaluated", evaluated,
-		"flagged", flagged,
+		"candidates", candidates,
 		"protected", protected)
 }
 

@@ -30,7 +30,7 @@ func (e EngineStartEvent) EventMessage() string {
 // deletion worker atomically increments the counters.
 type EngineCompleteEvent struct {
 	Evaluated        int    `json:"evaluated"`
-	Flagged          int    `json:"flagged"`
+	Candidates       int    `json:"candidates"`
 	DurationMs       int64  `json:"durationMs"`
 	ExecutionMode    string `json:"executionMode"`
 	FreedBytes       int64  `json:"freedBytes"`       // Potential bytes freed (approval/dry-run) or actual bytes queued (auto)
@@ -42,7 +42,7 @@ func (e EngineCompleteEvent) EventType() string { return "engine_complete" }
 
 // EventMessage implements Event.
 func (e EngineCompleteEvent) EventMessage() string {
-	return fmt.Sprintf("Engine run completed: evaluated %d, flagged %d", e.Evaluated, e.Flagged)
+	return fmt.Sprintf("Engine run completed: evaluated %d, candidates %d", e.Evaluated, e.Candidates)
 }
 
 // EngineErrorEvent is published when an engine cycle fails.

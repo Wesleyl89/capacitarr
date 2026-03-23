@@ -131,7 +131,7 @@ func TestSSEBroadcaster_ClientBufferFull(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// This should not block even though client buffer is full
-	bus.Publish(EngineCompleteEvent{Evaluated: 10, Flagged: 2})
+	bus.Publish(EngineCompleteEvent{Evaluated: 10, Candidates: 2})
 	time.Sleep(50 * time.Millisecond)
 
 	// Drain what we can
@@ -194,7 +194,7 @@ func TestSSEBroadcaster_ReplayMissedEvents(t *testing.T) {
 	// No clients connected — events go into ring buffer only
 	bus.Publish(LoginEvent{Username: "user1"})
 	bus.Publish(EngineStartEvent{ExecutionMode: db.ModeApproval})
-	bus.Publish(EngineCompleteEvent{Evaluated: 50, Flagged: 5})
+	bus.Publish(EngineCompleteEvent{Evaluated: 50, Candidates: 5})
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -335,7 +335,7 @@ func TestSSEBroadcaster_IncrementingEventIDs(t *testing.T) {
 	broadcaster.mu.Unlock()
 
 	bus.Publish(EngineStartEvent{ExecutionMode: db.ModeDryRun})
-	bus.Publish(EngineCompleteEvent{Evaluated: 10, Flagged: 2})
+	bus.Publish(EngineCompleteEvent{Evaluated: 10, Candidates: 2})
 
 	time.Sleep(100 * time.Millisecond)
 

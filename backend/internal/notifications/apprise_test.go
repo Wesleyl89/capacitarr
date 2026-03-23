@@ -25,7 +25,7 @@ func TestAppriseSender_SendDigest_Format(t *testing.T) {
 	digest := CycleDigest{
 		ExecutionMode: ModeAuto,
 		Evaluated:     42,
-		Flagged:       5,
+		Candidates:    5,
 		Deleted:       3,
 		Failed:        1,
 		FreedBytes:    1073741824, // 1 GB
@@ -70,7 +70,7 @@ func TestAppriseSender_SendDigest_WithTags(t *testing.T) {
 	digest := CycleDigest{
 		ExecutionMode: ModeDryRun,
 		Evaluated:     100,
-		Flagged:       3,
+		Candidates:    3,
 		FreedBytes:    5368709120,
 		DurationMs:    2500,
 		Version:       "v1.0.0",

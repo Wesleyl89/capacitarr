@@ -145,7 +145,7 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 		s.mu.Lock()
 		if s.accumulator != nil {
 			s.accumulator.evaluated = e.Evaluated
-			s.accumulator.flagged = e.Flagged
+			s.accumulator.candidates = e.Candidates
 			s.accumulator.durationMs = e.DurationMs
 			s.accumulator.executionMode = e.ExecutionMode
 			s.accumulator.engineComplete = true
@@ -443,7 +443,7 @@ type cycleAccumulator struct {
 
 	// Engine stats (from EngineCompleteEvent)
 	evaluated  int
-	flagged    int
+	candidates int
 	durationMs int64
 
 	// Deletion accumulation (from DeletionSuccess/Failed/DryRun events)
@@ -466,7 +466,7 @@ func (a *cycleAccumulator) buildDigest(version string) notifications.CycleDigest
 	return notifications.CycleDigest{
 		ExecutionMode:      a.executionMode,
 		Evaluated:          a.evaluated,
-		Flagged:            a.flagged,
+		Candidates:         a.candidates,
 		Deleted:            a.deletedCount,
 		Failed:             a.failedCount,
 		FreedBytes:         a.totalFreedBytes,

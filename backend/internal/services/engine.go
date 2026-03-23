@@ -18,10 +18,10 @@ type EngineService struct {
 	bus *events.EventBus
 
 	// Observable state
-	lastEvaluated atomic.Int64
-	lastFlagged   atomic.Int64
-	lastProtected atomic.Int64
-	pollRunning   atomic.Bool
+	lastEvaluated  atomic.Int64
+	lastCandidates atomic.Int64
+	lastProtected  atomic.Int64
+	pollRunning    atomic.Bool
 }
 
 // EngineStatusStarted is returned by TriggerRun when a new run is initiated.
@@ -61,20 +61,22 @@ func (s *EngineService) IsRunning() bool {
 }
 
 // SetLastRunStats updates the last run statistics.
-func (s *EngineService) SetLastRunStats(evaluated, flagged, protected int) {
+func (s *EngineService) SetLastRunStats(evaluated, candidates, protected int) {
 	s.lastEvaluated.Store(int64(evaluated))
-	s.lastFlagged.Store(int64(flagged))
+	s.lastCandidates.Store(int64(candidates))
 	s.lastProtected.Store(int64(protected))
 }
 
 // EngineHistoryPoint holds a single data point for the engine history sparklines.
 type EngineHistoryPoint struct {
-	Timestamp  time.Time `json:"timestamp"`
-	Evaluated  int       `json:"evaluated"`
-	Flagged    int       `json:"flagged"`
-	Deleted    int       `json:"deleted"`
-	FreedBytes int64     `json:"freedBytes"`
-	DurationMs int64     `json:"durationMs"`
+	Timestamp     time.Time `json:"timestamp"`
+	Evaluated     int       `json:"evaluated"`
+	Candidates    int       `json:"candidates"`
+	Queued        int       `json:"queued"`
+	Deleted       int       `json:"deleted"`
+	FreedBytes    int64     `json:"freedBytes"`
+	DurationMs    int64     `json:"durationMs"`
+	ExecutionMode string    `json:"executionMode"`
 }
 
 // CreateRunStats creates a new engine run stats entry and returns it.
@@ -91,11 +93,12 @@ func (s *EngineService) CreateRunStats(mode string) (*db.EngineRunStats, error) 
 
 // UpdateRunStats updates a run stats entry with the final evaluation results
 // and sets completed_at to the current time.
-func (s *EngineService) UpdateRunStats(id uint, evaluated, flagged int, durationMs int64) error {
+func (s *EngineService) UpdateRunStats(id uint, evaluated, candidates, queued int, durationMs int64) error {
 	now := time.Now().UTC()
 	result := s.db.Model(&db.EngineRunStats{}).Where("id = ?", id).Updates(map[string]any{
 		"evaluated":    evaluated,
-		"flagged":      flagged,
+		"candidates":   candidates,
+		"queued":       queued,
 		"duration_ms":  durationMs,
 		"completed_at": now,
 	})
@@ -119,12 +122,14 @@ func (s *EngineService) GetHistory(since time.Duration) ([]EngineHistoryPoint, e
 	points := make([]EngineHistoryPoint, len(stats))
 	for i, st := range stats {
 		points[i] = EngineHistoryPoint{
-			Timestamp:  st.RunAt,
-			Evaluated:  st.Evaluated,
-			Flagged:    st.Flagged,
-			Deleted:    st.Deleted,
-			FreedBytes: st.FreedBytes,
-			DurationMs: st.DurationMs,
+			Timestamp:     st.RunAt,
+			Evaluated:     st.Evaluated,
+			Candidates:    st.Candidates,
+			Queued:        st.Queued,
+			Deleted:       st.Deleted,
+			FreedBytes:    st.FreedBytes,
+			DurationMs:    st.DurationMs,
+			ExecutionMode: st.ExecutionMode,
 		}
 	}
 
@@ -178,6 +183,10 @@ func (s *EngineService) IncrementDeletedStats(runStatsID uint, sizeBytes int64) 
 // RestoreLastRunStats initializes the in-memory atomic counters from the most
 // recent EngineRunStats DB row. Called once on startup so the worker stats
 // panel shows the last run's results instead of zeros.
+//
+// Note: The Queued field is intentionally not restored here. It is consumed
+// exclusively via the history sparkline API (GetHistory), not the dashboard
+// header stat counters (GetStats).
 func (s *EngineService) RestoreLastRunStats() {
 	var latest db.EngineRunStats
 	if err := s.db.Order("run_at desc").First(&latest).Error; err != nil {
@@ -185,12 +194,12 @@ func (s *EngineService) RestoreLastRunStats() {
 	}
 
 	s.lastEvaluated.Store(int64(latest.Evaluated))
-	s.lastFlagged.Store(int64(latest.Flagged))
+	s.lastCandidates.Store(int64(latest.Candidates))
 
 	slog.Info("Restored engine stats from last run",
 		"component", "engine",
 		"evaluated", latest.Evaluated,
-		"flagged", latest.Flagged,
+		"candidates", latest.Candidates,
 		"runAt", latest.RunAt.Format(time.RFC3339))
 }
 
@@ -198,10 +207,10 @@ func (s *EngineService) RestoreLastRunStats() {
 // Keys match the frontend TypeScript WorkerStats interface.
 func (s *EngineService) GetStats() map[string]any {
 	stats := map[string]any{
-		"isRunning":        s.pollRunning.Load(),
-		"lastRunEvaluated": s.lastEvaluated.Load(),
-		"lastRunFlagged":   s.lastFlagged.Load(),
-		"protectedCount":   s.lastProtected.Load(),
+		"isRunning":          s.pollRunning.Load(),
+		"lastRunEvaluated":   s.lastEvaluated.Load(),
+		"lastRunCandidates":  s.lastCandidates.Load(),
+		"protectedCount":     s.lastProtected.Load(),
 	}
 
 	// Get the latest completed run from the database.

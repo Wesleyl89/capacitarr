@@ -91,7 +91,7 @@ func TestActivityPersister_PersistsMultipleEvents(t *testing.T) {
 	persister.Start()
 
 	bus.Publish(EngineStartEvent{ExecutionMode: db.ModeApproval})
-	bus.Publish(EngineCompleteEvent{Evaluated: 50, Flagged: 5})
+	bus.Publish(EngineCompleteEvent{Evaluated: 50, Candidates: 5})
 	bus.Publish(LoginEvent{Username: "admin"})
 
 	time.Sleep(100 * time.Millisecond)

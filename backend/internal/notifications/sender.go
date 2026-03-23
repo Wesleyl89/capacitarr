@@ -28,7 +28,7 @@ type Sender interface {
 type CycleDigest struct {
 	ExecutionMode      string  `json:"executionMode"`
 	Evaluated          int     `json:"evaluated"`
-	Flagged            int     `json:"flagged"`
+	Candidates         int     `json:"candidates"`
 	Deleted            int     `json:"deleted"`
 	Failed             int     `json:"failed"`
 	FreedBytes         int64   `json:"freedBytes"`
@@ -168,7 +168,7 @@ func ProgressBar(pct float64, width int) string {
 // digestTitle returns the appropriate title and emoji for a cycle digest
 // based on execution mode and action counts.
 func digestTitle(d CycleDigest) string {
-	if d.Flagged == 0 {
+	if d.Candidates == 0 {
 		return titleAllClear
 	}
 	switch d.ExecutionMode {
@@ -185,7 +185,7 @@ func digestTitle(d CycleDigest) string {
 
 // digestColor returns the embed color for a cycle digest.
 func digestColor(d CycleDigest) int {
-	if d.Flagged == 0 {
+	if d.Candidates == 0 {
 		return ColorGreen
 	}
 	switch d.ExecutionMode {
@@ -204,7 +204,7 @@ func digestColor(d CycleDigest) int {
 func digestDescription(d CycleDigest) string {
 	durSec := float64(d.DurationMs) / 1000.0
 
-	if d.Flagged == 0 {
+	if d.Candidates == 0 {
 		return fmt.Sprintf("Evaluated **%d** items — no action needed", d.Evaluated)
 	}
 
@@ -220,14 +220,14 @@ func digestDescription(d CycleDigest) string {
 		}
 		return desc
 	case ModeDryRun:
-		return fmt.Sprintf("Flagged **%d** of **%d** items in **%.1fs**\nWould free **%s**",
-			d.Flagged, d.Evaluated, durSec, HumanSize(d.FreedBytes))
+		return fmt.Sprintf("Candidates **%d** of **%d** items in **%.1fs**\nWould free **%s**",
+			d.Candidates, d.Evaluated, durSec, HumanSize(d.FreedBytes))
 	case ModeApproval:
 		return fmt.Sprintf("Queued **%d** of **%d** items in **%.1fs**\nPotential **%s**",
-			d.Flagged, d.Evaluated, durSec, HumanSize(d.FreedBytes))
+			d.Candidates, d.Evaluated, durSec, HumanSize(d.FreedBytes))
 	default:
 		return fmt.Sprintf("Processed **%d** of **%d** items in **%.1fs**",
-			d.Flagged, d.Evaluated, durSec)
+			d.Candidates, d.Evaluated, durSec)
 	}
 }
 

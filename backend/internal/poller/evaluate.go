@@ -297,6 +297,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", pi.item.Title)
 					continue
 				}
+				atomic.AddInt64(&p.lastRunCandidates, 1) // fix: auto mode was missing candidates increment
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
 			case db.ModeApproval:
@@ -325,7 +326,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				neededKeys[pi.item.Title+"|"+string(pi.item.Type)] = true
 
 				bytesFreed += pi.item.SizeBytes
-				atomic.AddInt64(&p.lastRunFlagged, 1)
+				atomic.AddInt64(&p.lastRunCandidates, 1)
 				atomic.AddInt64(&p.lastRunFreedBytes, pi.item.SizeBytes)
 				slog.Info("Engine action taken", "component", "poller",
 					"media", pi.item.Title, "action", "queued_for_approval", "score", pi.score, "freed", pi.item.SizeBytes,
@@ -350,7 +351,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 				}
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
-				atomic.AddInt64(&p.lastRunFlagged, 1)
+				atomic.AddInt64(&p.lastRunCandidates, 1)
 				atomic.AddInt64(&p.lastRunFreedBytes, pi.item.SizeBytes)
 				slog.Info("Engine action taken", "component", "poller",
 					"media", pi.item.Title, "action", db.ActionDryDelete, "score", pi.score, "freed", pi.item.SizeBytes,
@@ -387,8 +388,8 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 	}
 
 	// Diagnostic summary: log when candidates were found but all were skipped
-	if len(candidates) > 0 && deletionsQueued == 0 && atomic.LoadInt64(&p.lastRunFlagged) == 0 {
-		slog.Warn("All candidates were skipped — nothing flagged for approval/deletion",
+	if len(candidates) > 0 && deletionsQueued == 0 && atomic.LoadInt64(&p.lastRunCandidates) == 0 {
+		slog.Warn("All candidates were skipped — nothing queued for approval/deletion",
 			"component", "poller", "mount", group.MountPath,
 			"executionMode", prefs.ExecutionMode,
 			"candidates", len(candidates),

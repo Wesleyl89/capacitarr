@@ -40,9 +40,9 @@ func (s *AppriseSender) SendDigest(config SenderConfig, digest CycleDigest) erro
 	body := digestTitle(digest) + "\n\n" + digestDescription(digest)
 
 	// Append disk usage progress bar
-	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Flagged == 0) {
+	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Candidates == 0) {
 		bar := ProgressBar(digest.DiskUsagePct, 20)
-		if digest.ExecutionMode == ModeAuto && digest.Flagged > 0 {
+		if digest.ExecutionMode == ModeAuto && digest.Candidates > 0 {
 			body += fmt.Sprintf("\n\n%s %.0f%% → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
 		} else {
 			body += fmt.Sprintf("\n\n%s %.0f%% / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)

@@ -380,7 +380,7 @@ func TestMetricsService_GetWorkerMetrics_ReturnsExpectedKeys(t *testing.T) {
 	expectedKeys := []string{
 		"isRunning",
 		"lastRunEvaluated",
-		"lastRunFlagged",
+		"lastRunCandidates",
 		"protectedCount",
 		"pollIntervalSeconds",
 		"executionMode",

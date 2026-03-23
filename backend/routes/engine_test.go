@@ -17,9 +17,9 @@ func TestEngineHistory_ReturnsStats(t *testing.T) {
 	// Insert a few engine run stats
 	now := time.Now().UTC()
 	stats := []db.EngineRunStats{
-		{RunAt: now.Add(-6 * time.Hour), Evaluated: 100, Flagged: 5, Deleted: 3, FreedBytes: 1000000, DurationMs: 250, ExecutionMode: db.ModeAuto},
-		{RunAt: now.Add(-3 * time.Hour), Evaluated: 80, Flagged: 2, Deleted: 1, FreedBytes: 500000, DurationMs: 180, ExecutionMode: db.ModeAuto},
-		{RunAt: now.Add(-1 * time.Hour), Evaluated: 120, Flagged: 8, Deleted: 6, FreedBytes: 2000000, DurationMs: 320, ExecutionMode: db.ModeDryRun},
+		{RunAt: now.Add(-6 * time.Hour), Evaluated: 100, Candidates: 5, Deleted: 3, FreedBytes: 1000000, DurationMs: 250, ExecutionMode: db.ModeAuto},
+		{RunAt: now.Add(-3 * time.Hour), Evaluated: 80, Candidates: 2, Deleted: 1, FreedBytes: 500000, DurationMs: 180, ExecutionMode: db.ModeAuto},
+		{RunAt: now.Add(-1 * time.Hour), Evaluated: 120, Candidates: 8, Deleted: 6, FreedBytes: 2000000, DurationMs: 320, ExecutionMode: db.ModeDryRun},
 	}
 	for _, s := range stats {
 		database.Create(&s)
@@ -49,8 +49,8 @@ func TestEngineHistory_ReturnsStats(t *testing.T) {
 	if first["evaluated"].(float64) != 100 {
 		t.Errorf("expected evaluated=100, got %v", first["evaluated"])
 	}
-	if first["flagged"].(float64) != 5 {
-		t.Errorf("expected flagged=5, got %v", first["flagged"])
+	if first["candidates"].(float64) != 5 {
+		t.Errorf("expected flagged=5, got %v", first["candidates"])
 	}
 	if first["deleted"].(float64) != 3 {
 		t.Errorf("expected deleted=3, got %v", first["deleted"])

@@ -96,7 +96,7 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     100,
-		Flagged:       3,
+		Candidates:       3,
 		DurationMs:    500,
 		ExecutionMode: db.ModeAuto,
 	})
@@ -113,8 +113,8 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 	if digests[0].Evaluated != 100 {
 		t.Errorf("expected evaluated=100, got %d", digests[0].Evaluated)
 	}
-	if digests[0].Flagged != 3 {
-		t.Errorf("expected flagged=3, got %d", digests[0].Flagged)
+	if digests[0].Candidates != 3 {
+		t.Errorf("expected candidates=3, got %d", digests[0].Candidates)
 	}
 }
 
@@ -137,7 +137,7 @@ func TestNotificationDispatch_ReverseGateOrder(t *testing.T) {
 	// Gate 1 fires second — should trigger flush
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     50,
-		Flagged:       0,
+		Candidates:       0,
 		DurationMs:    200,
 		ExecutionMode: db.ModeDryRun,
 	})
@@ -176,7 +176,7 @@ func TestNotificationDispatch_Accumulation(t *testing.T) {
 
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     200,
-		Flagged:       3,
+		Candidates:       3,
 		DurationMs:    1000,
 		ExecutionMode: db.ModeAuto,
 	})
@@ -232,7 +232,7 @@ func TestNotificationDispatch_SubscriptionFiltering(t *testing.T) {
 
 	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
 	time.Sleep(50 * time.Millisecond)
-	svc.bus.Publish(events.EngineCompleteEvent{Evaluated: 10, Flagged: 0, DurationMs: 100, ExecutionMode: db.ModeAuto})
+	svc.bus.Publish(events.EngineCompleteEvent{Evaluated: 10, Candidates: 0, DurationMs: 100, ExecutionMode: db.ModeAuto})
 	time.Sleep(50 * time.Millisecond)
 	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
@@ -319,7 +319,7 @@ func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 	// FreedBytes comes from the EngineCompleteEvent instead.
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     2232,
-		Flagged:       80,
+		Candidates:       80,
 		DurationMs:    11900,
 		ExecutionMode: db.ModeApproval,
 		FreedBytes:    5368709120, // ~5 GB potential savings
@@ -339,8 +339,8 @@ func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 	if digests[0].ExecutionMode != db.ModeApproval {
 		t.Errorf("expected execution mode 'approval', got %q", digests[0].ExecutionMode)
 	}
-	if digests[0].Flagged != 80 {
-		t.Errorf("expected flagged=80, got %d", digests[0].Flagged)
+	if digests[0].Candidates != 80 {
+		t.Errorf("expected candidates=80, got %d", digests[0].Candidates)
 	}
 }
 
@@ -363,7 +363,7 @@ func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) { //nol
 
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     100,
-		Flagged:       5,
+		Candidates:       5,
 		DurationMs:    500,
 		ExecutionMode: db.ModeApproval,
 		FreedBytes:    1073741824,
@@ -397,7 +397,7 @@ func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
 
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     50,
-		Flagged:       2,
+		Candidates:       2,
 		DurationMs:    300,
 		ExecutionMode: db.ModeAuto,
 	})
@@ -430,7 +430,7 @@ func TestNotificationDispatch_AppriseChannel(t *testing.T) {
 
 	svc.bus.Publish(events.EngineCompleteEvent{
 		Evaluated:     50,
-		Flagged:       2,
+		Candidates:       2,
 		DurationMs:    300,
 		ExecutionMode: db.ModeAuto,
 	})
