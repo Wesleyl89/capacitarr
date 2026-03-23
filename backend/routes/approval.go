@@ -55,20 +55,13 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
-		// Determine whether a dry-run simulation is needed
-		prefs, err := reg.Settings.GetPreferences()
-		if err != nil {
-			slog.Error("Failed to load preferences for approval check", "error", err)
-			return apiError(c, http.StatusInternalServerError, "Failed to load preferences")
-		}
-		forceDryRun := !prefs.DeletionsEnabled || prefs.ExecutionMode == "dry-run"
-
-		// Execute the full approval workflow via service
+		// Execute the full approval workflow via service — the service handles
+		// dry-run determination from preferences internally.
 		approved, err := reg.Approval.ExecuteApproval(uint(entryID), services.ExecuteApprovalDeps{
 			Integration: reg.Integration,
 			Deletion:    reg.Deletion,
 			Engine:      reg.Engine,
-			ForceDryRun: forceDryRun,
+			Settings:    reg.Settings,
 		})
 		if err != nil {
 			if errors.Is(err, services.ErrApprovalNotPending) {
