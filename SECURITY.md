@@ -197,7 +197,7 @@ Run locally: `make build && make security:zap`
 | Cross-Site & Redirect Attacks (Passive) | 8 | ✅ All PASS |
 | Unexpected Content-Type (SPA fallback) | 1 | ⚠️ WARN (expected) |
 
-The full test-by-test breakdown with rule IDs is in [`docs/security/zap-baseline-20260316.md`](docs/security/zap-baseline-20260316.md).
+The full test-by-test breakdown with rule IDs is in [`docs/security/zap-baseline-20260323.md`](docs/security/zap-baseline-20260323.md). Previous baselines: [2026-03-16](docs/security/zap-baseline-20260316.md), [2026-03-10](docs/security/zap-baseline-20260310.md).
 
 **Testing cadence:** Run DAST scanning (`make security:zap`) before each release, after significant code changes affecting HTTP handlers or authentication, and periodically as part of routine security hygiene. The baseline should be updated in this document after each scan.
 
