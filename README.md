@@ -8,7 +8,7 @@
 
 > *Intelligent media library capacity manager for the \*arr ecosystem.*
 
-Capacitarr scores every media item across six dimensions — watch history, recency, file size, ratings, age, and series status — then removes the least-valuable items first when disk space runs low. A visual rule builder lets you protect specific content from ever being deleted.
+Capacitarr scores every media item across seven pluggable dimensions — watch history, recency, file size, ratings, age, series status, and request popularity — then removes the least-valuable items first when disk space runs low. A visual rule builder lets you protect specific content from ever being deleted.
 
 <p align="center">
   <img src="site/public/screenshots/dashboard.webp" alt="Capacitarr Dashboard" width="800" />
@@ -16,14 +16,16 @@ Capacitarr scores every media item across six dimensions — watch history, rece
 
 ## ✨ Highlights
 
-- **Intelligent Scoring** — Six pluggable weighted factors rank every item for deletion priority
-- **Insights Dashboard** — Library composition, quality distribution, bloat detection, and watch intelligence analytics
+- **Intelligent Scoring** — Seven pluggable weighted factors rank every item for deletion priority with dynamic UI-driven weights
+- **Smart Filters** — Dead content, stale content, requested, and protected presets with configurable staleness thresholds
 - **Visual Rule Builder** — Protect content with `always_keep`, `prefer_keep`, `prefer_delete`, and `always_delete` rules with impact previews
-- **9 Integrations** — Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Tautulli, Seerr (Overseerr/Jellyseerr)
+- **10 Integrations** — Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Tautulli, Jellystat, Seerr (Overseerr/Jellyseerr)
 - **Approval Queue** — Review and approve deletions before they happen
-- **Real-Time Dashboard** — 44+ SSE event types push everything to the browser instantly
-- **Per-Integration Thresholds** — Different disk usage triggers per *arr instance
-- **Watch Intelligence** — Dead content detection, stale content reports, popularity heatmaps, request fulfillment tracking
+- **Real-Time Dashboard** — 44+ granular SSE event types push everything to the browser instantly
+- **Library Management** — Per-library threshold management with independent disk usage triggers
+- **Capacity Forecast** — Linear regression predicts when disk thresholds will be reached
+- **Watch Intelligence** — Dead content detection, stale content analysis, multi-user watch aggregation, and watchlist/favorites enrichment
+- **TMDb Matching** — Reliable TMDb ID-based matching replaces error-prone title normalization
 - **Single Container** — Go + Nuxt + SQLite in one ~30 MB Docker image
 
 ## 🚀 Quick Start

@@ -24,6 +24,8 @@ Capacitarr exists because of the incredible *arr ecosystem. Special thanks to:
 - [shadcn-vue](https://www.shadcn-vue.com/) — Component library
 - [Tailwind CSS](https://tailwindcss.com/) — Utility-first CSS framework
 - [Nuxt](https://nuxt.com/) — Vue meta-framework
+- [ECharts](https://echarts.apache.org/) — Charting and data visualization
+- [TanStack Virtual](https://tanstack.com/virtual/) — Virtual scrolling for unbounded lists
 - [Geist](https://vercel.com/font) — Typography (Vercel)
 
 ---
