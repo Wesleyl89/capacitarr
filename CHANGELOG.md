@@ -39,6 +39,7 @@
 
 ### 🐛 Bug Fixes
 
+- *(enrichment)* Aggregate watch data across all Jellyfin and Emby users instead of admin-only — reported by @Thundernerd ([#3](https://gitlab.com/starshadow/software/capacitarr/-/issues/3))
 - *(enrichment)* Aggregate episode-level watch data into parent series for Jellyfin and Emby — reported by @Thundernerd ([#4](https://gitlab.com/starshadow/software/capacitarr/-/issues/4))
 
 ### 🔧 Refactors
