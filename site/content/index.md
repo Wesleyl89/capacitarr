@@ -39,7 +39,7 @@ Connect Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Tautulli, Jellyst
   :::
 
 #default
-  ![Capacitarr Dashboard](/screenshots/dashboard.png)
+  ![Capacitarr Dashboard](/screenshots/dashboard.webp)
 ::
 
 ::u-page-section
