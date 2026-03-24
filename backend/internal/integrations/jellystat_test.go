@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const testJellystatToken = "test-jellystat-jwt-token" //nolint:gosec // G101: test fixture, not a real credential
+const testJellystatAPIKey = "test-jellystat-api-key" //nolint:gosec // G101: test fixture, not a real credential
 
 // ─── JellystatClient.TestConnection ─────────────────────────────────────────
 
@@ -17,17 +17,17 @@ func TestJellystatClient_TestConnection_Success(t *testing.T) {
 		if r.URL.Path != "/api/getLibraries" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
-		// Verify Bearer token auth
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+testJellystatToken {
-			t.Errorf("Expected Bearer auth, got %q", auth)
+		// Verify x-api-token header auth
+		apiKey := r.Header.Get("x-api-token")
+		if apiKey != testJellystatAPIKey {
+			t.Errorf("Expected x-api-token %q, got %q", testJellystatAPIKey, apiKey)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[{"Id":"lib1","Name":"Movies"},{"Id":"lib2","Name":"Shows"}]`))
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestJellystatClient_TestConnection_Unauthorized(t *testing.T) {
 	if err == nil {
 		t.Fatal("TestConnection should fail with 401")
 	}
-	if !strings.Contains(err.Error(), "JWT token may be expired") {
-		t.Errorf("Error should mention JWT expiry, got: %v", err)
+	if !strings.Contains(err.Error(), "check your API key") {
+		t.Errorf("Error should mention API key, got: %v", err)
 	}
 }
 
@@ -55,7 +55,7 @@ func TestJellystatClient_TestConnection_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with 500")
@@ -69,7 +69,7 @@ func TestJellystatClient_TestConnection_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	err := client.TestConnection()
 	if err == nil {
 		t.Fatal("TestConnection should fail with malformed JSON")
@@ -118,7 +118,7 @@ func TestJellystatClient_GetBulkWatchStats_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 
 	// Build Jellyfin ID → TMDb ID map (jf-item-3 has no mapping)
 	jellyfinIDToTMDb := map[string]int{
@@ -175,7 +175,7 @@ func TestJellystatClient_GetBulkWatchStats_EmptyLibrary(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	result, err := client.GetBulkWatchStats(map[string]int{"jf-1": 12345})
 	if err != nil {
 		t.Fatalf("GetBulkWatchStats should succeed with empty library: %v", err)
@@ -192,7 +192,7 @@ func TestJellystatClient_GetBulkWatchStats_EmptyMap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	result, err := client.GetBulkWatchStats(map[string]int{})
 	if err != nil {
 		t.Fatalf("GetBulkWatchStats should succeed with empty map: %v", err)
@@ -217,7 +217,7 @@ func TestJellystatClient_GetBulkWatchStats_ZeroPlayCount(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	result, err := client.GetBulkWatchStats(map[string]int{"jf-item-1": 16320})
 	if err != nil {
 		t.Fatalf("GetBulkWatchStats should succeed: %v", err)
@@ -228,22 +228,25 @@ func TestJellystatClient_GetBulkWatchStats_ZeroPlayCount(t *testing.T) {
 	}
 }
 
-func TestJellystatClient_BearerAuthHeader(t *testing.T) {
+func TestJellystatClient_APIKeyHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			t.Errorf("Expected Bearer auth prefix, got %q", auth)
+		apiKey := r.Header.Get("x-api-token")
+		if apiKey == "" {
+			t.Error("Expected x-api-token header to be set")
 		}
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if token != testJellystatToken {
-			t.Errorf("Expected token %q, got %q", testJellystatToken, token)
+		if apiKey != testJellystatAPIKey {
+			t.Errorf("Expected API key %q, got %q", testJellystatAPIKey, apiKey)
+		}
+		// Verify Authorization header is NOT set
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			t.Errorf("Authorization header should not be set, got %q", auth)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	_ = client.TestConnection()
 }
 
@@ -278,7 +281,7 @@ func TestJellystatEnricher_MatchesByTMDbID(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewJellystatClient(srv.URL, testJellystatToken)
+	client := NewJellystatClient(srv.URL, testJellystatAPIKey)
 	jellyfinMap := map[string]int{"jf-item-1": 16320}
 	enricher := NewJellystatEnricher(client, jellyfinMap)
 

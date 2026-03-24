@@ -13,34 +13,34 @@ import (
 // supplementary analytics service that provides per-user watch history, play
 // counts, and activity tracking beyond what Jellyfin's native API exposes.
 //
-// Authentication uses JWT Bearer tokens. The token is stored in the standard
-// APIKey field and sent as `Authorization: Bearer <token>`.
+// Authentication uses Jellystat's API key mechanism. The key is stored in the
+// standard APIKey field and sent as the `x-api-token` header.
 type JellystatClient struct {
-	URL   string
-	Token string `json:"-"` // JWT token (stored in IntegrationConfig.APIKey)
+	URL    string
+	APIKey string `json:"-"` // Jellystat API key (stored in IntegrationConfig.APIKey)
 }
 
 // NewJellystatClient creates a new Jellystat API client.
-func NewJellystatClient(url, token string) *JellystatClient {
+func NewJellystatClient(url, apiKey string) *JellystatClient {
 	return &JellystatClient{
-		URL:   strings.TrimRight(url, "/"),
-		Token: token,
+		URL:    strings.TrimRight(url, "/"),
+		APIKey: apiKey,
 	}
 }
 
-// doRequest executes a Jellystat API call using Bearer token authentication.
+// doRequest executes a Jellystat API call using API key authentication.
 func (j *JellystatClient) doRequest(endpoint string) ([]byte, error) {
 	fullURL := j.URL + endpoint
-	return DoAPIRequest(fullURL, "Authorization", "Bearer "+j.Token)
+	return DoAPIRequest(fullURL, "x-api-token", j.APIKey)
 }
 
-// TestConnection verifies the Jellystat URL and JWT token are valid by calling
-// the statistics endpoint. On 401, returns a descriptive error about JWT expiry.
+// TestConnection verifies the Jellystat URL and API key are valid by calling
+// the libraries endpoint. On 401, returns a descriptive error about the API key.
 func (j *JellystatClient) TestConnection() error {
 	body, err := j.doRequest("/api/getLibraries")
 	if err != nil {
 		if strings.Contains(err.Error(), "unauthorized") {
-			return fmt.Errorf("jellystat auth failed (JWT token may be expired — regenerate in Jellystat Settings)")
+			return fmt.Errorf("jellystat auth failed (check your API key — generate one in Jellystat Settings → API Keys)")
 		}
 		return err
 	}
