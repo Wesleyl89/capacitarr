@@ -502,6 +502,7 @@ export interface NotificationChannel {
   appriseTags?: string;
   enabled: boolean;
   onCycleDigest: boolean;
+  onDryRunDigest: boolean;
   onError: boolean;
   onModeChanged: boolean;
   onServerStarted: boolean;

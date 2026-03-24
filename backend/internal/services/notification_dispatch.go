@@ -293,10 +293,12 @@ func (s *NotificationDispatchService) tryFlush() {
 }
 
 // dispatchDigest sends the cycle digest to all enabled channels that
-// subscribe to OnCycleDigest. For approval-mode digests, channels must
-// also subscribe to OnApprovalActivity — users who disable "Approval
-// Activity" expect all approval-related notifications to be silenced,
-// including the cycle digest that summarises items queued for approval.
+// subscribe to OnCycleDigest. Mode-specific digests are additionally gated
+// by their respective subscription flags:
+//   - Dry-run digests require OnDryRunDigest so users can silence the
+//     periodic "would delete N items" summaries independently.
+//   - Approval-mode digests require OnApprovalActivity so that disabling
+//     "Approval Activity" silences all approval-related notifications.
 func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleDigest) {
 	configs, err := s.channels.ListEnabled()
 	if err != nil {
@@ -306,6 +308,12 @@ func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleD
 
 	for _, cfg := range configs {
 		if !cfg.OnCycleDigest {
+			continue
+		}
+		// Dry-run digests are gated by both OnCycleDigest and
+		// OnDryRunDigest so users can suppress periodic dry-run
+		// summaries without losing auto-mode cleanup digests.
+		if digest.ExecutionMode == notifications.ModeDryRun && !cfg.OnDryRunDigest {
 			continue
 		}
 		// Approval-mode digests are gated by both OnCycleDigest and

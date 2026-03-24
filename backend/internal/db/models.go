@@ -287,6 +287,7 @@ type NotificationConfig struct {
 	Enabled     bool   `gorm:"default:true" json:"enabled"`
 	// Event subscriptions — which notification types trigger this channel
 	OnCycleDigest       bool      `gorm:"default:true" json:"onCycleDigest"`
+	OnDryRunDigest      bool      `gorm:"default:true" json:"onDryRunDigest"`
 	OnError             bool      `gorm:"default:true" json:"onError"`
 	OnModeChanged       bool      `gorm:"default:true" json:"onModeChanged"`
 	OnServerStarted     bool      `gorm:"default:true" json:"onServerStarted"`

@@ -73,10 +73,9 @@
       </UiCardHeader>
 
       <!-- Card Body -->
-      <UiCardContent class="pt-4 space-y-3">
-        <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Event Subscriptions
-        </p>
+      <UiCardContent class="pt-4 space-y-4">
+        <!-- Engine triggers -->
+        <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Triggers</p>
         <div class="space-y-3">
           <div>
             <UiLabel class="flex items-center gap-2 text-sm font-normal">
@@ -91,42 +90,21 @@
             </UiLabel>
             <p class="text-xs text-muted-foreground ml-11">One summary after each engine run</p>
           </div>
-          <div>
+          <div class="ml-6 border-l border-border pl-4">
             <UiLabel class="flex items-center gap-2 text-sm font-normal">
               <UiSwitch
-                :model-value="channel.onError"
+                :model-value="channel.onDryRunDigest"
                 size="sm"
-                @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
-              />
-              <span>Errors</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">When something goes wrong</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onModeChanged"
-                size="sm"
+                :disabled="!channel.onCycleDigest"
                 @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
+                  (val: boolean) => updateChannelEvent(channel, 'onDryRunDigest', val)
                 "
               />
-              <span>Mode Changed</span>
+              <span :class="{ 'text-muted-foreground': !channel.onCycleDigest }"
+                >Include Dry-Run</span
+              >
             </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">Heads up when you switch modes</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onServerStarted"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
-                "
-              />
-              <span>Server Started</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">A friendly hello after a restart</p>
+            <p class="text-xs text-muted-foreground ml-11">Also send digests for dry-run cycles</p>
           </div>
           <div>
             <UiLabel class="flex items-center gap-2 text-sm font-normal">
@@ -139,20 +117,9 @@
               />
               <span>Threshold Breached</span>
             </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">Disk is getting full</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onUpdateAvailable"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
-                "
-              />
-              <span>Update Available</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">New version ready to install</p>
+            <p class="text-xs text-muted-foreground ml-11">
+              Disk usage exceeded the configured limit
+            </p>
           </div>
           <div>
             <UiLabel class="flex items-center gap-2 text-sm font-normal">
@@ -172,6 +139,17 @@
           <div>
             <UiLabel class="flex items-center gap-2 text-sm font-normal">
               <UiSwitch
+                :model-value="channel.onError"
+                size="sm"
+                @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
+              />
+              <span>Errors</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">The engine crashed during evaluation</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
                 :model-value="channel.onIntegrationStatus"
                 size="sm"
                 @update:model-value="
@@ -183,6 +161,47 @@
             <p class="text-xs text-muted-foreground ml-11">
               {{ $t('notifications.integrationStatusDesc') }}
             </p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onModeChanged"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
+                "
+              />
+              <span>Mode Changed</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">Execution mode was switched</p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onServerStarted"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
+                "
+              />
+              <span>Server Started</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">
+              Capacitarr came online after a restart
+            </p>
+          </div>
+          <div>
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channel.onUpdateAvailable"
+                size="sm"
+                @update:model-value="
+                  (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
+                "
+              />
+              <span>Update Available</span>
+            </UiLabel>
+            <p class="text-xs text-muted-foreground ml-11">A newer version is ready to install</p>
           </div>
         </div>
       </UiCardContent>
@@ -268,9 +287,7 @@
         </div>
 
         <div class="space-y-3">
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Event Subscriptions
-          </p>
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Triggers</p>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onCycleDigest"
@@ -282,6 +299,44 @@
             />
             <span>Cycle Digest</span>
           </UiLabel>
+          <div class="ml-6 border-l border-border pl-4">
+            <UiLabel class="flex items-center gap-2 text-sm font-normal">
+              <UiSwitch
+                :model-value="channelForm.onDryRunDigest"
+                :disabled="!channelForm.onCycleDigest"
+                @update:model-value="
+                  (val: boolean) => {
+                    channelForm.onDryRunDigest = val;
+                  }
+                "
+              />
+              <span :class="{ 'text-muted-foreground': !channelForm.onCycleDigest }"
+                >Include Dry-Run</span
+              >
+            </UiLabel>
+          </div>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onThresholdBreach"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onThresholdBreach = val;
+                }
+              "
+            />
+            <span>Threshold Breached</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onApprovalActivity"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onApprovalActivity = val;
+                }
+              "
+            />
+            <span>Approval Activity</span>
+          </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
               :model-value="channelForm.onError"
@@ -292,6 +347,17 @@
               "
             />
             <span>Errors</span>
+          </UiLabel>
+          <UiLabel class="flex items-center gap-2 text-sm font-normal">
+            <UiSwitch
+              :model-value="channelForm.onIntegrationStatus"
+              @update:model-value="
+                (val: boolean) => {
+                  channelForm.onIntegrationStatus = val;
+                }
+              "
+            />
+            <span>Integration Status</span>
           </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
@@ -314,17 +380,6 @@
               "
             />
             <span>Server Started</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onThresholdBreach"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onThresholdBreach = val;
-                }
-              "
-            />
-            <span>Threshold Breached</span>
           </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch
@@ -356,7 +411,8 @@
 </template>
 
 <script setup lang="ts">
-import { PlusIcon, LoaderCircleIcon, BellIcon, MessageSquareIcon, SendIcon } from 'lucide-vue-next';
+import { PlusIcon, LoaderCircleIcon, BellIcon, SendIcon } from 'lucide-vue-next';
+import DiscordIcon from '~/components/icons/DiscordIcon.vue';
 import type { NotificationChannel, ApiError } from '~/types/api';
 
 const api = useApi();
@@ -377,10 +433,13 @@ const channelForm = reactive({
   webhookUrl: '',
   appriseTags: '',
   onCycleDigest: true,
+  onDryRunDigest: true,
+  onThresholdBreach: true,
+  onApprovalActivity: true,
   onError: true,
+  onIntegrationStatus: true,
   onModeChanged: true,
   onServerStarted: true,
-  onThresholdBreach: true,
   onUpdateAvailable: true,
 });
 
@@ -388,7 +447,7 @@ const channelForm = reactive({
 function channelTypeIcon(type: string) {
   switch (type) {
     case 'discord':
-      return MessageSquareIcon;
+      return DiscordIcon;
     case 'apprise':
       return SendIcon;
     default:
@@ -437,10 +496,13 @@ function openAddChannelModal() {
   channelForm.webhookUrl = '';
   channelForm.appriseTags = '';
   channelForm.onCycleDigest = true;
+  channelForm.onDryRunDigest = true;
+  channelForm.onThresholdBreach = true;
+  channelForm.onApprovalActivity = true;
   channelForm.onError = true;
+  channelForm.onIntegrationStatus = true;
   channelForm.onModeChanged = true;
   channelForm.onServerStarted = true;
-  channelForm.onThresholdBreach = true;
   channelForm.onUpdateAvailable = true;
   channelFormError.value = '';
   showChannelModal.value = true;
@@ -453,10 +515,13 @@ function openEditChannelModal(channel: NotificationChannel) {
   channelForm.webhookUrl = channel.webhookUrl || '';
   channelForm.appriseTags = channel.appriseTags || '';
   channelForm.onCycleDigest = channel.onCycleDigest;
+  channelForm.onDryRunDigest = channel.onDryRunDigest;
+  channelForm.onThresholdBreach = channel.onThresholdBreach;
+  channelForm.onApprovalActivity = channel.onApprovalActivity;
   channelForm.onError = channel.onError;
+  channelForm.onIntegrationStatus = channel.onIntegrationStatus;
   channelForm.onModeChanged = channel.onModeChanged;
   channelForm.onServerStarted = channel.onServerStarted;
-  channelForm.onThresholdBreach = channel.onThresholdBreach;
   channelForm.onUpdateAvailable = channel.onUpdateAvailable;
   channelFormError.value = '';
   showChannelModal.value = true;
@@ -472,10 +537,13 @@ async function onChannelSubmit() {
       webhookUrl: channelForm.webhookUrl,
       enabled: editingChannel.value ? editingChannel.value.enabled : true,
       onCycleDigest: channelForm.onCycleDigest,
+      onDryRunDigest: channelForm.onDryRunDigest,
+      onThresholdBreach: channelForm.onThresholdBreach,
+      onApprovalActivity: channelForm.onApprovalActivity,
       onError: channelForm.onError,
+      onIntegrationStatus: channelForm.onIntegrationStatus,
       onModeChanged: channelForm.onModeChanged,
       onServerStarted: channelForm.onServerStarted,
-      onThresholdBreach: channelForm.onThresholdBreach,
       onUpdateAvailable: channelForm.onUpdateAvailable,
     };
     if (channelForm.type === 'apprise') {

@@ -121,7 +121,7 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 func TestNotificationDispatch_ReverseGateOrder(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true, OnDryRunDigest: true},
 		},
 	}
 
@@ -379,8 +379,77 @@ func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) { //nol
 	}
 }
 
+func TestNotificationDispatch_DryRunDigestSuppressed(t *testing.T) { //nolint:dupl // test structure intentionally similar
+	// When OnDryRunDigest=false, dry-run cycle digests should be suppressed —
+	// users who turn off "Include Dry-Run" expect the periodic "would delete
+	// N items" summaries to stop, while still receiving auto-mode digests.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{
+			{ID: 1, Type: "discord", Name: "No DryRun Digest", Enabled: true,
+				OnCycleDigest: true, OnDryRunDigest: false},
+		},
+	}
+
+	svc, mock := newTestDispatch(t, channels)
+
+	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeDryRun})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.EngineCompleteEvent{
+		Evaluated:     100,
+		Candidates:    5,
+		DurationMs:    500,
+		ExecutionMode: db.ModeDryRun,
+		FreedBytes:    1073741824,
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
+	time.Sleep(200 * time.Millisecond)
+
+	digests := mock.getDigests()
+	if len(digests) != 0 {
+		t.Fatalf("expected 0 digests (OnDryRunDigest=false suppresses dry-run digests), got %d", len(digests))
+	}
+}
+
+func TestNotificationDispatch_NonDryRunDigestNotAffected(t *testing.T) {
+	// When OnDryRunDigest=false, auto-mode cycle digests should still
+	// be delivered normally — only dry-run digests are suppressed.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true,
+				OnCycleDigest: true, OnDryRunDigest: false},
+		},
+	}
+
+	svc, mock := newTestDispatch(t, channels)
+
+	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.EngineCompleteEvent{
+		Evaluated:     50,
+		Candidates:    2,
+		DurationMs:    300,
+		ExecutionMode: db.ModeAuto,
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 2, Failed: 0})
+	time.Sleep(200 * time.Millisecond)
+
+	digests := mock.getDigests()
+	if len(digests) != 1 {
+		t.Fatalf("expected 1 digest (auto mode unaffected by OnDryRunDigest=false), got %d", len(digests))
+	}
+	if digests[0].ExecutionMode != db.ModeAuto {
+		t.Errorf("expected execution mode 'auto', got %q", digests[0].ExecutionMode)
+	}
+}
+
 func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
-	// When OnApprovalActivity=false, non-approval-mode digests (auto, dry-run)
+	// When OnApprovalActivity=false, non-approval-mode digests (auto)
 	// should still be delivered normally.
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{

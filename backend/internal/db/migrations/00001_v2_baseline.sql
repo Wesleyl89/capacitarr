@@ -268,6 +268,7 @@ CREATE TABLE notification_configs (
     enabled              INTEGER NOT NULL DEFAULT 1,
     -- Event subscriptions
     on_cycle_digest      INTEGER NOT NULL DEFAULT 1,
+    on_dry_run_digest    INTEGER NOT NULL DEFAULT 1,
     on_error             INTEGER NOT NULL DEFAULT 1,
     on_mode_changed      INTEGER NOT NULL DEFAULT 1,
     on_server_started    INTEGER NOT NULL DEFAULT 1,
