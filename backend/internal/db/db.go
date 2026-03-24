@@ -2,7 +2,10 @@
 package db
 
 import (
+	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"capacitarr/internal/config"
 	"capacitarr/internal/logger"
@@ -21,14 +24,48 @@ type FactorDefault struct {
 	DefaultWeight int
 }
 
+// buildDSN converts a bare database path into a file: URI with SQLite PRAGMAs
+// that enable WAL mode and a busy timeout. In-memory databases (":memory:")
+// are returned unchanged because WAL mode is not supported for them.
+//
+// The resulting DSN sets:
+//   - journal_mode=wal: allows concurrent readers during writes, eliminating
+//     most "database is locked" errors from goroutine contention.
+//   - busy_timeout=5000: waits up to 5 seconds for a lock before returning
+//     SQLITE_BUSY, instead of failing immediately.
+//   - _txlock=immediate: acquires a write lock at BEGIN instead of at first
+//     write statement, preventing SQLITE_BUSY mid-transaction.
+func buildDSN(dbPath string) string {
+	if dbPath == ":memory:" || strings.HasPrefix(dbPath, "file:") {
+		return dbPath
+	}
+
+	params := url.Values{}
+	params.Add("_pragma", "journal_mode(wal)")
+	params.Add("_pragma", "busy_timeout(5000)")
+	params.Set("_txlock", "immediate")
+
+	return fmt.Sprintf("file:%s?%s", dbPath, params.Encode())
+}
+
 // Init opens the SQLite database, runs migrations, and returns the connection.
+//
+// The database is opened with WAL journal mode and a 5-second busy timeout to
+// prevent "database is locked" errors from concurrent goroutine access (poller,
+// deletion worker, activity persister, cron jobs, HTTP handlers). The connection
+// pool is limited to a single connection because SQLite supports only one
+// concurrent writer; serializing all access through one connection eliminates
+// file-level lock contention entirely.
 func Init(cfg *config.Config) (*gorm.DB, error) {
 	logLevel := gormlogger.Warn
 	if cfg.Debug {
 		logLevel = gormlogger.Info
 	}
 
-	database, err := gorm.Open(gormlite.Open(cfg.Database), &gorm.Config{
+	dsn := buildDSN(cfg.Database)
+	slog.Info("Opening database", "component", "db", "dsn", dsn)
+
+	database, err := gorm.Open(gormlite.Open(dsn), &gorm.Config{
 		Logger: logger.NewGormLogger(0).LogMode(logLevel),
 	})
 	if err != nil {
@@ -36,12 +73,25 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// Run Goose migrations (sole schema management — no AutoMigrate)
+	// Limit the connection pool to a single connection. SQLite only supports
+	// one concurrent writer; multiple pool connections cause file-level lock
+	// contention ("database is locked" errors). A single connection serializes
+	// all reads and writes through one path, which combined with WAL mode
+	// provides the best throughput for SQLite's single-writer architecture.
 	sqlDB, err := database.DB()
 	if err != nil {
-		slog.Error("Failed to get underlying sql.DB for migrations", "component", "db", "operation", "get_sql_db", "error", err)
+		slog.Error("Failed to get underlying sql.DB for configuration", "component", "db", "operation", "get_sql_db", "error", err)
 		return nil, err
 	}
+	sqlDB.SetMaxOpenConns(1)
+
+	// Register GORM callbacks that automatically retry write operations on
+	// SQLITE_BUSY errors with exponential backoff. This is a defense-in-depth
+	// measure — WAL mode + busy_timeout handle most contention, but if the
+	// busy timeout expires (e.g., during a long-running backup or migration),
+	// the retry callbacks provide an additional safety net.
+	RegisterRetryCallbacks(database)
+
 	if err := RunMigrations(sqlDB); err != nil {
 		slog.Error("Failed to run database migrations", "component", "db", "operation", "migrate", "error", err)
 		return nil, err
@@ -68,7 +118,15 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 	// Apply dynamic log level from preferences
 	logger.SetLevel(pref.LogLevel)
 
-	slog.Info("Database initialized successfully", "component", "db", "path", cfg.Database)
+	// Log the active journal mode to confirm WAL is in effect.
+	// In-memory databases use "memory" mode; file-based databases should report "wal".
+	var journalMode string
+	if err := database.Raw("PRAGMA journal_mode").Scan(&journalMode).Error; err != nil {
+		slog.Warn("Failed to query journal_mode", "component", "db", "error", err)
+	}
+
+	slog.Info("Database initialized successfully", "component", "db",
+		"path", cfg.Database, "journalMode", journalMode, "maxOpenConns", 1)
 	return database, nil
 }
 

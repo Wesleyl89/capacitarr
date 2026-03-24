@@ -164,6 +164,73 @@ func TestJournalMode(t *testing.T) {
 	t.Logf("journal_mode = %s", journalMode)
 }
 
+// TestWALModeFileDB verifies that buildDSN produces a DSN that enables WAL
+// journal mode on a file-based database. WAL mode is critical for preventing
+// "database is locked" errors from concurrent goroutine access.
+func TestWALModeFileDB(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test-wal.db"
+
+	dsn := buildDSN(dbPath)
+	database, err := gorm.Open(gormlite.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to open file-based SQLite with WAL DSN: %v", err)
+	}
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("Failed to get underlying sql.DB: %v", err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	sqlDB.SetMaxOpenConns(1)
+
+	var journalMode string
+	if err := database.Raw("PRAGMA journal_mode").Scan(&journalMode).Error; err != nil {
+		t.Fatalf("Failed to query journal_mode: %v", err)
+	}
+
+	if journalMode != "wal" {
+		t.Errorf("Expected journal_mode=wal, got %q", journalMode)
+	}
+
+	t.Logf("File-based journal_mode = %s", journalMode)
+}
+
+// TestBusyTimeoutFileDB verifies that buildDSN produces a DSN that sets a
+// non-zero busy_timeout on a file-based database.
+func TestBusyTimeoutFileDB(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test-busy.db"
+
+	dsn := buildDSN(dbPath)
+	database, err := gorm.Open(gormlite.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to open file-based SQLite with busy_timeout DSN: %v", err)
+	}
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("Failed to get underlying sql.DB: %v", err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	sqlDB.SetMaxOpenConns(1)
+
+	var busyTimeout int
+	if err := database.Raw("PRAGMA busy_timeout").Scan(&busyTimeout).Error; err != nil {
+		t.Fatalf("Failed to query busy_timeout: %v", err)
+	}
+
+	if busyTimeout != 5000 {
+		t.Errorf("Expected busy_timeout=5000, got %d", busyTimeout)
+	}
+
+	t.Logf("busy_timeout = %d ms", busyTimeout)
+}
+
 // TestDataTypeRoundTrip writes specific values for each column type used
 // in the schema (DATETIME, REAL, INTEGER, TEXT, NULL) and reads them back.
 // This catches any type conversion differences in the WASM bridge.
