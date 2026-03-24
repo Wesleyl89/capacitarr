@@ -1,57 +1,108 @@
-## [2.0.0] - Unreleased
-
-### ⚠️ Breaking Changes
-
-- Fresh database schema — 2.0 uses a clean baseline schema. An optional migration tool imports 1.x configurations.
-- `overseerr` integration type renamed to `seerr` (compatible with Overseerr, Jellyseerr, and Seerr)
+## [2.0.0] - 2026-03-24
 
 ### 🚀 Features
 
-- *(architecture)* Capability-based integration interfaces replacing monolithic `Integration` interface
-- *(architecture)* Integration registry with runtime capability discovery
-- *(architecture)* Pluggable enrichment pipeline with auto-discovered enrichers
-- *(architecture)* Pluggable scoring factors with `ScoringFactor` interface
-- *(architecture)* Extracted evaluator from poller — reusable scoring + filtering logic
-- *(analytics)* Dead content detection smart filter (never-watched, not on watchlist)
-- *(analytics)* Stale content smart filter with configurable staleness threshold
-- *(analytics)* Capacity forecast with linear regression
-- *(collections)* Collection-based deletion — deleting one collection member deletes all
-- *(enrichment)* TMDb ID-based matching replaces error-prone title normalization
-- *(enrichment)* Multi-user watch data aggregation for Jellyfin and Emby
-- *(enrichment)* Jellystat integration for Jellyfin analytics
-- *(enrichment)* Watchlist/favorites enrichment from Plex, Jellyfin, and Emby
-- *(enrichment)* Collection enrichment from Plex, Jellyfin, and Emby
-- *(frontend)* ECharts replaces ApexCharts with tree-shaken imports
-- *(frontend)* Virtual scrolling on all unbounded lists via @tanstack/vue-virtual
-- *(frontend)* CreatableCombobox component for free-text rule value input
-- *(frontend)* DashboardCard component for consistent analytics card layout
-- *(frontend)* Granular SSE event subscriptions per component
-- *(frontend)* Universal bottom toolbar with glassmorphism and iOS safe area support
-- *(library)* Library entity with per-library threshold management
-- *(library)* Smart filter presets (Dead, Stale, Requested, Protected)
-- *(library)* Audit log merged into Library → History tab
-- *(rules)* CreatableCombobox for custom value input in rule builder
-- *(rules)* Edit existing custom rules with card state-swap pattern
-- *(engine)* Dynamic scoring factor weight registry (auto-seeded, UI-driven)
-- *(backup)* Stepper import flow with inline field-level diffs
-- *(migration)* Optional one-way migration from 1.x database (CLI + web UI)
-- *(notifications)* Integration status notifications (failure + recovery)
+- *(db)* [**breaking**] Replace 1.x incremental migrations with 2.0 baseline schema ([dbd9e3b](https://gitlab.com/starshadow/software/capacitarr/-/commit/dbd9e3bc452cbd3b381dd11ed9329b10fc27ce40))
+- *(integrations)* Define capability interfaces for 2.0 ([c4af106](https://gitlab.com/starshadow/software/capacitarr/-/commit/c4af106bcd721dba0f2fd2135b3f6b95588a5a63))
+- *(integrations)* Add IntegrationRegistry with capability-based discovery ([f78e2e5](https://gitlab.com/starshadow/software/capacitarr/-/commit/f78e2e538e09d46e602363ed2e5755a7ef7e0b3c))
+- *(services)* Add LibraryService with threshold resolution ([6f75afe](https://gitlab.com/starshadow/software/capacitarr/-/commit/6f75afe5bd0b0649a8dc6e65c89c1fcf74a5d5a1))
+- *(engine)* Add pluggable scoring factors with ScoringFactor interface ([93a5824](https://gitlab.com/starshadow/software/capacitarr/-/commit/93a582434dcc63ec736320a61d8c988db3417850))
+- *(integrations)* Add pluggable enrichment pipeline ([9ea631e](https://gitlab.com/starshadow/software/capacitarr/-/commit/9ea631e597f4939396149c75c2cda068271fd210))
+- *(engine)* Extract reusable Evaluator from poller ([1204bfc](https://gitlab.com/starshadow/software/capacitarr/-/commit/1204bfc4d73048e2a45d6e56d502e58905e8bdc8))
+- *(integrations)* Implement WatchlistProvider and RequestProvider on clients ([904b408](https://gitlab.com/starshadow/software/capacitarr/-/commit/904b408a8008a8f599a5dc72c9355b65ab471087))
+- *(services)* Add AnalyticsService and WatchAnalyticsService with API routes ([e328622](https://gitlab.com/starshadow/software/capacitarr/-/commit/e3286225d63edc87121aee1aa98f7873a25d7c4d))
+- *(routes)* Add Library CRUD API endpoints ([d2da99d](https://gitlab.com/starshadow/software/capacitarr/-/commit/d2da99db359e35b2de9460d8663e17578e111a10))
+- *(integrations)* Add plugin-style factory registration ([6bb490e](https://gitlab.com/starshadow/software/capacitarr/-/commit/6bb490e13c6357711d3eeee045624de068dd8717))
+- *(services)* Add BuildIntegrationRegistry using factory+capability pattern ([35bac22](https://gitlab.com/starshadow/software/capacitarr/-/commit/35bac22dbf973ae315fb4f96b45f299c9962f9b0))
+- *(rules)* Add rule impact preview with API endpoint ([83417a1](https://gitlab.com/starshadow/software/capacitarr/-/commit/83417a154135ca4f695a32ef304d29ad2a11d3bb))
+- *(frontend)* Replace ApexCharts with ECharts (Phase 3 start) ([8900e4e](https://gitlab.com/starshadow/software/capacitarr/-/commit/8900e4ed22612e960400248825aacca8fa30efb1))
+- *(frontend)* Add DashboardCard component for analytics pages ([f8e0b6e](https://gitlab.com/starshadow/software/capacitarr/-/commit/f8e0b6e930d7af570802643667d591f6be6982ce))
+- *(frontend)* Add Insights page with three-tab layout (Phase 4) ([dbed697](https://gitlab.com/starshadow/software/capacitarr/-/commit/dbed697b5c660445094776cc4545732ba72257dc))
+- *(frontend)* Add Insights nav link and i18n keys ([c64cff2](https://gitlab.com/starshadow/software/capacitarr/-/commit/c64cff25b3331d62c8fa51a4282b9dfa31b1ca40))
+- *(migration)* Add 1.x → 2.0 one-way data import (Phase 7) ([cee90b7](https://gitlab.com/starshadow/software/capacitarr/-/commit/cee90b709fcf2ef57b9286668c7afeeda976567a))
+- *(ui)* Add CreatableCombobox component with create-on-type ([1b78b18](https://gitlab.com/starshadow/software/capacitarr/-/commit/1b78b187b21e2b4d554666b1e0cc0148e3cf1d13))
+- *(frontend)* Add virtual scrolling to dashboard activity feed ([c169605](https://gitlab.com/starshadow/software/capacitarr/-/commit/c169605108633b6d21eb2593a8bc1b1f49714fcf))
+- *(events)* Add analytics_updated SSE event on preview cache refresh ([a2dd0cf](https://gitlab.com/starshadow/software/capacitarr/-/commit/a2dd0cfb6e98b742f8e0b2efc7ff1c76027937d7))
+- *(frontend)* Complete Phase 4 frontend restructuring ([7decba0](https://gitlab.com/starshadow/software/capacitarr/-/commit/7decba08222292455f180404710ea1c518d74f5a))
+- *(frontend)* Wire Phase 6 frontend UI to backend APIs ([db534e1](https://gitlab.com/starshadow/software/capacitarr/-/commit/db534e156ba4790a898748a867bdf11da5b17da1))
+- *(migration)* Wire Phase 7 migration CLI, API, and frontend ([234c6b4](https://gitlab.com/starshadow/software/capacitarr/-/commit/234c6b427989e9fc8aaf09ded94d4502d5375d4b))
+- *(dashboard)* Add score column, startup poll, deletion queue SSE, chart upgrades ([c7bbda2](https://gitlab.com/starshadow/software/capacitarr/-/commit/c7bbda2e5f4dc60cffb24408e945bb805cc0f373))
+- *(insights)* Redesign insights page with capacity-focused visualizations ([05c25b8](https://gitlab.com/starshadow/software/capacitarr/-/commit/05c25b8fc1cdc7834eea8f49ce899f24c68e9f90))
+- *(approval)* Add per-cycle queue reconciliation and threshold-triggered engine runs ([35617bc](https://gitlab.com/starshadow/software/capacitarr/-/commit/35617bc648e46a8efb60313eb27ecb1abf4b04ad))
+- *(deletion)* Add grace period, snooze, and clear queue (Phase 3) ([6822971](https://gitlab.com/starshadow/software/capacitarr/-/commit/682297115e0f8b174349ca05265f7e21ba1ef313))
+- *(ui)* Always-visible deletion queue card with mode-specific empty states ([0ce2e72](https://gitlab.com/starshadow/software/capacitarr/-/commit/0ce2e72cc1571fe3362037f79604cdc2323fd09e))
+- *(deletion)* Return dry-deleted approval items to pending status ([771ee12](https://gitlab.com/starshadow/software/capacitarr/-/commit/771ee12d6e6bf21a164a479312fe0aed40d7f5e8))
+- *(rules)* Add combined rule context endpoint and extract field definitions ([5504677](https://gitlab.com/starshadow/software/capacitarr/-/commit/5504677e8b7e58a11f203f2ab564255ceef7d44b))
+- *(rules)* Add edit custom rules UI with card state-swap pattern ([c693a9a](https://gitlab.com/starshadow/software/capacitarr/-/commit/c693a9ac1d1eb5bd65dd27411b3bed599128925d))
+- *(ui)* V-motion presets, virtual scrolling, disk group sparkline ([0076e13](https://gitlab.com/starshadow/software/capacitarr/-/commit/0076e13645c9c9d1dabc14d4384e25b324227b19))
+- *(ui)* Replace disk group bar+sparkline with gauge arc ([f67f70e](https://gitlab.com/starshadow/software/capacitarr/-/commit/f67f70e251f939430c3a103bbce41c5e3b1d8739))
+- *(ui)* Add target/threshold pointer markers on gauge arc ([7870189](https://gitlab.com/starshadow/software/capacitarr/-/commit/787018922d7f0ff6b5f7f441c76a7d322734c182))
+- *(ui)* Gauge pulse fix, responsive disk group grid ([730ee1b](https://gitlab.com/starshadow/software/capacitarr/-/commit/730ee1bbe29bbeced825e9399d9574ad5682b23d))
+- *(integrations)* Add Jellystat integration for Jellyfin analytics ([fb1c12f](https://gitlab.com/starshadow/software/capacitarr/-/commit/fb1c12fa1c69456691f93fc3787f414fc0332094))
+- *(enrichment)* Add enrichment observability and match rate logging ([647c779](https://gitlab.com/starshadow/software/capacitarr/-/commit/647c779e7fb44ea64136f5c295b14c5f72940c23))
+- *(backup)* Rework import modes to merge/sync with per-item sync ([204d9e4](https://gitlab.com/starshadow/software/capacitarr/-/commit/204d9e47810cad09c3de628cd3f60792dd84e97a))
+- *(backup)* Add full-section import preview with field-level diffs ([92f81f6](https://gitlab.com/starshadow/software/capacitarr/-/commit/92f81f69d0b52414eca6884c730fe7c45bd4ea5b))
+- *(backup)* Add stepper import flow with inline diff view ([ee30ad6](https://gitlab.com/starshadow/software/capacitarr/-/commit/ee30ad6d4ee5d726db4069b4947c05db65318043))
+- *(collections)* Add collection deletion data model and Radarr resolver ([750def3](https://gitlab.com/starshadow/software/capacitarr/-/commit/750def35c7a2781a7b53c1d49d4a62f93ed62c18))
+- *(collections)* Add collection expansion in poller and deletion pipeline ([ad89d2a](https://gitlab.com/starshadow/software/capacitarr/-/commit/ad89d2ae3b7b2850f1d1b72713805061baf64a48))
+- *(collections)* Add collection enrichment from Plex, Jellyfin, and Emby ([8340d05](https://gitlab.com/starshadow/software/capacitarr/-/commit/8340d05baf94ff7ad01bf238a76437f3af75ce53))
+- *(collections)* Add collection indicators to frontend components ([78ef10f](https://gitlab.com/starshadow/software/capacitarr/-/commit/78ef10f844763ae809061f13806a952dfe201541))
+- *(collections)* Add integration settings toggle for collection deletion ([dc5ba91](https://gitlab.com/starshadow/software/capacitarr/-/commit/dc5ba91d007bf7f135d4f3d5f63e2c282ad4a00d))
+- *(collections)* Add collection context to notification digest ([856a5c4](https://gitlab.com/starshadow/software/capacitarr/-/commit/856a5c4a0d89e10e0318f421efa88e8fa6d9a27a))
+- *(migration)* Trigger engine run after 1.x → 2.0 migration ([e957ffc](https://gitlab.com/starshadow/software/capacitarr/-/commit/e957ffcfe9b98bb8ab34229e8b42cde016f65307))
+- *(dashboard)* Reorder queue cards — deletion first ([a6ccfd6](https://gitlab.com/starshadow/software/capacitarr/-/commit/a6ccfd66c7456cefa8670aa46d970eb6cc56d1ca))
+- Mode-aware sparkline with ghost series, evaluated band, pulse ([d94076c](https://gitlab.com/starshadow/software/capacitarr/-/commit/d94076c3fb92c09b2cce20006f1f3b833276084a))
 
 ### 🐛 Bug Fixes
 
-- *(enrichment)* Aggregate watch data across all Jellyfin and Emby users instead of admin-only — reported by @Thundernerd ([#3](https://gitlab.com/starshadow/software/capacitarr/-/issues/3))
-- *(enrichment)* Aggregate episode-level watch data into parent series for Jellyfin and Emby — reported by @Thundernerd ([#4](https://gitlab.com/starshadow/software/capacitarr/-/issues/4))
+- *(frontend)* Complete overseerr to seerr rename in frontend ([2e10f85](https://gitlab.com/starshadow/software/capacitarr/-/commit/2e10f8562c91fb901e44d8a0a0e474cd20d68d3d))
+- *(migration)* Redesign 1.x → 2.0 migration workflow ([43c3a1e](https://gitlab.com/starshadow/software/capacitarr/-/commit/43c3a1e4b1d61aa7e0bb5ec0ed26bef4e5a685ba))
+- *(insights)* Resolve chart color parsing and remove unusable charts ([729a7e8](https://gitlab.com/starshadow/software/capacitarr/-/commit/729a7e82cde2b121eb0c8171abd18f6cea793503))
+- *(preview)* Persist media cache to database for restart recovery ([5240db4](https://gitlab.com/starshadow/software/capacitarr/-/commit/5240db4b57380dd5c5dfc8eb79c56b73799917c5))
+- *(poller)* Fix approval queue population and ClearQueue cross-contamination ([10cb4fb](https://gitlab.com/starshadow/software/capacitarr/-/commit/10cb4fb7fe7959dba1dd07ee523483e7dcc7c7f0))
+- *(poller)* Use EventBus for run triggers and reset timer on settings change ([1ec2582](https://gitlab.com/starshadow/software/capacitarr/-/commit/1ec25820094be6f7328881725830210787d382e1))
+- *(db)* Merge media_cache migration into v2 baseline ([54b7330](https://gitlab.com/starshadow/software/capacitarr/-/commit/54b7330680cee38ce128c2efb714b4e4f73772ce))
+- *(rules)* Extract shared validation and fix Update() missing validation ([92358a9](https://gitlab.com/starshadow/software/capacitarr/-/commit/92358a93541797d4a29da9c77052704457a199dc))
+- Resolve goconst and prettier lint issues ([b85226d](https://gitlab.com/starshadow/software/capacitarr/-/commit/b85226dfe18536de89f047a97a70830bef8c5db9))
+- *(rules)* Remove global rules concept and add radio group component ([36956f6](https://gitlab.com/starshadow/software/capacitarr/-/commit/36956f6081f4f14976fee4f6dffec6b76664e5db))
+- *(integrations)* Fix error display, add enable toggle, remove unfinished features ([529acfa](https://gitlab.com/starshadow/software/capacitarr/-/commit/529acfa349e623fd6100ec238b1d272d05acfded))
+- *(ui)* Adaptive sparkline y-axis, label collision, date range sync ([6acdebe](https://gitlab.com/starshadow/software/capacitarr/-/commit/6acdebe04ed55320331e8e753a100f1af883856d))
+- *(ui)* Register GaugeChart in ECharts plugin ([efb9eea](https://gitlab.com/starshadow/software/capacitarr/-/commit/efb9eead840ff041137d31677334672f29befa20))
+- *(ui)* Replace speedometer pointers with small triangle carets ([ccd08e7](https://gitlab.com/starshadow/software/capacitarr/-/commit/ccd08e7ea7824f95f8632ba5ce51c764d8408d11))
+- *(ui)* Replace speedometer pointers with subtle arc nubs ([0d72a24](https://gitlab.com/starshadow/software/capacitarr/-/commit/0d72a24149e7d881ee7601bf99d7ed2d42f3c50c))
+- *(ui)* Space threshold markers on inner/outer edges of gauge arc ([7c46460](https://gitlab.com/starshadow/software/capacitarr/-/commit/7c464604afbd8457b40de5854076a4ebad5afa0a))
+- *(ui)* Push outer threshold triangle further from arc edge ([abe5849](https://gitlab.com/starshadow/software/capacitarr/-/commit/abe5849d1953fc2d914ec758f73a683afc399881))
+- *(ui)* Remove threshold triangle markers from gauge ([75fb0d9](https://gitlab.com/starshadow/software/capacitarr/-/commit/75fb0d9dc89a40bae8db80d6a2a61fb0ccfd9610))
+- *(ui)* Use rgba for gauge pulse animation instead of oklch var ([69a1c9c](https://gitlab.com/starshadow/software/capacitarr/-/commit/69a1c9c23f1bfbfd1d211b9e842823fbc56073b4))
+- *(enrichment)* Aggregate watch data across all Jellyfin/Emby users and match by TMDb ID ([e3fb52a](https://gitlab.com/starshadow/software/capacitarr/-/commit/e3fb52a8d810663f94e465833578d181e9993b02)) — reported by @Thundernerd ([#3](https://gitlab.com/starshadow/software/capacitarr/-/issues/3))
+- *(enrichment)* Wire Tautulli enricher via TMDb→RatingKey map ([1da5b75](https://gitlab.com/starshadow/software/capacitarr/-/commit/1da5b7572e0775aca59267838e671d5c5c0ae8d1))
+- *(db)* Add missing TableName() for MediaCache singleton ([0dec246](https://gitlab.com/starshadow/software/capacitarr/-/commit/0dec246d81e538c484768be7386f30df08f5ba86))
+- *(rules)* Fix CreatableCombobox dropdown in edit mode ([cfb197f](https://gitlab.com/starshadow/software/capacitarr/-/commit/cfb197f4456ca5a55d30d9c7b1d975c1bcfa4670))
+- *(rules)* Preserve enabled state when editing a rule ([01980a7](https://gitlab.com/starshadow/software/capacitarr/-/commit/01980a7d373a9707331d99725b092a1b0ae8af43))
+- *(engine)* Show run completion time instead of start time ([af4d915](https://gitlab.com/starshadow/software/capacitarr/-/commit/af4d9152e4745b9d09130acbc0a6f78c3bdd5124))
+- *(integrations)* Resolve poster URLs against *arr base URL ([42807f9](https://gitlab.com/starshadow/software/capacitarr/-/commit/42807f900c3d559dc53cbc6acfecd91af98cddd6))
+- *(approval)* Await engineFetchStats before fetching approval queue ([439910d](https://gitlab.com/starshadow/software/capacitarr/-/commit/439910d468085c6de9fec408e3b38bc3ec0b9faf))
+- *(enrichment)* Aggregate episode watch data into parent series for Jellyfin and Emby ([9bf19f7](https://gitlab.com/starshadow/software/capacitarr/-/commit/9bf19f73cb1e5b191a514a2b6dc60be6b49b851b)) — reported by @Thundernerd ([#4](https://gitlab.com/starshadow/software/capacitarr/-/issues/4))
+- *(migration)* Persist 1.x scoring weights to scoring_factor_weights table ([207670d](https://gitlab.com/starshadow/software/capacitarr/-/commit/207670dd131f5dd87ea4d2acac86bd41ca8d63a2))
+- *(ci)* Resolve noctx lint violations and Makefile CI parity ([cd64073](https://gitlab.com/starshadow/software/capacitarr/-/commit/cd640732fe33a24ac5b9c1bacb1d8217a66110e6))
+- *(site)* Correct broken dashboard image reference ([cad7a50](https://gitlab.com/starshadow/software/capacitarr/-/commit/cad7a50960f5b36f3ad71a4a2a8196e62bc94a55))
+- *(ui)* Use invisible pseudo-element for switch touch targets ([9b73a6c](https://gitlab.com/starshadow/software/capacitarr/-/commit/9b73a6c9b9cf5c351b39193085f3fa6811f10f64))
+- *(frontend)* Resolve browser console errors and warnings ([febdad8](https://gitlab.com/starshadow/software/capacitarr/-/commit/febdad85c29c66b153ad0fca56450996c27c7ef7))
+- *(migration)* Overhaul 1.x→2.0 migration safety and correctness ([acda87b](https://gitlab.com/starshadow/software/capacitarr/-/commit/acda87b4b8ae603a05e704dbaacaaefd58c73d09))
+- *(dashboard)* Move axisPointer cross config to tooltip ([e937dc6](https://gitlab.com/starshadow/software/capacitarr/-/commit/e937dc639df84a49cd0ead1ee96749003ffc65ed))
+- Add post-migration schema fixup for existing databases ([416c046](https://gitlab.com/starshadow/software/capacitarr/-/commit/416c046ba09787f84ecb4257c864aac4b4e4e421))
+- *(dashboard)* Replace auto-refresh timer with SSE-driven updates ([83080a6](https://gitlab.com/starshadow/software/capacitarr/-/commit/83080a62426d7b5bc8c8391dc7a61a678e6756d1))
+- *(notifications)* Add dry-run digest subscription gate ([dec21f3](https://gitlab.com/starshadow/software/capacitarr/-/commit/dec21f3f29335e4b2ab976b560b57e78add1e602))
+- *(db)* Resolve SQLite 'database is locked' errors with WAL mode ([10ec06f](https://gitlab.com/starshadow/software/capacitarr/-/commit/10ec06f2115932b359febc6b87c7fe81b192694c))
 
-### 🔧 Refactors
+### 🛡️ Security
 
-- *(integrations)* Rename `overseerr.go` → `seerr.go`, `OverseerrClient` → `SeerrClient`
-- *(integrations)* Factory pattern for client creation (`integrations.CreateClient()`)
-- *(poller)* Poller is now an orchestrator calling the extracted evaluator
-- *(poller)* Batch database queries during poll cycle for performance
-- *(models)* Layered media model with `EnrichmentData` and typed `MediaMetadata`
-- *(navigation)* Simplified top navbar to brand + page links; utilities moved to bottom toolbar
-- *(deletion)* Unified deletion pipeline with grace period and snooze support
+- *(phase-8)* Complete Phase 8 polish, testing & documentation ([2bbce07](https://gitlab.com/starshadow/software/capacitarr/-/commit/2bbce07a775050ddb3211d08957e785115a4123c))
+- *(security)* Add pre-release OWASP ZAP baseline for v2.0.0 ([14a28fc](https://gitlab.com/starshadow/software/capacitarr/-/commit/14a28fc36416916f54df3f16b4bf63f3c5dad1ba))
 
+### Refactor
+
+- *(integrations)* [**breaking**] Rename overseerr → seerr ([ebe7cc5](https://gitlab.com/starshadow/software/capacitarr/-/commit/ebe7cc582f6669517366874814797842a14ccc54))
 ## [1.10.0] - 2026-03-18
 
 ### 🚀 Features
@@ -321,6 +372,10 @@
 ### 🐛 Bug Fixes
 
 - *(events)* Fix deadlock in concurrency stress test ([00b50c1](https://gitlab.com/starshadow/software/capacitarr/-/commit/00b50c18253464657b00f57800a35ebe4687db97))
+
+### Refactor
+
+- *(db)* [**breaking**] Replace 18 incremental migrations with single clean baseline ([fafa409](https://gitlab.com/starshadow/software/capacitarr/-/commit/fafa4094bc073f6b8b36ede7dba8ff83485dcdf8))
 ## [1.0.0-rc.5] - 2026-03-05
 
 ### 🚀 Features
