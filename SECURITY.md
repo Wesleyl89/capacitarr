@@ -277,6 +277,42 @@ services:
 
 > **Note:** `read_only: true` requires using `user:` instead of `PUID/PGID` because the PUID/PGID entrypoint writes to `/etc/passwd` at startup. The `/config` volume is always writable regardless of `read_only`.
 
+### Supply Chain Security — Docker Image Pinning
+
+All Docker images used in CI pipelines and local `Makefile` targets are **pinned to specific version tags** rather than `:latest`. This prevents silent supply chain attacks where a compromised upstream image could propagate into our build and security scanning pipeline.
+
+#### Pinning Policy
+
+- **No `:latest` tags:** Every Docker image reference in `.gitlab-ci.yml` and `Makefile` must use a specific version tag (e.g., `:0.69.3`, `:v2.11.4`, `:3.21`)
+- **No curl-pipe-to-shell:** CI jobs must not download and execute scripts from external URLs at runtime. All tools must be consumed via their official Docker images
+- **Makefile ↔ CI parity:** Every image version in `.gitlab-ci.yml` must match the corresponding image in the `Makefile`. Both files are updated together
+- **Digest pinning for runtime image:** The production Dockerfile runtime base image (`alpine`) is pinned to a specific SHA-256 digest for reproducible, auditable builds
+
+#### Regular Re-evaluation
+
+Pinned Docker image versions are **re-evaluated on a regular basis** to pick up security patches and new features:
+
+1. Check each pinned image for newer stable releases
+2. Pull and test updated versions locally with `make ci`
+3. Update version tags in both `Makefile` and `.gitlab-ci.yml`
+4. Update the Dockerfile runtime base image digest if a new Alpine patch is available
+5. Commit with `chore(deps): bump <tool> to v<version>`
+
+#### Currently Pinned Images
+
+| Image | Pinned Version | Purpose |
+|-------|---------------|---------|
+| `ghcr.io/aquasecurity/trivy` | `0.69.3` | Filesystem and container image vulnerability scanning |
+| `golangci/golangci-lint` | `v2.11.4` | Go static analysis and linting |
+| `zricethezav/gitleaks` | `v8.30.1` | Secret scanning in git history |
+| `semgrep/semgrep` | `1.155.0` | Multi-language SAST scanning |
+| `orhunp/git-cliff` | `2.12.0` | Changelog generation from commits |
+| `goreleaser/goreleaser` | `v2.14.1` | Cross-compiled release binary builds |
+| `docker` | `27` | Docker-in-Docker for image builds |
+| `alpine` | `3.21` | Lightweight base for CI utility jobs |
+| `node` | `22-alpine` | Frontend build and test |
+| `golang` | `1.26-alpine` | Backend build and test |
+
 ### Important Caveats
 
 - **`AUTH_HEADER` trust model:** When enabled, Capacitarr unconditionally trusts the configured header. The server **must** be behind a reverse proxy that sets this header. Direct internet exposure with `AUTH_HEADER` enabled allows authentication bypass
