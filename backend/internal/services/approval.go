@@ -499,12 +499,14 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 	// 7. Determine dry-run mode from preferences. The route handler no longer
 	// needs to compute this — all business logic lives in the service layer.
 	forceDryRun := false
+	enqueuedMode := db.ModeApproval // default; overridden if prefs are available
 	if deps.Settings != nil {
 		prefs, prefsErr := deps.Settings.GetPreferences()
 		if prefsErr != nil {
 			return approved, fmt.Errorf("failed to load preferences: %w", prefsErr)
 		}
 		forceDryRun = !prefs.DeletionsEnabled || prefs.ExecutionMode == db.ModeDryRun
+		enqueuedMode = prefs.ExecutionMode
 	}
 
 	// 8. Queue for background deletion
@@ -517,6 +519,7 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 		RunStatsID:      runStatsID,
 		ForceDryRun:     forceDryRun,
 		ApprovalEntryID: approved.ID,
+		EnqueuedMode:    enqueuedMode,
 	}); queueErr != nil {
 		return approved, fmt.Errorf("deletion queue is full: %w", queueErr)
 	}
@@ -637,13 +640,14 @@ func (s *ApprovalService) ManualDelete(items []ManualDeleteItem, mode string, de
 		}
 
 		if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
-			Client:      client,
-			Item:        mediaItem,
-			Score:       item.Score,
-			Factors:     factors,
-			Trigger:     db.TriggerUser,
-			RunStatsID:  runStatsID,
-			ForceDryRun: forceDryRun,
+			Client:       client,
+			Item:         mediaItem,
+			Score:        item.Score,
+			Factors:      factors,
+			Trigger:      db.TriggerUser,
+			RunStatsID:   runStatsID,
+			ForceDryRun:  forceDryRun,
+			EnqueuedMode: mode,
 		}); queueErr != nil {
 			slog.Warn("Deletion queue full for manual delete", "component", "services",
 				"media", item.MediaName, "error", queueErr)

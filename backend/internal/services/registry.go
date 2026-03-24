@@ -88,6 +88,11 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 		Migration:            NewMigrationService(database, bus, filepath.Dir(cfg.Database)),
 	}
 
+	// Wire SettingsService's cross-service dependency on DeletionService
+	// so execution mode changes clear the deletion queue (prevents stale
+	// jobs from executing under the wrong mode).
+	settingsSvc.SetDeletionClearer(deletionSvc)
+
 	// Wire IntegrationService's cross-service dependency on DiskGroupService
 	reg.Integration.SetDiskGroupService(diskGroupSvc)
 

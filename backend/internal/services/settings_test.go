@@ -92,6 +92,123 @@ func TestSettingsService_UpdatePreferences_ModeChange(t *testing.T) {
 	}
 }
 
+// mockDeletionQueueClearer implements DeletionQueueClearer for settings tests.
+type mockDeletionQueueClearer struct {
+	clearCalled int
+	clearReturn int
+}
+
+func (m *mockDeletionQueueClearer) ClearQueue() int {
+	m.clearCalled++
+	return m.clearReturn
+}
+
+func TestSettingsService_UpdatePreferences_ModeChange_ClearsQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	clearer := &mockDeletionQueueClearer{clearReturn: 5}
+	svc.SetDeletionClearer(clearer)
+
+	// Get current prefs (default: dry-run)
+	current, _ := svc.GetPreferences()
+	current.ExecutionMode = db.ModeApproval
+
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences returned error: %v", err)
+	}
+
+	if clearer.clearCalled != 1 {
+		t.Errorf("expected ClearQueue to be called 1 time, got %d", clearer.clearCalled)
+	}
+}
+
+func TestSettingsService_UpdatePreferences_DeletionsDisabled_ClearsQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	clearer := &mockDeletionQueueClearer{clearReturn: 3}
+	svc.SetDeletionClearer(clearer)
+
+	// First enable deletions
+	current, _ := svc.GetPreferences()
+	current.DeletionsEnabled = true
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences (enable) returned error: %v", err)
+	}
+	clearer.clearCalled = 0 // reset counter
+
+	// Now disable deletions
+	current.DeletionsEnabled = false
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences returned error: %v", err)
+	}
+
+	if clearer.clearCalled != 1 {
+		t.Errorf("expected ClearQueue to be called 1 time on DeletionsEnabled toggle, got %d", clearer.clearCalled)
+	}
+}
+
+func TestSettingsService_UpdatePreferences_NoModeChange_NoQueueClear(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	clearer := &mockDeletionQueueClearer{clearReturn: 0}
+	svc.SetDeletionClearer(clearer)
+
+	// Update preferences without changing mode
+	current, _ := svc.GetPreferences()
+	current.PollIntervalSeconds = 600
+
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences returned error: %v", err)
+	}
+
+	if clearer.clearCalled != 0 {
+		t.Errorf("expected ClearQueue NOT to be called when mode unchanged, got %d calls", clearer.clearCalled)
+	}
+}
+
+func TestSettingsService_UpdatePreferences_DeletionsEnabled_NoQueueClear(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+
+	clearer := &mockDeletionQueueClearer{clearReturn: 0}
+	svc.SetDeletionClearer(clearer)
+
+	// Start with deletions disabled (default), then enable them
+	current, _ := svc.GetPreferences()
+	current.DeletionsEnabled = true
+
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences returned error: %v", err)
+	}
+
+	// Enabling deletions should NOT clear the queue (only disabling does)
+	if clearer.clearCalled != 0 {
+		t.Errorf("expected ClearQueue NOT to be called when enabling deletions, got %d calls", clearer.clearCalled)
+	}
+}
+
+func TestSettingsService_UpdatePreferences_NilClearer_NoPanic(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewSettingsService(database, bus)
+	// Do NOT set a deletion clearer — should not panic
+
+	current, _ := svc.GetPreferences()
+	current.ExecutionMode = db.ModeAuto
+
+	if _, err := svc.UpdatePreferences(current); err != nil {
+		t.Fatalf("UpdatePreferences returned error: %v", err)
+	}
+	// No panic = success
+}
+
 func TestSettingsService_ListRecentActivities(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)

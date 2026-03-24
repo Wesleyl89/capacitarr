@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"gorm.io/gorm"
@@ -11,15 +12,28 @@ import (
 	"capacitarr/internal/logger"
 )
 
+// DeletionQueueClearer allows SettingsService to clear the deletion queue
+// when execution mode changes, without importing DeletionService directly.
+type DeletionQueueClearer interface {
+	ClearQueue() int
+}
+
 // SettingsService manages application preferences and activity events.
 type SettingsService struct {
-	db  *gorm.DB
-	bus *events.EventBus
+	db              *gorm.DB
+	bus             *events.EventBus
+	deletionClearer DeletionQueueClearer // injected after construction via SetDeletionClearer()
 }
 
 // NewSettingsService creates a new SettingsService.
 func NewSettingsService(database *gorm.DB, bus *events.EventBus) *SettingsService {
 	return &SettingsService{db: database, bus: bus}
+}
+
+// SetDeletionClearer wires the cross-service dependency that allows
+// SettingsService to clear the deletion queue on execution mode changes.
+func (s *SettingsService) SetDeletionClearer(clearer DeletionQueueClearer) {
+	s.deletionClearer = clearer
 }
 
 // GetPreferences returns the current preferences (singleton row).
@@ -46,12 +60,39 @@ func (s *SettingsService) UpdatePreferences(payload db.PreferenceSet) (db.Prefer
 	// Apply dynamic log level
 	logger.SetLevel(payload.LogLevel)
 
-	// Detect execution mode change
+	// Detect execution mode change — clear the deletion queue to prevent
+	// stale jobs from executing under the wrong mode. ClearQueue() uses the
+	// cancellation skip-list, so items already mid-processing get the
+	// "cancelled" treatment in processJob().
 	if oldPrefs.ExecutionMode != payload.ExecutionMode {
+		if s.deletionClearer != nil {
+			cleared := s.deletionClearer.ClearQueue()
+			if cleared > 0 {
+				slog.Info("Cleared deletion queue on execution mode change",
+					"component", "services",
+					"oldMode", oldPrefs.ExecutionMode,
+					"newMode", payload.ExecutionMode,
+					"cleared", cleared)
+			}
+		}
+
 		s.bus.Publish(events.EngineModeChangedEvent{
 			OldMode: oldPrefs.ExecutionMode,
 			NewMode: payload.ExecutionMode,
 		})
+	}
+
+	// Detect DeletionsEnabled toggle (true → false) — same class of bug:
+	// auto-mode items in the grace period would still execute if we don't
+	// clear the queue when the user disables deletions.
+	if oldPrefs.DeletionsEnabled && !payload.DeletionsEnabled {
+		if s.deletionClearer != nil {
+			cleared := s.deletionClearer.ClearQueue()
+			if cleared > 0 {
+				slog.Info("Cleared deletion queue on deletions disabled",
+					"component", "services", "cleared", cleared)
+			}
+		}
 	}
 
 	s.bus.Publish(events.SettingsChangedEvent{})

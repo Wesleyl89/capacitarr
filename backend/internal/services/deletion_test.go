@@ -17,6 +17,7 @@ var errMockDelete = errors.New("mock delete error")
 type mockSettingsReader struct {
 	deletionsEnabled          bool
 	deletionQueueDelaySeconds int
+	executionMode             string
 }
 
 func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
@@ -24,9 +25,14 @@ func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
 	if delay == 0 {
 		delay = 30 // default
 	}
+	mode := m.executionMode
+	if mode == "" {
+		mode = db.ModeDryRun // default
+	}
 	return db.PreferenceSet{
 		DeletionsEnabled:          m.deletionsEnabled,
 		DeletionQueueDelaySeconds: delay,
+		ExecutionMode:             mode,
 	}, nil
 }
 
@@ -1559,5 +1565,431 @@ func TestDeletionService_DryRunLoop_ApproveAndReturn(t *testing.T) {
 	}
 	if approved2.Status != db.StatusApproved {
 		t.Errorf("expected status %q after second approve, got %q", db.StatusApproved, approved2.Status)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Mode-change safety tests
+// ---------------------------------------------------------------------------
+
+// TestProcessJob_ModeChangeCancelsJob verifies that a job enqueued in auto mode
+// is cancelled (not executed) when the execution mode changes to approval before
+// the job is processed.
+func TestProcessJob_ModeChangeCancelsJob(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	// Start with auto mode, then switch to approval before processing
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeApproval, // mode has already changed
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	// Enqueue a job that was created when mode was "auto"
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		EnqueuedMode: db.ModeAuto, // was enqueued in auto mode
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Wait for the batch to complete
+	bce := drainBatchEvent(t, ch)
+
+	// The job should have been cancelled (not deleted or dry-deleted)
+	if bce.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1 (cancelled counts as succeeded), got %d", bce.Succeeded)
+	}
+
+	// Verify audit log has a cancelled entry (mode-change cancellations use
+	// ActionCancelled to stay within the SQLite CHECK constraint; the structured
+	// log message distinguishes them from user cancellations).
+	var entries []db.AuditLogEntry
+	database.Find(&entries)
+	found := false
+	for _, e := range entries {
+		if e.Action == db.ActionCancelled && e.MediaName == "Serenity" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected audit log entry with action 'cancelled' for Serenity")
+	}
+}
+
+// TestProcessJob_SameModeNotCancelled verifies that a job enqueued in auto mode
+// is NOT cancelled when the execution mode is still auto at processing time.
+func TestProcessJob_SameModeNotCancelled(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeAuto,
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		EnqueuedMode: db.ModeAuto,
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	bce := drainBatchEvent(t, ch)
+	if bce.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1, got %d", bce.Succeeded)
+	}
+
+	// Verify audit log has a "deleted" entry (not cancelled)
+	var entries []db.AuditLogEntry
+	database.Find(&entries)
+	found := false
+	for _, e := range entries {
+		if e.Action == db.ActionDeleted && e.MediaName == "Serenity" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected audit log entry with action 'deleted' for Serenity")
+	}
+}
+
+// TestProcessJob_EmptyEnqueuedModeSkipsCheck verifies that jobs without
+// EnqueuedMode set (backward compatibility) are not cancelled by the
+// mode-change guard.
+func TestProcessJob_EmptyEnqueuedModeSkipsCheck(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          false, // dry-run via DeletionsEnabled
+		executionMode:             db.ModeApproval,
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	// Enqueue with empty EnqueuedMode (simulates pre-upgrade job)
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Firefly",
+			Type:      "show",
+			SizeBytes: 1024 * 1024 * 500,
+		},
+		EnqueuedMode: "", // empty — backward compat
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	bce := drainBatchEvent(t, ch)
+	if bce.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1, got %d", bce.Succeeded)
+	}
+
+	// Should be dry-deleted (not cancelled), because DeletionsEnabled=false
+	var entries []db.AuditLogEntry
+	database.Find(&entries)
+	found := false
+	for _, e := range entries {
+		if e.Action == db.ActionDryDelete && e.MediaName == "Firefly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected audit log entry with action 'dry_delete' for Firefly (backward compat)")
+	}
+}
+
+// TestProcessJob_AutoToDryRunCancelsJob verifies that a job enqueued in auto mode
+// is cancelled when the execution mode changes to dry-run (the other critical
+// dangerous transition besides auto→approval).
+func TestProcessJob_AutoToDryRunCancelsJob(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeDryRun, // mode changed to dry-run
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		EnqueuedMode: db.ModeAuto, // was enqueued in auto mode
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	bce := drainBatchEvent(t, ch)
+	if bce.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1 (cancelled), got %d", bce.Succeeded)
+	}
+
+	// Verify audit log has a cancelled entry (not deleted)
+	var entries []db.AuditLogEntry
+	database.Find(&entries)
+	foundCancelled := false
+	foundDeleted := false
+	for _, e := range entries {
+		if e.MediaName == "Serenity" {
+			if e.Action == db.ActionCancelled {
+				foundCancelled = true
+			}
+			if e.Action == db.ActionDeleted {
+				foundDeleted = true
+			}
+		}
+	}
+	if !foundCancelled {
+		t.Error("expected audit log entry with action 'cancelled' for Serenity")
+	}
+	if foundDeleted {
+		t.Error("item should NOT have been deleted — mode changed to dry-run")
+	}
+}
+
+// TestProcessJob_DryRunToAutoCancelsJob verifies that a job enqueued in dry-run
+// mode is cancelled when the execution mode changes to auto. Even though
+// ForceDryRun=true would prevent actual deletion, the queue should still be
+// cleared for consistency.
+func TestProcessJob_DryRunToAutoCancelsJob(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeAuto, // mode changed to auto
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: nil, // dry-run jobs have nil client
+		Item: integrations.MediaItem{
+			Title:     "Firefly",
+			Type:      "show",
+			SizeBytes: 1024 * 1024 * 500,
+		},
+		ForceDryRun:  true,
+		EnqueuedMode: db.ModeDryRun, // was enqueued in dry-run mode
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	bce := drainBatchEvent(t, ch)
+	if bce.Succeeded != 1 {
+		t.Errorf("expected Succeeded=1 (cancelled), got %d", bce.Succeeded)
+	}
+
+	// Verify audit log has a cancelled entry (not dry_delete)
+	var entries []db.AuditLogEntry
+	database.Find(&entries)
+	found := false
+	for _, e := range entries {
+		if e.Action == db.ActionCancelled && e.MediaName == "Firefly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected audit log entry with action 'cancelled' for Firefly")
+	}
+}
+
+// TestDrainAll_MultiplItemsModeChangeCancelsRemaining verifies that when
+// multiple items are in the queue and the mode changes mid-drain, the
+// drainAll() early-exit path cancels all remaining items without waiting
+// for the rate limiter on each one.
+func TestDrainAll_MultiplItemsModeChangeCancelsRemaining(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeApproval, // mode changed from auto to approval
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	// Queue 5 items that were enqueued in auto mode
+	svc.SignalBatchSize(5)
+	for i := 0; i < 5; i++ {
+		if err := svc.QueueDeletion(DeleteJob{
+			Client: &mockIntegration{},
+			Item: integrations.MediaItem{
+				Title:     "Serenity",
+				Type:      "movie",
+				SizeBytes: 1024 * 1024 * 100,
+			},
+			EnqueuedMode: db.ModeAuto,
+		}); err != nil {
+			t.Fatalf("QueueDeletion returned error: %v", err)
+		}
+	}
+
+	bce := drainBatchEvent(t, ch)
+
+	// All 5 should be cancelled (succeeded in batch terms)
+	if bce.Succeeded != 5 {
+		t.Errorf("expected Succeeded=5 (all cancelled), got %d", bce.Succeeded)
+	}
+	if bce.Failed != 0 {
+		t.Errorf("expected Failed=0, got %d", bce.Failed)
+	}
+
+	// Verify all 5 audit entries are cancelled
+	var entries []db.AuditLogEntry
+	database.Where("action = ?", db.ActionCancelled).Find(&entries)
+	if len(entries) != 5 {
+		t.Errorf("expected 5 cancelled audit entries, got %d", len(entries))
+	}
+
+	// Verify no items were actually deleted
+	var deletedEntries []db.AuditLogEntry
+	database.Where("action = ?", db.ActionDeleted).Find(&deletedEntries)
+	if len(deletedEntries) != 0 {
+		t.Errorf("expected 0 deleted audit entries, got %d", len(deletedEntries))
+	}
+}
+
+// TestProcessJob_ModeChangeCancelsJob_PublishesCancelledEvent verifies that
+// the DeletionCancelledEvent is published when a job is cancelled due to
+// a mode change.
+func TestProcessJob_ModeChangeCancelsJob_PublishesCancelledEvent(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+
+	settings := &mockSettingsReader{
+		deletionsEnabled:          true,
+		executionMode:             db.ModeApproval, // mode changed
+		deletionQueueDelaySeconds: 1,
+	}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, nil)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.SignalBatchSize(1)
+
+	if err := svc.QueueDeletion(DeleteJob{
+		Client: &mockIntegration{},
+		Item: integrations.MediaItem{
+			Title:     "Serenity",
+			Type:      "movie",
+			SizeBytes: 1024 * 1024 * 100,
+		},
+		EnqueuedMode: db.ModeAuto,
+	}); err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Drain events looking for DeletionCancelledEvent
+	deadline := time.After(testEventTimeout)
+	foundCancelled := false
+	for !foundCancelled {
+		select {
+		case evt := <-ch:
+			if ce, ok := evt.(events.DeletionCancelledEvent); ok {
+				foundCancelled = true
+				if ce.MediaName != "Serenity" {
+					t.Errorf("expected MediaName 'Serenity', got %q", ce.MediaName)
+				}
+				if ce.MediaType != "movie" {
+					t.Errorf("expected MediaType 'movie', got %q", ce.MediaType)
+				}
+			}
+			// Also check for batch complete to know when to stop
+			if _, ok := evt.(events.DeletionBatchCompleteEvent); ok && !foundCancelled {
+				t.Fatal("batch completed without DeletionCancelledEvent")
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for DeletionCancelledEvent")
+		}
 	}
 }

@@ -293,6 +293,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 					RunStatsID:      runStatsID,
 					DiskGroupID:     &diskGroupID,
 					CollectionGroup: pi.collectionGroup,
+					EnqueuedMode:    db.ModeAuto,
 				}); err != nil {
 					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", pi.item.Title)
 					continue
@@ -345,6 +346,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 					ForceDryRun:     true,
 					UpsertAudit:     true,
 					CollectionGroup: pi.collectionGroup,
+					EnqueuedMode:    db.ModeDryRun,
 				}); err != nil {
 					slog.Warn("Deletion queue full, skipping dry-run item", "component", "poller", "item", pi.item.Title)
 					continue

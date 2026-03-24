@@ -30,6 +30,7 @@ type DeleteJob struct {
 	UpsertAudit     bool   // When true, use AuditLog.UpsertDryRun() (idempotent poller dry-runs); when false, use AuditLog.Create() (append-only)
 	ApprovalEntryID uint   // Non-zero if this job originated from an approval queue item
 	CollectionGroup string // Non-empty if this job is part of a collection deletion (e.g., "Sonic the Hedgehog Collection")
+	EnqueuedMode    string // Execution mode when this job was enqueued (defense-in-depth: processJob cancels if mode changed)
 }
 
 // DeleteJobSummary is a serialisable snapshot of a queued deletion job,
@@ -374,6 +375,22 @@ drainLoop:
 		default:
 		}
 
+		// Early-exit: if execution mode changed since this job was enqueued,
+		// cancel all remaining items immediately instead of processing them
+		// one-by-one through the rate limiter. This avoids wasting ~3s per
+		// item on jobs that processJob() would cancel anyway.
+		if job.EnqueuedMode != "" {
+			if prefs, err := s.settings.GetPreferences(); err == nil {
+				if prefs.ExecutionMode != job.EnqueuedMode {
+					// Process this one job (processJob will cancel it via mode-change guard),
+					// then cancel all remaining jobs in bulk without rate limiting.
+					s.processJob(job, &deferredAuditEntries)
+					s.cancelRemainingOnModeChange(job.EnqueuedMode, &deferredAuditEntries)
+					break drainLoop
+				}
+			}
+		}
+
 		_ = s.rateLimiter.Wait(context.Background()) //nolint:errcheck // Wait with background context never returns non-nil error
 		s.processJob(job, &deferredAuditEntries)
 	}
@@ -387,6 +404,27 @@ drainLoop:
 			slog.Info("Batch upserted dry-run audit entries", "component", "services",
 				"count", len(deferredAuditEntries))
 		}
+	}
+}
+
+// cancelRemainingOnModeChange drains remaining queued items and marks them
+// as cancelled due to an execution mode change. Called by drainAll() when
+// it detects the mode changed mid-drain, to avoid wasting time on the
+// rate limiter for items that would all be cancelled by processJob() anyway.
+func (s *DeletionService) cancelRemainingOnModeChange(enqueuedMode string, deferredAuditEntries *[]db.AuditLogEntry) {
+	var cancelled int
+	for {
+		job, ok := s.dequeueJob()
+		if !ok {
+			break
+		}
+		// processJob() will detect the mode mismatch and cancel the item
+		s.processJob(job, deferredAuditEntries)
+		cancelled++
+	}
+	if cancelled > 0 {
+		slog.Info("Cancelled remaining queued items due to mode change",
+			"component", "services", "enqueuedMode", enqueuedMode, "cancelled", cancelled)
 	}
 }
 
@@ -443,7 +481,50 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 		return
 	}
 
-	// Check whether actual deletions are enabled via SettingsService
+	// Defense-in-depth: if the execution mode changed since this job was enqueued,
+	// treat it as cancelled. This catches items that were dequeued between the
+	// ClearQueue() call and the mode change, or race conditions where the worker
+	// dequeues an item just before ClearQueue() marks it.
+	if job.EnqueuedMode != "" {
+		if prefs, err := s.settings.GetPreferences(); err == nil {
+			if prefs.ExecutionMode != job.EnqueuedMode {
+				s.processed.Add(1)
+				s.batchSucceeded.Add(1)
+
+				logEntry := db.AuditLogEntry{
+					MediaName:       job.Item.Title,
+					MediaType:       string(job.Item.Type),
+					Action:          db.ActionCancelled,
+					SizeBytes:       job.Item.SizeBytes,
+					Trigger:         job.Trigger,
+					DiskGroupID:     job.DiskGroupID,
+					CollectionGroup: job.CollectionGroup,
+				}
+				if err := s.auditLog.Create(logEntry); err != nil {
+					slog.Error("Failed to create audit log entry", "component", "services", "error", err)
+				}
+
+				s.bus.Publish(events.DeletionCancelledEvent{
+					MediaName: job.Item.Title,
+					MediaType: string(job.Item.Type),
+					SizeBytes: job.Item.SizeBytes,
+				})
+				s.publishProgress()
+
+				slog.Info("Deletion cancelled — execution mode changed since enqueue",
+					"component", "services",
+					"media", job.Item.Title,
+					"enqueuedMode", job.EnqueuedMode,
+					"currentMode", prefs.ExecutionMode)
+				return
+			}
+		}
+	}
+
+	// Re-read DeletionsEnabled at processing time (not enqueue time) as a safety net.
+	// If the user disabled deletions while items were in the grace period, this
+	// catches it and forces dry-run. This is intentional — see
+	// docs/plans/20260324T1740Z-deletion-queue-mode-change-safety.md.
 	deletionsEnabled := false
 	if prefs, err := s.settings.GetPreferences(); err == nil {
 		deletionsEnabled = prefs.DeletionsEnabled
@@ -508,7 +589,8 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	// Actual deletion — nil-safety check for dry-run jobs that have no client
 	if job.Client == nil {
 		slog.Error("Deletion job has nil client — cannot perform actual deletion",
-			"component", "services", "media", job.Item.Title)
+			"component", "services", "media", job.Item.Title,
+			"enqueuedMode", job.EnqueuedMode, "forceDryRun", job.ForceDryRun)
 		s.failed.Add(1)
 		s.batchFailed.Add(1)
 		s.publishProgress()
