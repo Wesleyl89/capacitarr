@@ -110,10 +110,12 @@ type RuleExport struct {
 
 // IntegrationExport contains non-sensitive integration fields.
 type IntegrationExport struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	URL     string `json:"url"`
-	Enabled bool   `json:"enabled"`
+	Name               string `json:"name"`
+	Type               string `json:"type"`
+	URL                string `json:"url"`
+	Enabled            bool   `json:"enabled"`
+	CollectionDeletion bool   `json:"collectionDeletion"`
+	ShowLevelOnly      bool   `json:"showLevelOnly"`
 }
 
 // DiskGroupExport contains configuration-only disk group fields.
@@ -249,10 +251,12 @@ func (s *BackupService) Export(sections ExportSections, appVersion string) (*Set
 		exported := make([]IntegrationExport, 0, len(configs))
 		for _, ic := range configs {
 			exported = append(exported, IntegrationExport{
-				Name:    ic.Name,
-				Type:    ic.Type,
-				URL:     ic.URL,
-				Enabled: ic.Enabled,
+				Name:               ic.Name,
+				Type:               ic.Type,
+				URL:                ic.URL,
+				Enabled:            ic.Enabled,
+				CollectionDeletion: ic.CollectionDeletion,
+				ShowLevelOnly:      ic.ShowLevelOnly,
 			})
 		}
 		envelope.Integrations = exported
@@ -677,9 +681,11 @@ func (s *BackupService) importIntegrations(tx *gorm.DB, integrations []Integrati
 		var existing db.IntegrationConfig
 		err := tx.Where("type = ? AND name = ?", ie.Type, ie.Name).First(&existing).Error
 		if err == nil {
-			// Found — update URL and Enabled but preserve API key
+			// Found — update URL, Enabled, and toggle settings but preserve API key
 			existing.URL = ie.URL
 			existing.Enabled = ie.Enabled
+			existing.CollectionDeletion = ie.CollectionDeletion
+			existing.ShowLevelOnly = ie.ShowLevelOnly
 			if dbErr := tx.Save(&existing).Error; dbErr != nil {
 				return count, 0, fmt.Errorf("failed to update integration %q: %w", ie.Name, dbErr)
 			}
@@ -689,11 +695,13 @@ func (s *BackupService) importIntegrations(tx *gorm.DB, integrations []Integrati
 
 		// Not found — create new with placeholder API key, forced disabled
 		ic := db.IntegrationConfig{
-			Name:    ie.Name,
-			Type:    ie.Type,
-			URL:     ie.URL,
-			APIKey:  placeholderAPIKey,
-			Enabled: true, // GORM default:true workaround — disable below
+			Name:               ie.Name,
+			Type:               ie.Type,
+			URL:                ie.URL,
+			APIKey:             placeholderAPIKey,
+			Enabled:            true, // GORM default:true workaround — disable below
+			CollectionDeletion: ie.CollectionDeletion,
+			ShowLevelOnly:      ie.ShowLevelOnly,
 		}
 		if dbErr := tx.Create(&ic).Error; dbErr != nil {
 			return count, 0, fmt.Errorf("failed to create integration %q: %w", ie.Name, dbErr)
@@ -1037,6 +1045,12 @@ func (s *BackupService) previewIntegrations(imports []IntegrationExport, existin
 			}
 			if ex.Enabled != ie.Enabled {
 				changes = append(changes, FieldChange{Field: "enabled", OldValue: fmt.Sprintf("%v", ex.Enabled), NewValue: fmt.Sprintf("%v", ie.Enabled)})
+			}
+			if ex.CollectionDeletion != ie.CollectionDeletion {
+				changes = append(changes, FieldChange{Field: "collectionDeletion", OldValue: fmt.Sprintf("%v", ex.CollectionDeletion), NewValue: fmt.Sprintf("%v", ie.CollectionDeletion)})
+			}
+			if ex.ShowLevelOnly != ie.ShowLevelOnly {
+				changes = append(changes, FieldChange{Field: "showLevelOnly", OldValue: fmt.Sprintf("%v", ex.ShowLevelOnly), NewValue: fmt.Sprintf("%v", ie.ShowLevelOnly)})
 			}
 			action := previewActionUnchanged
 			if len(changes) > 0 {

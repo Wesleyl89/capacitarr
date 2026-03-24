@@ -73,6 +73,7 @@ type IntegrationConfig struct {
 	LastSync           *time.Time `json:"lastSync,omitempty"`
 	LastError          string     `json:"lastError,omitempty"`
 	CollectionDeletion bool       `gorm:"default:false" json:"collectionDeletion"` // When enabled, deleting one collection member deletes all
+	ShowLevelOnly      bool       `gorm:"default:false" json:"showLevelOnly"`      // Sonarr only: evaluate entire shows instead of individual seasons
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 }

@@ -476,3 +476,90 @@ func TestIntegrationService_SyncAll_TestsEnrichmentTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationService_ShowLevelOnly_CreateAndUpdate(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Create with ShowLevelOnly enabled
+	created, err := svc.Create(db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", Enabled: true, ShowLevelOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !created.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly=true after create")
+	}
+
+	// GetByID should preserve the field
+	fetched, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if !fetched.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly=true from GetByID")
+	}
+
+	// Update to disable ShowLevelOnly
+	updated, err := svc.Update(created.ID, db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", Enabled: true, ShowLevelOnly: false,
+	})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if updated.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly=false after update")
+	}
+
+	// Verify via GetByID
+	fetched2, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if fetched2.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly=false from GetByID after update")
+	}
+}
+
+func TestIntegrationService_ListEnabled_ShowLevelOnlyFilter(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Create two integrations — one with ShowLevelOnly, one without
+	database.Create(&db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", Enabled: true, ShowLevelOnly: true,
+	})
+	database.Create(&db.IntegrationConfig{
+		Type: "radarr", Name: "Serenity Radarr", URL: "http://localhost:7878",
+		APIKey: "key2", Enabled: true, ShowLevelOnly: false,
+	})
+
+	enabled, err := svc.ListEnabled()
+	if err != nil {
+		t.Fatalf("ListEnabled returned error: %v", err)
+	}
+
+	if len(enabled) != 2 {
+		t.Fatalf("expected 2 enabled integrations, got %d", len(enabled))
+	}
+
+	// Verify ShowLevelOnly is correctly read from DB
+	showLevelCount := 0
+	for _, cfg := range enabled {
+		if cfg.ShowLevelOnly {
+			showLevelCount++
+			if cfg.Name != "Firefly Sonarr" {
+				t.Errorf("expected ShowLevelOnly on 'Firefly Sonarr', got %q", cfg.Name)
+			}
+		}
+	}
+	if showLevelCount != 1 {
+		t.Errorf("expected exactly 1 integration with ShowLevelOnly, got %d", showLevelCount)
+	}
+}

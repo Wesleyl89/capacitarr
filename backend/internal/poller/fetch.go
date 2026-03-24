@@ -66,6 +66,23 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 			items[i].IntegrationID = id
 			items[i].Path = normalizePath(items[i].Path)
 		}
+
+		// When ShowLevelOnly is enabled for this integration, drop season-level
+		// items so only show-level entries are scored and queued.
+		cfg, cfgErr := integrationSvc.GetByID(id)
+		if cfgErr == nil && cfg.ShowLevelOnly {
+			originalCount := len(items)
+			filtered := items[:0]
+			for _, item := range items {
+				if item.Type != integrations.MediaTypeSeason {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+			slog.Debug("ShowLevelOnly filter applied", "component", "poller",
+				"integrationID", id, "removedSeasons", originalCount-len(items))
+		}
+
 		result.allItems = append(result.allItems, items...)
 
 		// Update media stats via service

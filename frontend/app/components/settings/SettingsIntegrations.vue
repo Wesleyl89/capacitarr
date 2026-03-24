@@ -249,6 +249,31 @@
           </NuxtLink>
         </div>
 
+        <!-- Show-Level Evaluation toggle (Sonarr only) -->
+        <div v-if="formState.type === 'sonarr'" class="space-y-2 pt-1">
+          <UiSeparator />
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <TvIcon class="w-4 h-4 text-blue-500 shrink-0" />
+                <UiLabel class="cursor-pointer">Show-Level Evaluation</UiLabel>
+              </div>
+              <p class="text-xs text-muted-foreground mt-1">
+                Evaluate and delete entire shows instead of individual seasons. When a show is
+                selected for deletion, all seasons and episodes are removed.
+              </p>
+            </div>
+            <UiSwitch v-model:checked="formState.showLevelOnly" />
+          </div>
+          <NuxtLink
+            to="/help#show-level-evaluation"
+            class="text-xs text-primary hover:underline inline-flex items-center gap-1"
+          >
+            <InfoIcon class="w-3 h-3" />
+            Learn more about show-level evaluation
+          </NuxtLink>
+        </div>
+
         <UiAlert v-if="formError" variant="destructive">
           <UiAlertDescription>{{ formError }}</UiAlertDescription>
         </UiAlert>
@@ -278,6 +303,7 @@ import {
   AlertTriangleIcon,
   LogInIcon,
   LayersIcon,
+  TvIcon,
   InfoIcon,
 } from 'lucide-vue-next';
 import type { IntegrationConfig, ConnectionTestResult, ApiError } from '~/types/api';
@@ -308,6 +334,7 @@ const formState = reactive({
   url: '',
   apiKey: '',
   collectionDeletion: false,
+  showLevelOnly: false,
 });
 
 /** Integration types that support collection deletion */
@@ -400,6 +427,7 @@ function openAddModal() {
     url: '',
     apiKey: '',
     collectionDeletion: false,
+    showLevelOnly: false,
   });
   formError.value = '';
   showModal.value = true;
@@ -417,6 +445,7 @@ function openEditModal(integration: IntegrationConfig) {
     url: integration.url,
     apiKey: integration.apiKey,
     collectionDeletion: integration.collectionDeletion ?? false,
+    showLevelOnly: integration.showLevelOnly ?? false,
   });
   formError.value = '';
   showModal.value = true;

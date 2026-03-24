@@ -103,10 +103,12 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		// This prevents partial updates (e.g. toggling enabled) from
 		// accidentally zeroing out other fields.
 		var update struct {
-			Name    string `json:"name"`
-			URL     string `json:"url"`
-			APIKey  string `json:"apiKey"`
-			Enabled *bool  `json:"enabled"`
+			Name               string `json:"name"`
+			URL                string `json:"url"`
+			APIKey             string `json:"apiKey"`
+			Enabled            *bool  `json:"enabled"`
+			CollectionDeletion *bool  `json:"collectionDeletion"`
+			ShowLevelOnly      *bool  `json:"showLevelOnly"`
 		}
 		if err := c.Bind(&update); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
@@ -129,6 +131,12 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 		if update.Enabled != nil {
 			existing.Enabled = *update.Enabled
+		}
+		if update.CollectionDeletion != nil {
+			existing.CollectionDeletion = *update.CollectionDeletion
+		}
+		if update.ShowLevelOnly != nil {
+			existing.ShowLevelOnly = *update.ShowLevelOnly
 		}
 
 		// Clear stale sync status — configuration has changed, so the

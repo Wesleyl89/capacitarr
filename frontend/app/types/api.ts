@@ -15,6 +15,7 @@ export interface IntegrationConfig {
   apiKey: string;
   enabled: boolean;
   collectionDeletion: boolean;
+  showLevelOnly: boolean;
   mediaSizeBytes: number;
   mediaCount: number;
   lastSync?: string | null;
@@ -369,6 +370,8 @@ export interface IntegrationExport {
   type: string;
   url: string;
   enabled: boolean;
+  collectionDeletion?: boolean;
+  showLevelOnly?: boolean;
 }
 
 export interface DiskGroupExport {

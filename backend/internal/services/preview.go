@@ -281,6 +281,18 @@ func (s *PreviewService) buildPreviewFromScratch() (*PreviewResult, error) {
 		return nil, err
 	}
 
+	// Pre-fetch enabled integration configs to check ShowLevelOnly per source.
+	enabledCfgs, cfgErr := s.integrations.ListEnabled()
+	if cfgErr != nil {
+		return nil, cfgErr
+	}
+	showLevelOnlyIDs := make(map[uint]bool)
+	for _, cfg := range enabledCfgs {
+		if cfg.ShowLevelOnly {
+			showLevelOnlyIDs[cfg.ID] = true
+		}
+	}
+
 	// Fetch media items from all MediaSources via the registry
 	var allItems []integrations.MediaItem
 	for id, source := range registry.MediaSources() {
@@ -291,6 +303,19 @@ func (s *PreviewService) buildPreviewFromScratch() (*PreviewResult, error) {
 		for i := range items {
 			items[i].IntegrationID = id
 		}
+
+		// When ShowLevelOnly is enabled, drop season-level items so only
+		// show-level entries appear in the preview.
+		if showLevelOnlyIDs[id] {
+			filtered := items[:0]
+			for _, item := range items {
+				if item.Type != integrations.MediaTypeSeason {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+
 		allItems = append(allItems, items...)
 	}
 
@@ -345,12 +370,9 @@ func (s *PreviewService) buildPreviewFromScratch() (*PreviewResult, error) {
 
 	// Build EvaluationContext from enabled integrations so the scoring engine
 	// can exclude factors whose prerequisites are not met.
-	enabledConfigs, err := s.integrations.ListEnabled()
-	if err != nil {
-		return nil, err
-	}
-	configTypes := make([]string, len(enabledConfigs))
-	for i, cfg := range enabledConfigs {
+	// Reuse enabledCfgs fetched earlier for ShowLevelOnly filtering.
+	configTypes := make([]string, len(enabledCfgs))
+	for i, cfg := range enabledCfgs {
 		configTypes[i] = cfg.Type
 	}
 	evalCtx := engine.NewEvaluationContext(configTypes)

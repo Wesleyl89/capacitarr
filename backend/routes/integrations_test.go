@@ -200,6 +200,80 @@ func TestDeleteIntegration(t *testing.T) {
 	}
 }
 
+func TestUpdateIntegration_ShowLevelOnlyAndCollectionDeletion(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	// Create a Sonarr integration
+	body := `{"type":"sonarr","name":"Firefly Sonarr","url":"http://localhost:8989","apiKey":"abc123"}`
+	req := testutil.AuthenticatedRequest(t, http.MethodPost, "/api/integrations", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var created db.IntegrationConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("Failed to parse created integration: %v", err)
+	}
+
+	// Verify defaults are false
+	if created.ShowLevelOnly {
+		t.Error("Expected ShowLevelOnly=false on creation")
+	}
+	if created.CollectionDeletion {
+		t.Error("Expected CollectionDeletion=false on creation")
+	}
+
+	// Update: enable both ShowLevelOnly and CollectionDeletion
+	updateBody := `{"showLevelOnly":true,"collectionDeletion":true}`
+	req = testutil.AuthenticatedRequest(t, http.MethodPut, fmt.Sprintf("/api/integrations/%d", created.ID), strings.NewReader(updateBody))
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updated db.IntegrationConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("Failed to parse updated integration: %v", err)
+	}
+
+	if !updated.ShowLevelOnly {
+		t.Error("Expected ShowLevelOnly=true after update")
+	}
+	if !updated.CollectionDeletion {
+		t.Error("Expected CollectionDeletion=true after update")
+	}
+	// Ensure other fields were preserved
+	if updated.Name != "Firefly Sonarr" {
+		t.Errorf("Expected name preserved as 'Firefly Sonarr', got %q", updated.Name)
+	}
+
+	// Update: disable ShowLevelOnly via explicit false
+	updateBody2 := `{"showLevelOnly":false}`
+	req = testutil.AuthenticatedRequest(t, http.MethodPut, fmt.Sprintf("/api/integrations/%d", created.ID), strings.NewReader(updateBody2))
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updated2 db.IntegrationConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated2); err != nil {
+		t.Fatalf("Failed to parse second update: %v", err)
+	}
+
+	if updated2.ShowLevelOnly {
+		t.Error("Expected ShowLevelOnly=false after second update")
+	}
+	// CollectionDeletion should be preserved (not sent in update)
+	if !updated2.CollectionDeletion {
+		t.Error("Expected CollectionDeletion=true to be preserved when not sent in update")
+	}
+}
+
 func TestIntegrationsCRUD_Unauthenticated(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)

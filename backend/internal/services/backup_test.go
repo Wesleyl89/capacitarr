@@ -1451,3 +1451,89 @@ func TestBackupService_Import_LegacyModes(t *testing.T) {
 		t.Errorf("expected 2 integrations preserved in append mode, got %d", len(integrations))
 	}
 }
+
+func TestBackupService_IntegrationExport_ShowLevelOnlyRoundTrip(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewBackupService(database, bus)
+	svc.SetDiskGroupService(NewDiskGroupService(database, bus))
+
+	// Create integrations with toggle fields set
+	database.Create(&db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://sonarr:8989",
+		APIKey: "key-1", Enabled: true, ShowLevelOnly: true,
+	})
+	database.Create(&db.IntegrationConfig{
+		Type: "radarr", Name: "Serenity Radarr", URL: "http://radarr:7878",
+		APIKey: "key-2", Enabled: true, CollectionDeletion: true,
+	})
+
+	// Export
+	sections := ExportSections{Integrations: true}
+	envelope, err := svc.Export(sections, "v1.0.0-test")
+	if err != nil {
+		t.Fatalf("Export returned error: %v", err)
+	}
+
+	if len(envelope.Integrations) != 2 {
+		t.Fatalf("expected 2 integrations exported, got %d", len(envelope.Integrations))
+	}
+
+	// Verify exported fields
+	for _, ie := range envelope.Integrations {
+		switch ie.Name {
+		case "Firefly Sonarr":
+			if !ie.ShowLevelOnly {
+				t.Error("expected ShowLevelOnly=true for Firefly Sonarr export")
+			}
+			if ie.CollectionDeletion {
+				t.Error("expected CollectionDeletion=false for Firefly Sonarr export")
+			}
+		case "Serenity Radarr":
+			if ie.ShowLevelOnly {
+				t.Error("expected ShowLevelOnly=false for Serenity Radarr export")
+			}
+			if !ie.CollectionDeletion {
+				t.Error("expected CollectionDeletion=true for Serenity Radarr export")
+			}
+		}
+	}
+
+	// Import into a fresh DB to verify round-trip
+	freshDB := setupTestDB(t)
+	freshBus := newTestBus(t)
+	freshSvc := NewBackupService(freshDB, freshBus)
+	freshSvc.SetDiskGroupService(NewDiskGroupService(freshDB, freshBus))
+
+	importSections := ImportSections{Integrations: true}
+	_, importErr := freshSvc.Import(*envelope, importSections)
+	if importErr != nil {
+		t.Fatalf("Import returned error: %v", importErr)
+	}
+
+	// Verify imported fields
+	var imported []db.IntegrationConfig
+	freshDB.Find(&imported)
+	if len(imported) != 2 {
+		t.Fatalf("expected 2 integrations imported, got %d", len(imported))
+	}
+
+	for _, ic := range imported {
+		switch ic.Name {
+		case "Firefly Sonarr":
+			if !ic.ShowLevelOnly {
+				t.Error("expected ShowLevelOnly=true after import for Firefly Sonarr")
+			}
+			if ic.CollectionDeletion {
+				t.Error("expected CollectionDeletion=false after import for Firefly Sonarr")
+			}
+		case "Serenity Radarr":
+			if ic.ShowLevelOnly {
+				t.Error("expected ShowLevelOnly=false after import for Serenity Radarr")
+			}
+			if !ic.CollectionDeletion {
+				t.Error("expected CollectionDeletion=true after import for Serenity Radarr")
+			}
+		}
+	}
+}
