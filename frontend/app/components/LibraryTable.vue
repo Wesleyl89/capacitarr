@@ -16,10 +16,30 @@ import {
   CheckIcon,
   ZapIcon,
   LayersIcon,
+  TvIcon,
 } from 'lucide-vue-next';
 import { useVirtualizer } from '@tanstack/vue-virtual';
 import type { EvaluatedItem, IntegrationConfig } from '~/types/api';
 import { formatBytes } from '~/utils/format';
+
+// ---------------------------------------------------------------------------
+// Display Row Types — discriminated union for mixed header/item rows (issue #9)
+// ---------------------------------------------------------------------------
+interface ShowGroupHeader {
+  kind: 'header';
+  showTitle: string;
+  seasonCount: number;
+  totalBytes: number;
+}
+
+interface ItemRow {
+  kind: 'item';
+  entry: EvaluatedItem;
+  /** Original index in filteredItems for selection/detail support. */
+  filteredIndex: number;
+}
+
+type DisplayRow = ShowGroupHeader | ItemRow;
 
 const props = defineProps<{
   items: EvaluatedItem[];
@@ -96,20 +116,34 @@ const filteredItems = computed(() => {
 
   if (search.value) {
     const q = search.value.toLowerCase();
-    result = result.filter((e) => e.item.title.toLowerCase().includes(q));
+    result = result.filter(
+      (e) =>
+        e.item.title.toLowerCase().includes(q) ||
+        (e.item.showTitle && e.item.showTitle.toLowerCase().includes(q)),
+    );
   }
 
   if (typeFilter.value) {
-    result = result.filter((e) => e.item.type === typeFilter.value);
+    if (typeFilter.value === 'show') {
+      // Shows filter: display all seasons grouped by parent show (issue #9)
+      result = result.filter((e) => e.item.type === 'season');
+    } else {
+      result = result.filter((e) => e.item.type === typeFilter.value);
+    }
   }
 
   if (integrationFilter.value !== null) {
     result = result.filter((e) => e.item.integrationId === integrationFilter.value);
   }
 
-  // Sort
+  // Sort — when Shows filter is active, group by showTitle first (issue #9)
   const dir = sortDir.value === 'asc' ? 1 : -1;
   result = [...result].sort((a, b) => {
+    // Primary grouping by showTitle when Shows filter is active
+    if (isShowsFilter.value) {
+      const showCmp = (a.item.showTitle ?? '').localeCompare(b.item.showTitle ?? '');
+      if (showCmp !== 0) return showCmp;
+    }
     switch (sortBy.value) {
       case 'title':
         return dir * a.item.title.localeCompare(b.item.title);
@@ -137,9 +171,48 @@ const hasFilters = computed(
 );
 
 // ---------------------------------------------------------------------------
+// Display Rows — interleave group headers when Shows filter is active (issue #9)
+// ---------------------------------------------------------------------------
+const isShowsFilter = computed(() => typeFilter.value === 'show');
+
+/**
+ * When the Shows filter is active, builds a flat list of DisplayRow items
+ * with group headers interspersed between each show's seasons.
+ * Otherwise, wraps filteredItems as plain ItemRow entries.
+ */
+const displayRows = computed<DisplayRow[]>(() => {
+  if (!isShowsFilter.value) {
+    return filteredItems.value.map((entry, i) => ({ kind: 'item', entry, filteredIndex: i }));
+  }
+
+  const rows: DisplayRow[] = [];
+  let currentShow = '';
+  for (let i = 0; i < filteredItems.value.length; i++) {
+    const entry = filteredItems.value[i]!;
+    const showTitle = entry.item.showTitle ?? entry.item.title;
+    if (showTitle !== currentShow) {
+      // Compute group stats
+      const groupItems = filteredItems.value.filter(
+        (e) => (e.item.showTitle ?? e.item.title) === showTitle,
+      );
+      rows.push({
+        kind: 'header',
+        showTitle,
+        seasonCount: groupItems.length,
+        totalBytes: groupItems.reduce((sum, e) => sum + e.item.sizeBytes, 0),
+      });
+      currentShow = showTitle;
+    }
+    rows.push({ kind: 'item', entry, filteredIndex: i });
+  }
+  return rows;
+});
+
+// ---------------------------------------------------------------------------
 // Virtual Scrolling
 // ---------------------------------------------------------------------------
 const TABLE_ROW_HEIGHT = 41;
+const TABLE_HEADER_ROW_HEIGHT = 36;
 const GRID_ROW_HEIGHT = 280;
 const GRID_ROW_GAP = 12;
 
@@ -150,14 +223,24 @@ function getEntry(index: number): EvaluatedItem {
   return entry;
 }
 
+/** Access a display row by virtualizer index. */
+function getDisplayRow(index: number): DisplayRow {
+  const row = displayRows.value[index];
+  if (!row) throw new Error(`Invalid display row index: ${index}`);
+  return row;
+}
+
 const tableScrollRef = ref<HTMLElement | null>(null);
 const gridScrollRef = ref<HTMLElement | null>(null);
 
 const tableVirtualizer = useVirtualizer(
   computed(() => ({
-    count: filteredItems.value.length,
+    count: displayRows.value.length,
     getScrollElement: () => tableScrollRef.value,
-    estimateSize: () => TABLE_ROW_HEIGHT,
+    estimateSize: (index: number) => {
+      const row = displayRows.value[index];
+      return row?.kind === 'header' ? TABLE_HEADER_ROW_HEIGHT : TABLE_ROW_HEIGHT;
+    },
     overscan: 10,
   })),
 );
@@ -571,112 +654,184 @@ const tableColumns = computed(() => [
             <UiTable>
               <UiTableBody>
                 <tr :style="{ height: `${tableVirtualizer.getVirtualItems()[0]?.start ?? 0}px` }" />
-                <UiTableRow
+                <template
                   v-for="vRow in tableVirtualizer.getVirtualItems()"
-                  :key="itemKey(getEntry(vRow.index))"
-                  class="cursor-pointer"
-                  @click="
-                    selectionMode
-                      ? toggleItem(getEntry(vRow.index), vRow.index, $event)
-                      : openDetail(getEntry(vRow.index))
+                  :key="
+                    getDisplayRow(vRow.index).kind === 'header'
+                      ? `hdr-${(getDisplayRow(vRow.index) as ShowGroupHeader).showTitle}`
+                      : itemKey((getDisplayRow(vRow.index) as ItemRow).entry)
                   "
                 >
-                  <UiTableCell v-if="selectionMode" class="w-10 text-center">
-                    <component
-                      :is="
-                        getEntry(vRow.index).isProtected
-                          ? ShieldCheckIcon
-                          : selectedIds.has(itemKey(getEntry(vRow.index)))
-                            ? CheckSquareIcon
-                            : SquareIcon
-                      "
-                      class="w-4 h-4"
-                      :class="
-                        getEntry(vRow.index).isProtected
-                          ? 'text-emerald-500 cursor-not-allowed'
-                          : 'text-muted-foreground'
-                      "
-                      :title="
-                        getEntry(vRow.index).isProtected ? t('library.protectedTooltip') : undefined
-                      "
-                    />
-                  </UiTableCell>
-                  <UiTableCell class="font-medium">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="truncate">{{ getEntry(vRow.index).item.title }}</span>
-                      <UiBadge
-                        v-if="getEntry(vRow.index).queueStatus === 'pending'"
-                        variant="outline"
-                        class="text-[10px] border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0"
-                      >
-                        <ClockIcon class="w-3 h-3" />
-                        {{ t('library.queuePending') }}
-                      </UiBadge>
-                      <UiBadge
-                        v-else-if="getEntry(vRow.index).queueStatus === 'approved'"
-                        variant="outline"
-                        class="text-[10px] border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0"
-                      >
-                        <CheckIcon class="w-3 h-3" />
-                        {{ t('library.queueApproved') }}
-                      </UiBadge>
-                      <UiBadge
-                        v-else-if="getEntry(vRow.index).queueStatus === 'user_initiated'"
-                        variant="destructive"
-                        class="text-[10px] shrink-0"
-                      >
-                        <ZapIcon class="w-3 h-3" />
-                        {{ t('library.queueDelete') }}
-                      </UiBadge>
-                      <UiBadge
-                        v-else-if="getEntry(vRow.index).queueStatus === 'deleting'"
-                        variant="destructive"
-                        class="text-[10px] shrink-0 animate-pulse"
-                      >
-                        <LoaderCircleIcon class="w-3 h-3 animate-spin" />
-                        {{ t('library.queueDeleting') }}
-                      </UiBadge>
-                      <UiBadge
-                        v-if="getEntry(vRow.index).item.collections?.length"
-                        variant="outline"
-                        class="text-[10px] border-indigo-500/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0"
-                        :title="getEntry(vRow.index).item.collections?.join(', ')"
-                      >
-                        <LayersIcon class="w-3 h-3" />
-                        {{ getEntry(vRow.index).item.collections![0] }}
-                      </UiBadge>
-                    </div>
-                  </UiTableCell>
-                  <UiTableCell>
-                    <UiBadge variant="secondary" class="text-[10px] capitalize">
-                      {{ getEntry(vRow.index).item.type }}
-                    </UiBadge>
-                  </UiTableCell>
-                  <UiTableCell>
-                    <span class="text-xs text-muted-foreground">
-                      {{ integrationMap.get(getEntry(vRow.index).item.integrationId) ?? '—' }}
-                    </span>
-                  </UiTableCell>
-                  <UiTableCell class="text-right">
-                    <span class="text-xs tabular-nums text-muted-foreground">
-                      {{ formatBytes(getEntry(vRow.index).item.sizeBytes) }}
-                    </span>
-                  </UiTableCell>
-                  <UiTableCell class="text-right">
-                    <span
-                      class="text-xs font-mono tabular-nums font-semibold"
-                      :class="
-                        getEntry(vRow.index).isProtected ? 'text-emerald-500' : 'text-primary'
-                      "
+                  <!-- Show Group Header Row (issue #9) -->
+                  <tr
+                    v-if="getDisplayRow(vRow.index).kind === 'header'"
+                    class="bg-muted/50 border-b"
+                    :style="{ height: `${TABLE_HEADER_ROW_HEIGHT}px` }"
+                  >
+                    <td v-if="selectionMode" class="w-10" />
+                    <td
+                      :colspan="selectionMode ? tableColumns.length : tableColumns.length"
+                      class="px-3 py-1.5"
                     >
-                      {{
-                        getEntry(vRow.index).isProtected
-                          ? 'Protected'
-                          : getEntry(vRow.index).score.toFixed(2)
-                      }}
-                    </span>
-                  </UiTableCell>
-                </UiTableRow>
+                      <div class="flex items-center gap-2">
+                        <TvIcon class="w-4 h-4 text-primary shrink-0" />
+                        <span class="text-sm font-semibold">
+                          {{ (getDisplayRow(vRow.index) as ShowGroupHeader).showTitle }}
+                        </span>
+                        <UiBadge variant="secondary" class="text-[10px] px-1.5 py-0 tabular-nums">
+                          {{ (getDisplayRow(vRow.index) as ShowGroupHeader).seasonCount }}
+                          {{
+                            (getDisplayRow(vRow.index) as ShowGroupHeader).seasonCount === 1
+                              ? 'season'
+                              : 'seasons'
+                          }}
+                        </UiBadge>
+                        <span class="text-xs text-muted-foreground tabular-nums">
+                          {{
+                            formatBytes((getDisplayRow(vRow.index) as ShowGroupHeader).totalBytes)
+                          }}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  <!-- Regular Item Row -->
+                  <UiTableRow
+                    v-else
+                    class="cursor-pointer"
+                    @click="
+                      selectionMode
+                        ? toggleItem(
+                            (getDisplayRow(vRow.index) as ItemRow).entry,
+                            (getDisplayRow(vRow.index) as ItemRow).filteredIndex,
+                            $event,
+                          )
+                        : openDetail((getDisplayRow(vRow.index) as ItemRow).entry)
+                    "
+                  >
+                    <UiTableCell v-if="selectionMode" class="w-10 text-center">
+                      <component
+                        :is="
+                          (getDisplayRow(vRow.index) as ItemRow).entry.isProtected
+                            ? ShieldCheckIcon
+                            : selectedIds.has(itemKey((getDisplayRow(vRow.index) as ItemRow).entry))
+                              ? CheckSquareIcon
+                              : SquareIcon
+                        "
+                        class="w-4 h-4"
+                        :class="
+                          (getDisplayRow(vRow.index) as ItemRow).entry.isProtected
+                            ? 'text-emerald-500 cursor-not-allowed'
+                            : 'text-muted-foreground'
+                        "
+                        :title="
+                          (getDisplayRow(vRow.index) as ItemRow).entry.isProtected
+                            ? t('library.protectedTooltip')
+                            : undefined
+                        "
+                      />
+                    </UiTableCell>
+                    <UiTableCell class="font-medium">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="truncate">
+                          {{ (getDisplayRow(vRow.index) as ItemRow).entry.item.title }}
+                        </span>
+                        <UiBadge
+                          v-if="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.queueStatus === 'pending'
+                          "
+                          variant="outline"
+                          class="text-[10px] border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0"
+                        >
+                          <ClockIcon class="w-3 h-3" />
+                          {{ t('library.queuePending') }}
+                        </UiBadge>
+                        <UiBadge
+                          v-else-if="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.queueStatus === 'approved'
+                          "
+                          variant="outline"
+                          class="text-[10px] border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0"
+                        >
+                          <CheckIcon class="w-3 h-3" />
+                          {{ t('library.queueApproved') }}
+                        </UiBadge>
+                        <UiBadge
+                          v-else-if="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.queueStatus ===
+                            'user_initiated'
+                          "
+                          variant="destructive"
+                          class="text-[10px] shrink-0"
+                        >
+                          <ZapIcon class="w-3 h-3" />
+                          {{ t('library.queueDelete') }}
+                        </UiBadge>
+                        <UiBadge
+                          v-else-if="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.queueStatus === 'deleting'
+                          "
+                          variant="destructive"
+                          class="text-[10px] shrink-0 animate-pulse"
+                        >
+                          <LoaderCircleIcon class="w-3 h-3 animate-spin" />
+                          {{ t('library.queueDeleting') }}
+                        </UiBadge>
+                        <UiBadge
+                          v-if="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.item.collections?.length
+                          "
+                          variant="outline"
+                          class="text-[10px] border-indigo-500/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0"
+                          :title="
+                            (getDisplayRow(vRow.index) as ItemRow).entry.item.collections?.join(
+                              ', ',
+                            )
+                          "
+                        >
+                          <LayersIcon class="w-3 h-3" />
+                          {{ (getDisplayRow(vRow.index) as ItemRow).entry.item.collections![0] }}
+                        </UiBadge>
+                      </div>
+                    </UiTableCell>
+                    <UiTableCell>
+                      <UiBadge variant="secondary" class="text-[10px] capitalize">
+                        {{ (getDisplayRow(vRow.index) as ItemRow).entry.item.type }}
+                      </UiBadge>
+                    </UiTableCell>
+                    <UiTableCell>
+                      <span class="text-xs text-muted-foreground">
+                        {{
+                          integrationMap.get(
+                            (getDisplayRow(vRow.index) as ItemRow).entry.item.integrationId,
+                          ) ?? '—'
+                        }}
+                      </span>
+                    </UiTableCell>
+                    <UiTableCell class="text-right">
+                      <span class="text-xs tabular-nums text-muted-foreground">
+                        {{
+                          formatBytes((getDisplayRow(vRow.index) as ItemRow).entry.item.sizeBytes)
+                        }}
+                      </span>
+                    </UiTableCell>
+                    <UiTableCell class="text-right">
+                      <span
+                        class="text-xs font-mono tabular-nums font-semibold"
+                        :class="
+                          (getDisplayRow(vRow.index) as ItemRow).entry.isProtected
+                            ? 'text-emerald-500'
+                            : 'text-primary'
+                        "
+                      >
+                        {{
+                          (getDisplayRow(vRow.index) as ItemRow).entry.isProtected
+                            ? 'Protected'
+                            : (getDisplayRow(vRow.index) as ItemRow).entry.score.toFixed(2)
+                        }}
+                      </span>
+                    </UiTableCell>
+                  </UiTableRow>
+                </template>
                 <tr
                   :style="{
                     height: `${tableVirtualizer.getTotalSize() - (tableVirtualizer.getVirtualItems().at(-1)?.end ?? 0)}px`,
