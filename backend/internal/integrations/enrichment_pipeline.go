@@ -88,9 +88,12 @@ func (p *EnrichmentPipeline) Run(items []MediaItem) EnrichmentStats {
 
 	// Track per-capability enricher outcomes for failure detection.
 	// capTotal: number of enrichers registered for each capability.
-	// capFailed: number that errored or zero-matched.
+	// capErrored: number that returned a non-nil error from Enrich().
+	// Only actual errors count toward capability failure — zero-matchers
+	// are NOT counted because zero matches is a legitimate state (e.g.
+	// no items requested via Seerr, fresh Tautulli with no history).
 	capTotal := make(map[string]int)
-	capFailed := make(map[string]int)
+	capErrored := make(map[string]int)
 
 	for _, e := range sorted {
 		// Determine this enricher's capability (if declared)
@@ -112,7 +115,7 @@ func (p *EnrichmentPipeline) Run(items []MediaItem) EnrichmentStats {
 				"enricher", e.Name(), "error", err)
 			stats.FailedEnrichers = append(stats.FailedEnrichers, e.Name())
 			if enrichCap != "" {
-				capFailed[enrichCap]++
+				capErrored[enrichCap]++
 			}
 			continue
 		}
@@ -129,16 +132,15 @@ func (p *EnrichmentPipeline) Run(items []MediaItem) EnrichmentStats {
 		// so exclude it from zero-match detection
 		if delta == 0 && e.Priority() < 100 {
 			stats.ZeroMatchers = append(stats.ZeroMatchers, e.Name())
-			if enrichCap != "" {
-				capFailed[enrichCap]++
-			}
 		}
 	}
 
-	// Detect capabilities where ALL enrichers failed or zero-matched.
+	// Detect capabilities where ALL enrichers errored (returned non-nil from Enrich).
 	// Only flag capabilities that had at least one enricher registered.
+	// Zero-matchers are NOT counted — zero matches is legitimate (no requests,
+	// fresh history, etc.) and should not disable scoring factors.
 	for capability, total := range capTotal {
-		if total > 0 && capFailed[capability] >= total {
+		if total > 0 && capErrored[capability] >= total {
 			stats.FailedCapabilities = append(stats.FailedCapabilities, capability)
 		}
 	}
