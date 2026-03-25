@@ -455,11 +455,13 @@ func (f *RequestPopularityFactor) RequiredIntegrationType() integrations.Integra
 	return integrations.IntegrationTypeSeerr
 }
 
-// RequiredEnrichmentCapability returns the enrichment capability that must
-// have succeeded for this factor to produce meaningful data.
-func (f *RequestPopularityFactor) RequiredEnrichmentCapability() string {
-	return integrations.EnrichCapRequestData
-}
+// NOTE: RequestPopularityFactor intentionally does NOT implement
+// RequiresEnrichmentCapability. Its zero-data default (0.5 for all items)
+// is a safe neutral score that doesn't bias toward deletion. Layer 1
+// (RequiresIntegration) provides sufficient protection — the factor is
+// excluded when Seerr is not configured or has a connection error.
+// Layer 2 enrichment-capability checking is reserved for factors where
+// zero data causes dangerous bias (WatchHistory → 1.0, Recency → 1.0).
 
 // Calculate returns 0.1 for requested items (protect), 0.5 for unrequested.
 func (f *RequestPopularityFactor) Calculate(item integrations.MediaItem) float64 {
