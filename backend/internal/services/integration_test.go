@@ -401,27 +401,27 @@ func TestIntegrationService_SyncAll_NoEnabled(t *testing.T) {
 	}
 }
 
-func TestIntegrationService_FetchCollectionValues_NoPlex(t *testing.T) {
+func TestIntegrationService_FetchCollectionValues_NoMediaServers(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewIntegrationService(database, bus)
 
-	// No Plex integrations → empty result
+	// No media server integrations → empty result
 	result, err := svc.FetchCollectionValues()
 	if err != nil {
 		t.Fatalf("FetchCollectionValues returned error: %v", err)
 	}
 	if len(result) != 0 {
-		t.Errorf("expected 0 collection values with no Plex, got %d", len(result))
+		t.Errorf("expected 0 collection values with no media servers, got %d", len(result))
 	}
 }
 
-func TestIntegrationService_FetchCollectionValues_SkipsNonPlex(t *testing.T) {
+func TestIntegrationService_FetchCollectionValues_SkipsNonMediaServers(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewIntegrationService(database, bus)
 
-	// Create a non-Plex integration — should be ignored
+	// Create a non-media-server integration — should be ignored by the switch
 	database.Create(&db.IntegrationConfig{Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1", Enabled: true})
 
 	result, err := svc.FetchCollectionValues()

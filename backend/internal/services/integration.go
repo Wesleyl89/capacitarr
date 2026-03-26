@@ -70,9 +70,9 @@ func (s *IntegrationService) CloseCache() {
 	s.ruleValueCache.Close()
 }
 
-// FetchCollectionValues returns collection names from all enabled Plex integrations.
-// Results are cached with the standard TTL. The returned slice is sorted alphabetically.
-// Uses PlexClient.GetCollectionNames() which handles deduplication and sorting internally.
+// FetchCollectionValues returns collection names from all enabled media server
+// integrations (Plex, Jellyfin, Emby). Results are cached with the standard TTL.
+// The returned slice is sorted alphabetically and deduplicated across all servers.
 func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, error) {
 	const cacheKey = "global:collections"
 
@@ -87,21 +87,31 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 		return nil, fmt.Errorf("failed to list enabled integrations: %w", err)
 	}
 
-	// Collect unique collection names across all Plex integrations.
+	// Collect unique collection names across all media server integrations.
 	seen := make(map[string]bool)
 	for _, cfg := range configs {
-		if cfg.Type != string(integrations.IntegrationTypePlex) {
+		var names []string
+		var fetchErr error
+
+		switch cfg.Type {
+		case string(integrations.IntegrationTypePlex):
+			client := integrations.NewPlexClient(cfg.URL, cfg.APIKey)
+			names, fetchErr = client.GetCollectionNames()
+		case string(integrations.IntegrationTypeJellyfin):
+			client := integrations.NewJellyfinClient(cfg.URL, cfg.APIKey)
+			names, fetchErr = client.GetCollectionNames()
+		case string(integrations.IntegrationTypeEmby):
+			client := integrations.NewEmbyClient(cfg.URL, cfg.APIKey)
+			names, fetchErr = client.GetCollectionNames()
+		default:
 			continue
 		}
 
-		client := integrations.NewPlexClient(cfg.URL, cfg.APIKey)
-		names, fetchErr := client.GetCollectionNames()
 		if fetchErr != nil {
-			slog.Warn("Failed to fetch Plex collection names",
-				"component", "integration_service", "integrationId", cfg.ID, "error", fetchErr)
+			slog.Warn("Failed to fetch collection names",
+				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
 			continue
 		}
-
 		for _, name := range names {
 			seen[name] = true
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 )
@@ -371,6 +372,47 @@ func (e *EmbyClient) GetWatchlistItems() (map[int]bool, error) {
 	}
 
 	return merged, nil
+}
+
+// GetCollectionNames returns a sorted, deduplicated list of Box Set names from
+// Emby. This is used by FetchCollectionValues() to provide autocomplete
+// options for collection-based rules. Emby's API is structurally identical to
+// Jellyfin (forked codebase).
+func (e *EmbyClient) GetCollectionNames() ([]string, error) {
+	adminID, err := e.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Emby admin user for collection names: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("/Users/%s/Items?IncludeItemTypes=BoxSet&Recursive=true", adminID)
+	body, err := e.doRequest(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Emby box sets: %w", err)
+	}
+
+	var resp struct {
+		Items []struct {
+			Name string `json:"Name"`
+		} `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse Emby box sets: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	for _, item := range resp.Items {
+		name := strings.TrimSpace(item.Name)
+		if name != "" {
+			seen[name] = true
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // GetCollectionMemberships fetches all Box Sets from Emby, then fetches their

@@ -702,3 +702,139 @@ func TestJellyfinClient_GetWatchlistItems_MultiUserUnion(t *testing.T) {
 		t.Error("Expected TMDb ID 1437 (Firefly) in watchlist")
 	}
 }
+
+func TestJellyfinClient_GetCollectionNames_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		case "/Users/admin-1/Items":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"Items":[
+				{"Name":"Sci-Fi Classics"},
+				{"Name":"Joss Whedon Collection"},
+				{"Name":"Sci-Fi Classics"},
+				{"Name":"  Space Westerns  "}
+			]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, "test-key")
+	names, err := client.GetCollectionNames()
+	if err != nil {
+		t.Fatalf("GetCollectionNames should succeed: %v", err)
+	}
+
+	// Should be deduplicated and sorted
+	expected := []string{"Joss Whedon Collection", "Sci-Fi Classics", "Space Westerns"}
+	if len(names) != len(expected) {
+		t.Fatalf("Expected %d collection names, got %d: %v", len(expected), len(names), names)
+	}
+	for i, name := range names {
+		if name != expected[i] {
+			t.Errorf("Expected names[%d] = %q, got %q", i, expected[i], name)
+		}
+	}
+}
+
+func TestJellyfinClient_GetCollectionNames_Empty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		case "/Users/admin-1/Items":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"Items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, "test-key")
+	names, err := client.GetCollectionNames()
+	if err != nil {
+		t.Fatalf("GetCollectionNames should succeed with empty result: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("Expected 0 collection names, got %d", len(names))
+	}
+}
+
+func TestJellyfinClient_GetCollectionNames_NoUsers(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/Users" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, "test-key")
+	_, err := client.GetCollectionNames()
+	if err == nil {
+		t.Fatal("GetCollectionNames should fail when no users exist")
+	}
+}
+
+func TestJellyfinClient_GetCollectionNames_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, "test-key")
+	_, err := client.GetCollectionNames()
+	if err == nil {
+		t.Fatal("GetCollectionNames should fail on API error")
+	}
+}
+
+func TestJellyfinClient_GetCollectionNames_SkipsBlankNames(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"Id":"admin-1","Name":"admin","Policy":{"IsAdministrator":true}}]`))
+		case "/Users/admin-1/Items":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"Items":[
+				{"Name":"Serenity Collection"},
+				{"Name":""},
+				{"Name":"   "},
+				{"Name":"Firefly Box Set"}
+			]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewJellyfinClient(srv.URL, "test-key")
+	names, err := client.GetCollectionNames()
+	if err != nil {
+		t.Fatalf("GetCollectionNames should succeed: %v", err)
+	}
+	if len(names) != 2 {
+		t.Fatalf("Expected 2 collection names (blank skipped), got %d: %v", len(names), names)
+	}
+	if names[0] != "Firefly Box Set" {
+		t.Errorf("Expected names[0] = %q, got %q", "Firefly Box Set", names[0])
+	}
+	if names[1] != "Serenity Collection" {
+		t.Errorf("Expected names[1] = %q, got %q", "Serenity Collection", names[1])
+	}
+}

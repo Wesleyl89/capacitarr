@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -439,6 +440,46 @@ func (j *JellyfinClient) GetItemIDToTMDbIDMap() (map[string]int, error) {
 		"mappings", len(result))
 
 	return result, nil
+}
+
+// GetCollectionNames returns a sorted, deduplicated list of Box Set names from
+// Jellyfin. This is used by FetchCollectionValues() to provide autocomplete
+// options for collection-based rules.
+func (j *JellyfinClient) GetCollectionNames() ([]string, error) {
+	adminID, err := j.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Jellyfin admin user for collection names: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("/Users/%s/Items?IncludeItemTypes=BoxSet&Recursive=true", adminID)
+	body, err := j.doRequest(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Jellyfin box sets: %w", err)
+	}
+
+	var resp struct {
+		Items []struct {
+			Name string `json:"Name"`
+		} `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse Jellyfin box sets: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	for _, item := range resp.Items {
+		name := strings.TrimSpace(item.Name)
+		if name != "" {
+			seen[name] = true
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // GetCollectionMemberships fetches all Box Sets from Jellyfin, then fetches their

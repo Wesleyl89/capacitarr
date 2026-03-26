@@ -43,10 +43,10 @@ const (
 // MediaDeleter and DiskReporter (i.e., it authoritatively manages content).
 //
 // Sonarr, Radarr, Lidarr, Readarr: Connectable + MediaSource + DiskReporter + MediaDeleter + RuleValueFetcher
-// Plex:                             Connectable + WatchDataProvider + WatchlistProvider
+// Plex:                             Connectable + WatchDataProvider + WatchlistProvider + CollectionDataProvider
 // Tautulli:                         Connectable (enriches via TautulliEnricher, not WatchDataProvider)
 // Seerr:                            Connectable + RequestProvider
-// Jellyfin, Emby:                   Connectable + WatchDataProvider + WatchlistProvider
+// Jellyfin, Emby:                   Connectable + WatchDataProvider + WatchlistProvider + CollectionDataProvider
 // Jellystat:                        Connectable (enriches via JellystatEnricher, not WatchDataProvider)
 // ============================================================================
 
