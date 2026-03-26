@@ -1,3 +1,28 @@
+## [2.2.0] - 2026-03-26
+
+### 🚀 Features
+
+- *(collections)* Multi-source collection deletion with approval grouping ([7cae95f](https://gitlab.com/starshadow/software/capacitarr/-/commit/7cae95feb9550a1df99707ea3d651f4392a84f4c))
+- *(docs)* Add tracearr integration plan ([de78a1d](https://gitlab.com/starshadow/software/capacitarr/-/commit/de78a1d2677ca0bc86d2aad335e31a4f9512f20d)) — reported by @tomislavf ([#10](https://gitlab.com/starshadow/software/capacitarr/-/issues/10))
+- *(integrations)* Add Tracearr integration support ([a4a3e43](https://gitlab.com/starshadow/software/capacitarr/-/commit/a4a3e43607305ea6a7e9b7f258ef2c3ba3c089cc)) — reported by @tomislavf ([#10](https://gitlab.com/starshadow/software/capacitarr/-/issues/10))
+
+### 🐛 Bug Fixes
+
+- *(library)* Make Shows filter display seasons grouped by show ([4ad6cae](https://gitlab.com/starshadow/software/capacitarr/-/commit/4ad6cae0638e2e60ba3f5167ae7297742e5c995c)) — reported by @tomislavf ([#9](https://gitlab.com/starshadow/software/capacitarr/-/issues/9))
+- *(library)* Improve shows/seasons UX across library management ([71a779c](https://gitlab.com/starshadow/software/capacitarr/-/commit/71a779c60e0a11531191bb317efac749fdf6c7f0)) — reported by @tomislavf ([#9](https://gitlab.com/starshadow/software/capacitarr/-/issues/9))
+- *(ui)* Misc UI fixes — filters, selection, score colors, deletion priority ([9915978](https://gitlab.com/starshadow/software/capacitarr/-/commit/99159786b98cbf4a5e41a91018e086bc0f90ab79)) — reported by @tomislavf ([#9](https://gitlab.com/starshadow/software/capacitarr/-/issues/9))
+- *(ui)* Resolve poster dimming in deletion priority grid view ([961a880](https://gitlab.com/starshadow/software/capacitarr/-/commit/961a88013bf00efa9a858a1a16bf4ef7dc9c68d4)) — reported by @tomislavf ([#10](https://gitlab.com/starshadow/software/capacitarr/-/issues/10))
+- *(library)* Filter media type buttons by configured integrations ([169959a](https://gitlab.com/starshadow/software/capacitarr/-/commit/169959af4a0dcd008171172bdc3a6602392b1422)) — reported by @tomislavf ([#9](https://gitlab.com/starshadow/software/capacitarr/-/issues/9))
+- *(engine)* Exclude scoring factors when integrations are broken ([e757024](https://gitlab.com/starshadow/software/capacitarr/-/commit/e757024a61d3b8f8cbe729ed1fc376689a4f882e))
+- *(engine)* Only count enricher errors toward capability failure ([ae71000](https://gitlab.com/starshadow/software/capacitarr/-/commit/ae71000f39bdcf8bbee6e21edb6344a3e7c54b01))
+- *(engine)* Remove Layer 2 from RequestPopularityFactor ([f7573c9](https://gitlab.com/starshadow/software/capacitarr/-/commit/f7573c949790674f2b3de6ec49de5ae7cf6c839d))
+- *(seerr)* Fix connection test and request count aggregation ([cb4b4c9](https://gitlab.com/starshadow/software/capacitarr/-/commit/cb4b4c9726f31419f7e90d9568a3b732049ed4f5))
+- *(integrations)* Add collection autocomplete for Jellyfin and Emby ([e626b75](https://gitlab.com/starshadow/software/capacitarr/-/commit/e626b7589c96a2b41d73c3ed80ea3337e21292fd)) — reported by @tomislavf
+- *(tracearr)* Use correct Public API endpoints verified from source ([b4bf49f](https://gitlab.com/starshadow/software/capacitarr/-/commit/b4bf49f272907ec264d30bcbe288ae5b53a8f241)) — reported by @tomislavf
+
+### 🛡️ Security
+
+- Full codebase audit — security, docs, and code quality ([5701438](https://gitlab.com/starshadow/software/capacitarr/-/commit/5701438a829b55d669fcb4881e4b1478a393adff))
 ## [2.1.0] - 2026-03-24
 
 ### 🚀 Features
