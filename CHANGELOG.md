@@ -1,9 +1,14 @@
+## [2.2.1] - 2026-03-26
+
+### 🐛 Bug Fixes
+
+- *(changelog)* Reclassify feat(docs) commits as docs in git-cliff ([3815406](https://gitlab.com/starshadow/software/capacitarr/-/commit/38154068fff9b73c7b6acf21671e53ef2d9c5418))
+- *(integrations)* Use correct v-model binding for modal switches ([2b14373](https://gitlab.com/starshadow/software/capacitarr/-/commit/2b14373b56bd02d140c63a723b53d5b9fbc5bee3)) — reported by @tomislavf ([#8](https://gitlab.com/starshadow/software/capacitarr/-/issues/8))
 ## [2.2.0] - 2026-03-26
 
 ### 🚀 Features
 
 - *(collections)* Multi-source collection deletion with approval grouping ([7cae95f](https://gitlab.com/starshadow/software/capacitarr/-/commit/7cae95feb9550a1df99707ea3d651f4392a84f4c))
-- *(docs)* Add tracearr integration plan ([de78a1d](https://gitlab.com/starshadow/software/capacitarr/-/commit/de78a1d2677ca0bc86d2aad335e31a4f9512f20d)) — reported by @tomislavf ([#10](https://gitlab.com/starshadow/software/capacitarr/-/issues/10))
 - *(integrations)* Add Tracearr integration support ([a4a3e43](https://gitlab.com/starshadow/software/capacitarr/-/commit/a4a3e43607305ea6a7e9b7f258ef2c3ba3c089cc)) — reported by @tomislavf ([#10](https://gitlab.com/starshadow/software/capacitarr/-/issues/10))
 
 ### 🐛 Bug Fixes
