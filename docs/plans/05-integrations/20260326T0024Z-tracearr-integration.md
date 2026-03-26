@@ -23,52 +23,82 @@ Capacitarr currently uses Tautulli for Plex watch analytics and Jellystat for Je
 
 ### Tracearr Public API
 
+> **NOTE:** The information below was corrected during implementation by reading the actual Tracearr source code at `github.com/connorgallopo/Tracearr`. The original plan assumptions about API paths were incorrect.
+
 Authentication uses Bearer tokens: `Authorization: Bearer trr_pub_<token>`. Tokens are generated in Tracearr Settings, require `owner` role, and use the `trr_pub_` prefix. Default port is 3000.
 
-#### Relevant Stats Endpoints
+Tracearr has **two distinct API layers** (verified from source: `apps/server/src/index.ts`):
+
+1. **Internal API** (`/api/v1/stats/...`) — session/JWT auth only. Used by the web frontend.
+2. **Public API** (`/api/v1/public/...`) — Bearer token auth with `trr_pub_` keys. Used by third-party integrations like Capacitarr.
+
+The `API_BASE_PATH` constant is `/api/v1` (from `packages/shared/src/constants.ts:274-275`). Public routes are registered at prefix `${API_BASE_PATH}/public` (line 381 of `index.ts`).
+
+#### Relevant Public API Endpoints
 
 | Route | Description | Use in Capacitarr |
 |-------|-------------|-------------------|
-| `GET /stats/content/top-content` | Top movies/shows by play count with watch time, rating keys | Primary enrichment source |
-| `GET /stats/engagement` | Engagement metrics with Netflix-style play counting | Engagement-quality play counts |
-| `GET /stats/engagement/shows` | Show-level stats with episode rollup | Show aggregation |
-| `GET /stats/users` | Per-user play counts and stats | User attribution for WatchedByUsers |
-| `GET /stats/users/top-users` | User leaderboard by watch time | Future: user-level analytics |
+| `GET /api/v1/public/health` | Health check (returns `{status, version}`) | Connection testing |
+| `GET /api/v1/public/stats` | Dashboard summary (activeStreams, totalUsers, totalSessions) | Future: dashboard widget |
+| `GET /api/v1/public/history` | Paginated session history with media titles, users, durations | Primary enrichment source |
+| `GET /api/v1/public/streams` | Currently active playback sessions | Future: live monitoring |
+| `GET /api/v1/public/users` | User list with stats | Future: user-level analytics |
+| `GET /api/v1/public/stats/today` | Today's statistics with timezone support | Future: daily stats |
 
-All endpoints accept query params: `period`, `startDate`, `endDate`, `serverId`.
+The `/history` endpoint accepts query params: `page`, `pageSize`, `serverId`, `state`, `mediaType`, `startDate`, `endDate`, `timezone`.
 
-#### Top Content Response Shape
+#### History Response Shape
 
-Movies query returns: `media_title`, `year`, `play_count`, `total_watch_ms`, `thumb_path`, `server_id`, `rating_key`. Shows query returns the same fields but uses `grandparent_title` instead of `media_title`, aggregated by series across all episodes.
+The `/history` endpoint returns a paginated response:
 
-The `rating_key` field corresponds to the media server's internal item ID (Plex ratingKey, Jellyfin ItemId, or Emby ItemId). This is critical for TMDb ID resolution.
+```json
+{
+  "data": [
+    {
+      "mediaTitle": "Serenity",
+      "showTitle": null,
+      "mediaType": "movie",
+      "year": 2005,
+      "watched": true,
+      "durationMs": 7200000,
+      "user": { "username": "mal" }
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 100, "total": 42 }
+}
+```
 
-## Architecture Decision: ID Resolution Strategy
+For episodes, `showTitle` contains the series name (e.g., "Firefly") and `mediaTitle` contains the episode name. The `mediaType` filter (`movie` or `episode`) is used to fetch movies and episodes separately.
 
-### Decision: RatingKey to TMDb Resolution via Existing Media Server Maps
+**Important:** The Public API does NOT expose `rating_key` or media server item IDs. Matching to *arr items is done by normalized title + year comparison, not by TMDb ID resolution. This eliminates the need for Plex/Jellyfin/Emby ID mapping tables.
 
-Tracearr items include `rating_key` (the media server's internal ID). Capacitarr already builds ID mapping tables per poll cycle for Tautulli and Jellystat enrichment:
+## Architecture Decision: Title-Based Matching (Revised)
 
-- **Plex:** `tmdbToRatingKey map[int]string` (built from PlexClient via [`GetTMDbToRatingKeyMap()`](../../../backend/internal/integrations/plex.go:340))
-- **Jellyfin:** `jellyfinIDToTMDbID map[string]int` (built from JellyfinClient via [`GetItemIDToTMDbIDMap()`](../../../backend/internal/integrations/jellyfin.go:397))
+> **NOTE:** The original plan proposed rating key → TMDb ID resolution. This was revised during implementation because the Tracearr Public API does not expose rating keys or media server item IDs.
 
-For Tracearr, we build a unified **reverse map** `ratingKeyToTMDbID map[string]int` from all configured media servers. This is assembled in [`poller/fetch.go`](../../../backend/internal/poller/fetch.go) by inverting the Plex map and merging the Jellyfin/Emby maps.
+### Decision: Title + Year Matching via Public API Session History
+
+The Tracearr Public API (`/api/v1/public/history`) returns individual session records with `mediaTitle`, `showTitle`, `year`, and `user` — but NO `rating_key` or media server item IDs. This means TMDb ID resolution maps are not usable.
+
+Instead, the TracearrEnricher:
+1. Fetches all session history from `/api/v1/public/history` (paginated, movies and episodes separately)
+2. Aggregates sessions by normalized title: `lowercase(title)|year` for movies, `lowercase(showTitle)` for episodes
+3. Matches against *arr items by the same normalized title key
+4. Sets `PlayCount` (number of sessions) and `WatchedByUsers` (unique usernames)
 
 ```mermaid
 flowchart LR
-    PLEX_MAP["Plex: TMDb→RatingKey<br/>(invert to RatingKey→TMDb)"]
-    JF_MAP["Jellyfin: ItemID→TMDb<br/>(direct use)"]
-    EMBY_MAP["Emby: ItemID→TMDb<br/>(new method)"]
-    UNIFIED_MAP["Unified ratingKeyToTMDbID"]
-    TRACEARR_ENRICHER["TracearrEnricher"]
+    HISTORY["Tracearr Public API<br/>/api/v1/public/history"]
+    AGG["Aggregate by title+year"]
+    MATCH["Match against *arr items<br/>by normalized title"]
+    ITEMS["MediaItems with<br/>PlayCount + WatchedByUsers"]
 
-    PLEX_MAP --> UNIFIED_MAP
-    JF_MAP --> UNIFIED_MAP
-    EMBY_MAP --> UNIFIED_MAP
-    UNIFIED_MAP --> TRACEARR_ENRICHER
+    HISTORY --> AGG
+    AGG --> MATCH
+    MATCH --> ITEMS
 ```
 
-This means Tracearr enrichment only works when at least one media server (Plex, Jellyfin, or Emby) is also configured. This is a reasonable constraint since Tracearr itself requires a media server connection — if users have Tracearr, they have a media server.
+This approach is **self-contained** — Tracearr enrichment does NOT require any other media server (Plex, Jellyfin, Emby) to be configured. The trade-off is that title matching is slightly less precise than TMDb ID matching (e.g., remakes with the same title and year), but this is acceptable for play count enrichment.
 
 ---
 
