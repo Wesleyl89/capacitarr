@@ -21,7 +21,7 @@ lint:
 	@echo "→ Ensuring go:embed directory exists..."
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
 	docker run --rm --pull missing -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
-		golangci/golangci-lint:v2.11.4 golangci-lint run ./...
+		golangci/golangci-lint:v2.11.4 sh -c "golangci-lint config verify && golangci-lint run ./..."
 	@echo "✓ Lint complete"
 
 ## Run Prettier (auto-fix)
@@ -44,7 +44,7 @@ check:
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
 	@echo "→ Checking backend (golangci-lint via Docker)..."
 	docker run --rm --pull missing -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
-		golangci/golangci-lint:v2.11.4 golangci-lint run ./...
+		golangci/golangci-lint:v2.11.4 sh -c "golangci-lint config verify && golangci-lint run ./..."
 	@echo "✓ All checks passed"
 
 # ─── CI-Equivalent Checks (Docker-based, matches CI exactly) ──────────────────
@@ -55,7 +55,7 @@ lint\:ci:
 	@echo "→ [lint:go] golangci-lint (Docker: golangci/golangci-lint:v2.11.4)..."
 	mkdir -p backend/frontend/dist && touch backend/frontend/dist/.gitkeep
 	docker run --rm --pull missing -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
-		golangci/golangci-lint:v2.11.4 golangci-lint run ./...
+		golangci/golangci-lint:v2.11.4 sh -c "golangci-lint config verify && golangci-lint run ./..."
 	@echo "→ [lint:frontend] ESLint + Prettier (Docker: node:22-alpine)..."
 	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app $(NODE_CACHE_VOLS) -w /app \
 		node:22-alpine sh -c "\
