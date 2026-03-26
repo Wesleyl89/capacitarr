@@ -1,7 +1,7 @@
 # Seerr Requested Filter — Diagnosis & Fix
 
-**Status:** 🔧 In Progress (Phase 1 & 2 code complete, Phase 3 blocked on valid Seerr API key)
-**Branch:** `fix/seerr-requested-filter`
+**Status:** ✅ Complete
+**Branch:** `fix/seerr-requested-filter` (merged to `main`)
 
 ## Problem
 
