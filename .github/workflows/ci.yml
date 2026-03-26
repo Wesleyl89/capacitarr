@@ -154,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy filesystem scan (backend)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: backend/
@@ -163,7 +163,7 @@ jobs:
           scanners: vuln
           version: "v0.69.3"
       - name: Trivy filesystem scan (frontend)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: frontend/
@@ -181,7 +181,7 @@ jobs:
       - name: Build Docker image for scanning
         run: docker build -t capacitarr:ci-scan .
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: capacitarr:ci-scan
           exit-code: "1"
