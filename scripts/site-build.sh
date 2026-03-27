@@ -3,15 +3,15 @@
 #
 # Used by:
 #   - Cloudflare Pages (build command: scripts/site-build.sh)
+#     Root directory: / (repo root)
+#     Build output: site/dist
+#     Required env vars: PNPM_VERSION (set in Cloudflare Pages settings)
 #
 # Output: site/dist/ (static HTML/CSS/JS)
 
 set -eux
 
 echo "=== Site Build ==="
-
-# Install pnpm (idempotent — succeeds if already installed)
-npm install -g pnpm
 
 # Install site dependencies
 cd site
