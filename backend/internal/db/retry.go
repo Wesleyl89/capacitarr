@@ -6,95 +6,62 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// retryMaxAttempts is the maximum number of times a write operation is retried
-// when SQLite returns SQLITE_BUSY ("database is locked"). With WAL mode and
-// busy_timeout already handling most contention, this is a defense-in-depth
-// measure for edge cases where the busy timeout expires.
+// retryMaxAttempts is the default maximum number of retry attempts for
+// WithRetry when SQLite returns SQLITE_BUSY.
 const retryMaxAttempts = 3
 
 // retryBaseDelay is the initial backoff delay between retry attempts.
 // Each subsequent attempt doubles the delay (with jitter).
 const retryBaseDelay = 50 * time.Millisecond
 
-// RegisterRetryCallbacks installs GORM callbacks that automatically retry
-// Create, Update, and Delete operations when SQLite returns "database is locked"
-// (SQLITE_BUSY). This provides application-level retry as a defense-in-depth
-// measure on top of WAL mode and busy_timeout.
+// WithRetry wraps a function call with exponential backoff retry on
+// SQLITE_BUSY errors. This provides application-level retry at the service
+// call level where full operation context is available, rather than inside
+// GORM's callback pipeline where only raw SQL is available.
 //
-// The retry uses exponential backoff with jitter to avoid thundering herd
-// problems when multiple goroutines retry simultaneously.
-func RegisterRetryCallbacks(database *gorm.DB) {
-	_ = database.Callback().Create().After("gorm:create").Register("sqlite_retry:create", func(tx *gorm.DB) {
-		retryOnBusy(tx, "create")
-	})
-	_ = database.Callback().Update().After("gorm:update").Register("sqlite_retry:update", func(tx *gorm.DB) {
-		retryOnBusy(tx, "update")
-	})
-	_ = database.Callback().Delete().After("gorm:delete").Register("sqlite_retry:delete", func(tx *gorm.DB) {
-		retryOnBusy(tx, "delete")
-	})
-}
-
-// retryOnBusy checks if the current GORM operation failed with SQLITE_BUSY
-// and retries it with exponential backoff. The retry count is tracked in the
-// GORM statement's settings to prevent infinite recursion.
-func retryOnBusy(tx *gorm.DB, operation string) {
-	if tx.Error == nil {
-		return
+// Usage:
+//
+//	err := db.WithRetry(func() error {
+//	    return s.db.Create(&row).Error
+//	}, 3)
+func WithRetry(fn func() error, maxAttempts int) error {
+	if maxAttempts <= 0 {
+		maxAttempts = retryMaxAttempts
 	}
 
-	if !isSQLiteBusy(tx.Error) {
-		return
-	}
-
-	// Get or initialize retry count from statement settings
-	attempt := 1
-	if val, ok := tx.Get("sqlite_retry_attempt"); ok {
-		if a, ok := val.(int); ok {
-			attempt = a
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = fn()
+		if err == nil || !isSQLiteBusy(err) {
+			return err
 		}
-	}
 
-	if attempt >= retryMaxAttempts {
-		slog.Error("SQLite busy retry exhausted",
+		if attempt >= maxAttempts {
+			slog.Error("SQLite busy retry exhausted",
+				"component", "db",
+				"attempts", attempt,
+				"error", err,
+			)
+			return err
+		}
+
+		// Exponential backoff with jitter
+		delay := retryBaseDelay * time.Duration(1<<(attempt-1))
+		jitter := time.Duration(cryptoRandInt64(int64(delay / 2)))
+		delay += jitter
+
+		slog.Warn("SQLite busy, retrying operation",
 			"component", "db",
-			"operation", operation,
-			"attempts", attempt,
-			"error", tx.Error,
+			"attempt", attempt,
+			"maxAttempts", maxAttempts,
+			"backoff", delay,
 		)
-		return
+
+		time.Sleep(delay)
 	}
-
-	// Exponential backoff with jitter
-	delay := retryBaseDelay * time.Duration(1<<(attempt-1))
-	jitter := time.Duration(cryptoRandInt64(int64(delay / 2)))
-	delay += jitter
-
-	slog.Warn("SQLite busy, retrying operation",
-		"component", "db",
-		"operation", operation,
-		"attempt", attempt,
-		"maxAttempts", retryMaxAttempts,
-		"backoff", delay,
-	)
-
-	time.Sleep(delay)
-
-	// Clear the error and re-execute the statement
-	tx.Error = nil
-	tx.Set("sqlite_retry_attempt", attempt+1)
-
-	// Re-execute the SQL statement
-	result := tx.Session(&gorm.Session{NewDB: true}).Exec(
-		tx.Statement.SQL.String(),
-		tx.Statement.Vars...,
-	)
-	tx.Error = result.Error
-	tx.RowsAffected = result.RowsAffected
+	return err
 }
 
 // isSQLiteBusy checks if an error is a SQLite SQLITE_BUSY error.

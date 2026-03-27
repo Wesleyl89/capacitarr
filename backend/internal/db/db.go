@@ -85,13 +85,6 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 	}
 	sqlDB.SetMaxOpenConns(1)
 
-	// Register GORM callbacks that automatically retry write operations on
-	// SQLITE_BUSY errors with exponential backoff. This is a defense-in-depth
-	// measure — WAL mode + busy_timeout handle most contention, but if the
-	// busy timeout expires (e.g., during a long-running backup or migration),
-	// the retry callbacks provide an additional safety net.
-	RegisterRetryCallbacks(database)
-
 	if err := RunMigrations(sqlDB); err != nil {
 		slog.Error("Failed to run database migrations", "component", "db", "operation", "migrate", "error", err)
 		return nil, err

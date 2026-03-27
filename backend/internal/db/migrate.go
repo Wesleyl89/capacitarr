@@ -63,9 +63,9 @@ func RunMigrationsDown(sqlDB *sql.DB) error {
 // rename. Fresh installs already have the correct schema from the baseline migration.
 func fixupEngineRunStats(sqlDB *sql.DB) error {
 	// Check which columns exist
-	hasFlagged := hasColumn(sqlDB, "flagged")
-	hasCandidates := hasColumn(sqlDB, "candidates")
-	hasQueued := hasColumn(sqlDB, "queued")
+	hasFlagged := hasColumnInTable(sqlDB, "engine_run_stats", "flagged")
+	hasCandidates := hasColumnInTable(sqlDB, "engine_run_stats", "candidates")
+	hasQueued := hasColumnInTable(sqlDB, "engine_run_stats", "queued")
 
 	ctx := context.Background()
 
@@ -88,12 +88,26 @@ func fixupEngineRunStats(sqlDB *sql.DB) error {
 	return nil
 }
 
-// hasColumn checks if engine_run_stats has a specific column using PRAGMA table_info.
-// Hardcoded to engine_run_stats to avoid string-formatted SQL queries (semgrep).
-func hasColumn(sqlDB *sql.DB, column string) bool {
-	// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
-	// Table name is hardcoded, not user input.
-	rows, err := sqlDB.QueryContext(context.Background(), "PRAGMA table_info(engine_run_stats)")
+// tableColumnChecker returns a function that queries PRAGMA table_info for
+// a specific hardcoded table. Each entry uses a string-literal query so
+// no runtime string formatting touches the SQL.
+var tableColumnCheckers = map[string]func(*sql.DB) (*sql.Rows, error){
+	"engine_run_stats": func(db *sql.DB) (*sql.Rows, error) {
+		return db.QueryContext(context.Background(), "PRAGMA table_info(engine_run_stats)")
+	},
+}
+
+// hasColumnInTable checks if a table has a specific column using PRAGMA table_info.
+// The tableName must have a registered checker in tableColumnCheckers; unrecognized
+// tables return false. This avoids string-formatted SQL while supporting multiple
+// tables for future migrations.
+func hasColumnInTable(sqlDB *sql.DB, tableName, column string) bool {
+	queryFn, ok := tableColumnCheckers[tableName]
+	if !ok {
+		return false
+	}
+
+	rows, err := queryFn(sqlDB)
 	if err != nil {
 		return false
 	}
