@@ -1,13 +1,17 @@
 package integrations
 
 import (
+	"sync"
 	"testing"
 )
 
-func TestRegisterAllFactories(t *testing.T) {
-	// Clear any previous registrations (tests run in same process)
-	factoryRegistry = make(map[string]IntegrationFactory)
+// resetFactoryRegistry clears all registered factories for test isolation.
+func resetFactoryRegistry() {
+	factoryRegistry = sync.Map{}
+}
 
+func TestRegisterAllFactories(t *testing.T) {
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	expectedTypes := []string{
@@ -15,8 +19,9 @@ func TestRegisterAllFactories(t *testing.T) {
 		"plex", "tautulli", "seerr", "jellyfin", "emby", "jellystat", "tracearr",
 	}
 
-	if len(factoryRegistry) != len(expectedTypes) {
-		t.Errorf("expected %d factories, got %d", len(expectedTypes), len(factoryRegistry))
+	registered := RegisteredTypes()
+	if len(registered) != len(expectedTypes) {
+		t.Errorf("expected %d factories, got %d", len(expectedTypes), len(registered))
 	}
 
 	for _, intType := range expectedTypes {
@@ -27,7 +32,7 @@ func TestRegisterAllFactories(t *testing.T) {
 }
 
 func TestCreateClient_KnownType(t *testing.T) {
-	factoryRegistry = make(map[string]IntegrationFactory)
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	client := CreateClient("sonarr", "http://localhost:8989", "test-key")
@@ -51,7 +56,7 @@ func TestCreateClient_KnownType(t *testing.T) {
 }
 
 func TestCreateClient_UnknownType(t *testing.T) {
-	factoryRegistry = make(map[string]IntegrationFactory)
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	client := CreateClient("unknown", "http://localhost", "key")
@@ -61,7 +66,7 @@ func TestCreateClient_UnknownType(t *testing.T) {
 }
 
 func TestCreateClient_SeerrCapabilities(t *testing.T) {
-	factoryRegistry = make(map[string]IntegrationFactory)
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	client := CreateClient("seerr", "http://localhost:5055", "test-key")
@@ -81,7 +86,7 @@ func TestCreateClient_SeerrCapabilities(t *testing.T) {
 }
 
 func TestCreateClient_PlexCapabilities(t *testing.T) {
-	factoryRegistry = make(map[string]IntegrationFactory)
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	client := CreateClient("plex", "http://localhost:32400", "test-token")
@@ -100,7 +105,7 @@ func TestCreateClient_PlexCapabilities(t *testing.T) {
 }
 
 func TestRegisteredTypes(t *testing.T) {
-	factoryRegistry = make(map[string]IntegrationFactory)
+	resetFactoryRegistry()
 	RegisterAllFactories()
 
 	types := RegisteredTypes()

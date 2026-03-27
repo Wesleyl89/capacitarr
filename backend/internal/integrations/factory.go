@@ -3,6 +3,7 @@ package integrations
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 )
 
 // IntegrationFactory creates a client for a given integration type.
@@ -11,37 +12,40 @@ import (
 type IntegrationFactory func(url, apiKey string) interface{}
 
 // factoryRegistry maps integration type strings to their factory functions.
+// Uses sync.Map for safe concurrent reads during test parallelism.
 // Populated by RegisterFactory() calls, typically in init() or RegisterAllFactories().
-var factoryRegistry = make(map[string]IntegrationFactory)
+var factoryRegistry sync.Map
 
 // RegisterFactory registers a factory for the given integration type.
 func RegisterFactory(intType string, factory IntegrationFactory) {
-	factoryRegistry[intType] = factory
+	factoryRegistry.Store(intType, factory)
 }
 
 // CreateClient creates a client for the given integration type using the
 // registered factory. Returns nil if no factory is registered for the type.
 func CreateClient(intType, url, apiKey string) interface{} {
-	factory, ok := factoryRegistry[intType]
+	val, ok := factoryRegistry.Load(intType)
 	if !ok {
 		slog.Warn("No factory registered for integration type", "component", "factory", "type", intType)
 		return nil
 	}
+	factory := val.(IntegrationFactory)
 	return factory(url, apiKey)
 }
 
 // RegisteredTypes returns all registered integration type strings.
 func RegisteredTypes() []string {
-	types := make([]string, 0, len(factoryRegistry))
-	for t := range factoryRegistry {
-		types = append(types, t)
-	}
+	var types []string
+	factoryRegistry.Range(func(key, _ any) bool {
+		types = append(types, key.(string))
+		return true
+	})
 	return types
 }
 
 // HasFactory returns true if a factory is registered for the given type.
 func HasFactory(intType string) bool {
-	_, ok := factoryRegistry[intType]
+	_, ok := factoryRegistry.Load(intType)
 	return ok
 }
 
@@ -83,5 +87,5 @@ func RegisterAllFactories() {
 	})
 
 	slog.Debug("All integration factories registered", "component", "factory",
-		"count", len(factoryRegistry), "types", fmt.Sprintf("%v", RegisteredTypes()))
+		"count", len(RegisteredTypes()), "types", fmt.Sprintf("%v", RegisteredTypes()))
 }

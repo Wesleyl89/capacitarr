@@ -42,7 +42,8 @@ const sampleNuxtHTML = `<!DOCTYPE html><html><head>` +
 	`</head><body></body></html>`
 
 func TestInjectNoncePlaceholders(t *testing.T) {
-	result := string(injectNoncePlaceholders([]byte(sampleNuxtHTML)))
+	resultBytes, _ := injectNoncePlaceholders([]byte(sampleNuxtHTML))
+	result := string(resultBytes)
 
 	// The theme/splash script must get a nonce placeholder
 	if !strings.Contains(result, `<script type="text/javascript" nonce="__CSP_NONCE__">`) {
@@ -66,8 +67,9 @@ func TestInjectNoncePlaceholders(t *testing.T) {
 }
 
 func TestInjectNoncePlaceholders_NoDoubleInjection(t *testing.T) {
-	first := injectNoncePlaceholders([]byte(sampleNuxtHTML))
-	second := string(injectNoncePlaceholders(first))
+	first, _ := injectNoncePlaceholders([]byte(sampleNuxtHTML))
+	secondBytes, _ := injectNoncePlaceholders(first)
+	second := string(secondBytes)
 
 	// Count placeholder occurrences — should be exactly 2 (one per inline script)
 	count := strings.Count(second, cspNoncePlaceholder)
@@ -77,7 +79,7 @@ func TestInjectNoncePlaceholders_NoDoubleInjection(t *testing.T) {
 }
 
 func TestApplyNonce(t *testing.T) {
-	template := injectNoncePlaceholders([]byte(sampleNuxtHTML))
+	template, _ := injectNoncePlaceholders([]byte(sampleNuxtHTML))
 	nonce := "abc123_test-nonce"
 	result := string(applyNonce(template, nonce))
 
@@ -95,7 +97,7 @@ func TestApplyNonce(t *testing.T) {
 }
 
 func TestApplyNonce_PreservesOtherContent(t *testing.T) {
-	template := injectNoncePlaceholders([]byte(sampleNuxtHTML))
+	template, _ := injectNoncePlaceholders([]byte(sampleNuxtHTML))
 	nonce := "test-nonce"
 	result := string(applyNonce(template, nonce))
 

@@ -83,25 +83,15 @@ func (b *SSEBroadcaster) run() {
 func (b *SSEBroadcaster) broadcast(event Event) {
 	id := b.nextID.Add(1)
 
-	// Marshal the concrete event struct first, then inject "message" into the
-	// flat JSON object. We can't use Go struct embedding with an interface
-	// because json.Marshal wraps the interface value in a named "Event" key
-	// instead of flattening the fields, e.g. {"Event":{...},"message":"..."}.
-	eventJSON, err := json.Marshal(event)
+	// Marshal the event with the human-readable message field injected.
+	// ssePayload.MarshalJSON() handles merging the event struct fields
+	// with the "message" key without fragile byte manipulation.
+	payload := ssePayload{event: event, message: event.EventMessage()}
+	mergedJSON, err := json.Marshal(payload)
 	if err != nil {
 		slog.Error("Failed to marshal SSE event", "component", "sse", "error", err)
 		return
 	}
-
-	// Merge "message" into the existing JSON object: strip the closing '}',
-	// append the message field. This avoids a full unmarshal/re-marshal cycle.
-	humanMsg := event.EventMessage()
-	escapedMsg, _ := json.Marshal(humanMsg) //nolint:errcheck // string marshal can't fail
-	mergedJSON := make([]byte, 0, len(eventJSON)+len(escapedMsg)+14)
-	mergedJSON = append(mergedJSON, eventJSON[:len(eventJSON)-1]...) // strip trailing '}'
-	mergedJSON = append(mergedJSON, `,"message":`...)
-	mergedJSON = append(mergedJSON, escapedMsg...)
-	mergedJSON = append(mergedJSON, '}')
 
 	// Build SSE message with proper formatting
 	msg := fmt.Appendf(nil, "id: %d\nevent: %s\ndata: ", id, event.EventType())
@@ -222,4 +212,46 @@ func (b *SSEBroadcaster) ClientCount() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.clients)
+}
+
+// ssePayload wraps an Event with its human-readable message for JSON
+// serialization. MarshalJSON() merges the event struct fields with the
+// "message" key safely, replacing the previous brittle byte-manipulation
+// approach that assumed the JSON representation was always a flat object
+// ending with '}'.
+type ssePayload struct {
+	event   Event
+	message string
+}
+
+// MarshalJSON produces a flat JSON object with all event fields plus "message".
+// For the happy path (struct events produce {…}), it uses the efficient
+// byte-merge approach with an explicit format check. For edge cases (non-object
+// JSON), it falls back to a safe map-based merge.
+func (p ssePayload) MarshalJSON() ([]byte, error) {
+	eventJSON, err := json.Marshal(p.event)
+	if err != nil {
+		return nil, err
+	}
+
+	escapedMsg, _ := json.Marshal(p.message) //nolint:errcheck // string marshal can't fail
+
+	// Happy path: event serializes as a JSON object {…}
+	if len(eventJSON) >= 2 && eventJSON[0] == '{' && eventJSON[len(eventJSON)-1] == '}' {
+		result := make([]byte, 0, len(eventJSON)+len(escapedMsg)+14)
+		result = append(result, eventJSON[:len(eventJSON)-1]...) // strip trailing '}'
+		result = append(result, `,"message":`...)
+		result = append(result, escapedMsg...)
+		result = append(result, '}')
+		return result, nil
+	}
+
+	// Fallback: event is not a flat JSON object (edge case). Wrap in an
+	// envelope so the data is still valid JSON.
+	slog.Warn("SSE event did not marshal to a JSON object, using envelope fallback",
+		"component", "sse", "eventType", p.event.EventType())
+	return json.Marshal(map[string]any{
+		"data":    json.RawMessage(eventJSON),
+		"message": p.message,
+	})
 }

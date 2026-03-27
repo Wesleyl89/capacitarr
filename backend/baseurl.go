@@ -45,7 +45,13 @@ func buildHTMLTemplates(fsys fs.FS, baseURL string) *htmlTemplates {
 	}
 
 	// Inject CSP nonce placeholders into inline scripts
-	tmpl.index = injectNoncePlaceholders(indexData)
+	var nonceCount int
+	tmpl.index, nonceCount = injectNoncePlaceholders(indexData)
+	totalNonces := nonceCount
+	if nonceCount == 0 {
+		slog.Warn("CSP nonce injection found zero scripts in index.html — inline scripts will be blocked by CSP",
+			"component", "baseurl", "file", "index.html")
+	}
 
 	// Read and process 200.html (SPA fallback) if it exists
 	spaData, err := readFSFile(fsys, "200.html")
@@ -53,7 +59,12 @@ func buildHTMLTemplates(fsys fs.FS, baseURL string) *htmlTemplates {
 		if baseURL != "/" {
 			spaData = rewriteHTML(spaData, baseURL)
 		}
-		tmpl.spa = injectNoncePlaceholders(spaData)
+		tmpl.spa, nonceCount = injectNoncePlaceholders(spaData)
+		totalNonces += nonceCount
+		if nonceCount == 0 {
+			slog.Warn("CSP nonce injection found zero scripts in 200.html — inline scripts will be blocked by CSP",
+				"component", "baseurl", "file", "200.html")
+		}
 	}
 
 	logMsg := "HTML templates prepared with CSP nonce placeholders"
@@ -63,6 +74,7 @@ func buildHTMLTemplates(fsys fs.FS, baseURL string) *htmlTemplates {
 	slog.Info(logMsg,
 		"component", "baseurl",
 		"baseURL", baseURL,
+		"nonceInjections", totalNonces,
 		"indexSize", len(tmpl.index),
 		"spaSize", len(tmpl.spa),
 	)
