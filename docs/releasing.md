@@ -14,9 +14,9 @@ Releases are created when you push a `v*` tag to the repository. The CI pipeline
 4. **Pushes Docker images** — multi-arch images (`linux/amd64` + `linux/arm64`) to GHCR
 5. **Rebuilds the project site** — the `pages` job picks up the committed changelog
 
-### On Every Push and MR
+### On Every Push and PR
 
-The standard CI pipeline runs on every push and merge request:
+The standard CI pipeline runs on every push and pull request:
 
 - **Lint** — `golangci-lint` + ESLint
 - **Test** — Go tests + frontend tests

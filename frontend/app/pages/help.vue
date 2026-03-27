@@ -700,18 +700,18 @@
 
               <span class="text-muted-foreground">Source</span>
               <a
-                href="https://gitlab.com/starshadow/software/capacitarr"
+                href="https://github.com/Ghent/capacitarr"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="inline-flex items-center gap-1 text-primary hover:underline"
               >
-                GitLab
+                GitHub
                 <ExternalLinkIcon class="w-3 h-3" />
               </a>
 
               <span class="text-muted-foreground">Docs</span>
               <a
-                href="https://starshadow.gitlab.io/software/capacitarr/"
+                href="https://capacitarr.app"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="inline-flex items-center gap-1 text-primary hover:underline"

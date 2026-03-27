@@ -19,7 +19,6 @@ docs/
 !frontend/README.md
 
 # CI/CD and build config (not needed in Docker build)
-.gitlab-ci.yml
 .goreleaser.yml
 cliff.toml
 Makefile

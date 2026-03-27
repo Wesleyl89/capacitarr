@@ -7,7 +7,11 @@ import { env } from 'node:process'
 const baseURL = env.SITE_BASE_URL || '/'
 
 export default defineNuxtConfig({
-  modules: ['@nuxt/ui', '@nuxt/content'],
+  modules: ['@nuxt/ui', '@nuxt/content', '@nuxtjs/sitemap'],
+
+  site: {
+    url: 'https://capacitarr.app',
+  },
 
   css: ['~/assets/css/main.css'],
 

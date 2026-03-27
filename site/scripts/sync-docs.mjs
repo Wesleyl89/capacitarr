@@ -12,7 +12,7 @@
  * - Injects navigation ordering for sidebar display
  * - Injects CHANGELOG.md with frontmatter
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative } from 'node:path'
 
 const ROOT = join(import.meta.dirname, '..')
@@ -287,6 +287,31 @@ function syncFile(src, dest, { rewriter = rewriteDocsLinks, rewriterArg = '', fr
 
   writeFileSync(dest, content)
 }
+
+// ── Clean previous output ──────────────────────────────────────────
+//
+// Remove all generated .md and _dir.yml files from content/docs/ to
+// prevent stale files from prior directory structures from lingering.
+// The .gitkeep sentinel is preserved so the directory stays tracked.
+// This fixes duplicate navigation items and ordering bugs caused by
+// old flat-level files coexisting with the new grouped structure.
+
+function cleanGeneratedContent(dir) {
+  if (!existsSync(dir)) return
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      // Recursively clean subdirectories, then remove empty dirs
+      cleanGeneratedContent(fullPath)
+      try { rmSync(fullPath, { recursive: true }) } catch { /* dir may not be empty if .gitkeep exists */ }
+    } else if (entry.name.endsWith('.md') || entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) {
+      if (entry.name === '.gitkeep') continue
+      rmSync(fullPath)
+    }
+  }
+}
+
+cleanGeneratedContent(CONTENT_DOCS)
 
 // ── Auto-discover and sync docs/ ───────────────────────────────────
 

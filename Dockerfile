@@ -39,7 +39,7 @@ WORKDIR /app
 
 LABEL org.opencontainers.image.title="Capacitarr" \
       org.opencontainers.image.description="Media server capacity management" \
-      org.opencontainers.image.source="https://gitlab.com/starshadow/software/capacitarr"
+      org.opencontainers.image.source="https://github.com/Ghent/capacitarr"
 
 # Install only what's needed, then remove the package manager to reduce attack
 # surface. Busybox wget (built into Alpine) replaces curl for healthchecks.
