@@ -10,37 +10,22 @@ import (
 
 // LidarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Lidarr v1 API (Servarr framework).
 // Lidarr manages music libraries and follows the same API patterns as Sonarr/Radarr.
+// Shared *arr methods are provided by the embedded arrBaseClient.
 type LidarrClient struct {
-	URL    string
-	APIKey string `json:"-"`
+	arrBaseClient
 }
 
 // NewLidarrClient creates a new Lidarr music management API client.
 func NewLidarrClient(url, apiKey string) *LidarrClient {
 	return &LidarrClient{
-		URL:    strings.TrimRight(url, "/"),
-		APIKey: apiKey,
+		arrBaseClient: newArrBaseClient(url, apiKey, "/api/v1"),
 	}
 }
 
-func (l *LidarrClient) doRequest(endpoint string) ([]byte, error) {
-	return DoAPIRequest(l.URL+endpoint, "X-Api-Key", l.APIKey)
-}
-
-// TestConnection verifies the Lidarr server is reachable and the API key is valid.
-func (l *LidarrClient) TestConnection() error {
-	_, err := l.doRequest("/api/v1/system/status")
-	return err
-}
-
-// GetDiskSpace returns disk usage information reported by Lidarr.
-func (l *LidarrClient) GetDiskSpace() ([]DiskSpace, error) {
-	return arrFetchDiskSpace(l.doRequest, "/api/v1")
-}
-
-// GetRootFolders returns the configured root folder paths from Lidarr.
-func (l *LidarrClient) GetRootFolders() ([]string, error) {
-	return arrFetchRootFolders(l.doRequest, "/api/v1")
+// GetLanguages returns nil because Lidarr does not support language lookup.
+// This overrides the arrBaseClient default which delegates to arrFetchLanguages.
+func (l *LidarrClient) GetLanguages() ([]NameValue, error) {
+	return nil, nil
 }
 
 // lidarrArtist maps the Lidarr artist API response (relevant fields)
@@ -127,23 +112,8 @@ func (l *LidarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
-// --- RuleValueFetcher implementation ---
-
-// GetQualityProfiles returns available quality profiles from Lidarr.
-func (l *LidarrClient) GetQualityProfiles() ([]NameValue, error) {
-	return arrFetchQualityProfiles(l.doRequest, "/api/v1")
-}
-
-// GetTags returns all tags configured in Lidarr.
-func (l *LidarrClient) GetTags() ([]NameValue, error) {
-	return arrFetchTags(l.doRequest, "/api/v1")
-}
-
-// GetLanguages returns nil because Lidarr does not support language lookup.
-func (l *LidarrClient) GetLanguages() ([]NameValue, error) {
-	// Lidarr does not have a language endpoint
-	return nil, nil
-}
+// GetQualityProfiles, GetTags are provided by arrBaseClient.
+// GetLanguages is overridden above (Lidarr has no language endpoint).
 
 // DeleteMediaItem removes an artist and its files from disk via the Lidarr API.
 func (l *LidarrClient) DeleteMediaItem(item MediaItem) error {

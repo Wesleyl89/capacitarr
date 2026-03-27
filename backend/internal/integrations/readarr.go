@@ -3,43 +3,21 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 )
 
 // ReadarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Readarr v1 API (books/audiobooks).
 // Follows the same API pattern as Sonarr/Radarr/Lidarr.
+// Shared *arr methods are provided by the embedded arrBaseClient.
 type ReadarrClient struct {
-	URL    string
-	APIKey string `json:"-"`
+	arrBaseClient
 }
 
 // NewReadarrClient creates a new Readarr book management API client.
 func NewReadarrClient(url, apiKey string) *ReadarrClient {
 	return &ReadarrClient{
-		URL:    strings.TrimRight(url, "/"),
-		APIKey: apiKey,
+		arrBaseClient: newArrBaseClient(url, apiKey, "/api/v1"),
 	}
-}
-
-func (r *ReadarrClient) doRequest(endpoint string) ([]byte, error) {
-	return DoAPIRequest(r.URL+endpoint, "X-Api-Key", r.APIKey)
-}
-
-// TestConnection verifies the Readarr server is reachable and the API key is valid.
-func (r *ReadarrClient) TestConnection() error {
-	_, err := r.doRequest("/api/v1/system/status")
-	return err
-}
-
-// GetDiskSpace returns disk space info from Readarr
-func (r *ReadarrClient) GetDiskSpace() ([]DiskSpace, error) {
-	return arrFetchDiskSpace(r.doRequest, "/api/v1")
-}
-
-// GetRootFolders returns root folder paths configured in Readarr
-func (r *ReadarrClient) GetRootFolders() ([]string, error) {
-	return arrFetchRootFolders(r.doRequest, "/api/v1")
 }
 
 // readarrBook maps a Readarr book API response (relevant fields)
@@ -141,22 +119,7 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
-// --- RuleValueFetcher implementation ---
-
-// GetQualityProfiles returns available quality profiles from Readarr.
-func (r *ReadarrClient) GetQualityProfiles() ([]NameValue, error) {
-	return arrFetchQualityProfiles(r.doRequest, "/api/v1")
-}
-
-// GetTags returns all tags configured in Readarr.
-func (r *ReadarrClient) GetTags() ([]NameValue, error) {
-	return arrFetchTags(r.doRequest, "/api/v1")
-}
-
-// GetLanguages returns all languages configured in Readarr.
-func (r *ReadarrClient) GetLanguages() ([]NameValue, error) {
-	return arrFetchLanguages(r.doRequest, "/api/v1")
-}
+// GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
 // DeleteMediaItem removes a book from Readarr and optionally deletes files
 func (r *ReadarrClient) DeleteMediaItem(item MediaItem) error {

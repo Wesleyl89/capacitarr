@@ -94,25 +94,22 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 	}
 
 	// Collect unique collection names across all media server integrations.
+	// Uses the CollectionNameFetcher capability interface instead of a switch
+	// on integration type — new integrations that implement GetCollectionNames()
+	// are automatically discovered.
 	seen := make(map[string]bool)
 	for _, cfg := range configs {
-		var names []string
-		var fetchErr error
-
-		switch cfg.Type {
-		case string(integrations.IntegrationTypePlex):
-			client := integrations.NewPlexClient(cfg.URL, cfg.APIKey)
-			names, fetchErr = client.GetCollectionNames()
-		case string(integrations.IntegrationTypeJellyfin):
-			client := integrations.NewJellyfinClient(cfg.URL, cfg.APIKey)
-			names, fetchErr = client.GetCollectionNames()
-		case string(integrations.IntegrationTypeEmby):
-			client := integrations.NewEmbyClient(cfg.URL, cfg.APIKey)
-			names, fetchErr = client.GetCollectionNames()
-		default:
+		client := integrations.CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
+		if client == nil {
 			continue
 		}
 
+		fetcher, ok := client.(integrations.CollectionNameFetcher)
+		if !ok {
+			continue
+		}
+
+		names, fetchErr := fetcher.GetCollectionNames()
 		if fetchErr != nil {
 			slog.Warn("Failed to fetch collection names",
 				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)

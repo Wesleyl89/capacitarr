@@ -11,37 +11,17 @@ import (
 )
 
 // SonarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Sonarr v3 API.
+// Shared *arr methods (TestConnection, GetDiskSpace, GetRootFolders, GetQualityProfiles, GetTags, GetLanguages)
+// are provided by the embedded arrBaseClient.
 type SonarrClient struct {
-	URL    string
-	APIKey string `json:"-"`
+	arrBaseClient
 }
 
 // NewSonarrClient creates a new Sonarr TV series management API client.
 func NewSonarrClient(url, apiKey string) *SonarrClient {
 	return &SonarrClient{
-		URL:    strings.TrimRight(url, "/"),
-		APIKey: apiKey,
+		arrBaseClient: newArrBaseClient(url, apiKey, "/api/v3"),
 	}
-}
-
-func (s *SonarrClient) doRequest(endpoint string) ([]byte, error) {
-	return DoAPIRequest(s.URL+endpoint, "X-Api-Key", s.APIKey)
-}
-
-// TestConnection verifies the Sonarr server is reachable and the API key is valid.
-func (s *SonarrClient) TestConnection() error {
-	_, err := s.doRequest("/api/v3/system/status")
-	return err
-}
-
-// GetDiskSpace returns disk usage information reported by Sonarr.
-func (s *SonarrClient) GetDiskSpace() ([]DiskSpace, error) {
-	return arrFetchDiskSpace(s.doRequest, "/api/v3")
-}
-
-// GetRootFolders returns the configured root folder paths from Sonarr.
-func (s *SonarrClient) GetRootFolders() ([]string, error) {
-	return arrFetchRootFolders(s.doRequest, "/api/v3")
 }
 
 // sonarrSeries maps the Sonarr series API response
@@ -176,22 +156,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
-// --- RuleValueFetcher implementation ---
-
-// GetQualityProfiles returns available quality profiles from Sonarr.
-func (s *SonarrClient) GetQualityProfiles() ([]NameValue, error) {
-	return arrFetchQualityProfiles(s.doRequest, "/api/v3")
-}
-
-// GetTags returns all tags configured in Sonarr.
-func (s *SonarrClient) GetTags() ([]NameValue, error) {
-	return arrFetchTags(s.doRequest, "/api/v3")
-}
-
-// GetLanguages returns all languages configured in Sonarr.
-func (s *SonarrClient) GetLanguages() ([]NameValue, error) {
-	return arrFetchLanguages(s.doRequest, "/api/v3")
-}
+// GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
 // DeleteMediaItem removes a series or season and its files from disk via the Sonarr API.
 func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {

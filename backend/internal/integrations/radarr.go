@@ -9,37 +9,16 @@ import (
 )
 
 // RadarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Radarr v3 API.
+// Shared *arr methods are provided by the embedded arrBaseClient.
 type RadarrClient struct {
-	URL    string
-	APIKey string `json:"-"`
+	arrBaseClient
 }
 
 // NewRadarrClient creates a new Radarr movie management API client.
 func NewRadarrClient(url, apiKey string) *RadarrClient {
 	return &RadarrClient{
-		URL:    strings.TrimRight(url, "/"),
-		APIKey: apiKey,
+		arrBaseClient: newArrBaseClient(url, apiKey, "/api/v3"),
 	}
-}
-
-func (r *RadarrClient) doRequest(endpoint string) ([]byte, error) {
-	return DoAPIRequest(r.URL+endpoint, "X-Api-Key", r.APIKey)
-}
-
-// TestConnection verifies the Radarr server is reachable and the API key is valid.
-func (r *RadarrClient) TestConnection() error {
-	_, err := r.doRequest("/api/v3/system/status")
-	return err
-}
-
-// GetDiskSpace returns disk usage information reported by Radarr.
-func (r *RadarrClient) GetDiskSpace() ([]DiskSpace, error) {
-	return arrFetchDiskSpace(r.doRequest, "/api/v3")
-}
-
-// GetRootFolders returns the configured root folder paths from Radarr.
-func (r *RadarrClient) GetRootFolders() ([]string, error) {
-	return arrFetchRootFolders(r.doRequest, "/api/v3")
 }
 
 // radarrMovie maps the Radarr movie API response (relevant fields)
@@ -150,22 +129,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 	return items, nil
 }
 
-// --- RuleValueFetcher implementation ---
-
-// GetQualityProfiles returns available quality profiles from Radarr.
-func (r *RadarrClient) GetQualityProfiles() ([]NameValue, error) {
-	return arrFetchQualityProfiles(r.doRequest, "/api/v3")
-}
-
-// GetTags returns all tags configured in Radarr.
-func (r *RadarrClient) GetTags() ([]NameValue, error) {
-	return arrFetchTags(r.doRequest, "/api/v3")
-}
-
-// GetLanguages returns all languages configured in Radarr.
-func (r *RadarrClient) GetLanguages() ([]NameValue, error) {
-	return arrFetchLanguages(r.doRequest, "/api/v3")
-}
+// GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
 // DeleteMediaItem removes a movie and its files from disk via the Radarr API.
 func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {

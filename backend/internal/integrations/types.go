@@ -119,6 +119,13 @@ type CollectionDataProvider interface {
 	GetCollectionMemberships() (map[int][]string, error)
 }
 
+// CollectionNameFetcher is implemented by media server integrations that can
+// return a list of collection names for use in rule value autocomplete.
+// Satisfied by Plex, Jellyfin, and Emby clients.
+type CollectionNameFetcher interface {
+	GetCollectionNames() ([]string, error)
+}
+
 // CollectionResolver is implemented by integrations that can resolve which
 // other items share a collection with a given item. When collection deletion
 // is enabled on an integration, the poller calls this to expand a single
