@@ -57,7 +57,7 @@ lint\:ci:
 	docker run --rm --pull missing -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
 		golangci/golangci-lint:v2.11.4 sh -c "golangci-lint config verify && golangci-lint run ./..."
 	@echo "→ [lint:frontend] ESLint + Prettier (Docker: node:22-alpine)..."
-	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app $(NODE_CACHE_VOLS) -w /app \
+	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app -v /app/node_modules $(NODE_CACHE_VOLS) -w /app \
 		node:22-alpine sh -c "\
 			corepack enable && \
 			pnpm install --frozen-lockfile && \
@@ -74,7 +74,7 @@ test\:ci:
 	docker run --rm --pull missing -v $(CURDIR)/backend:/app $(GO_CACHE_VOLS) -w /app \
 		golang:1.26-alpine sh -c "cd /app && go test -v ./... -count=1"
 	@echo "→ [test:frontend] vitest (Docker: node:22-alpine)..."
-	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app $(NODE_CACHE_VOLS) -w /app \
+	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app -v /app/node_modules $(NODE_CACHE_VOLS) -w /app \
 		node:22-alpine sh -c "\
 			corepack enable && \
 			pnpm install --frozen-lockfile && \
@@ -91,7 +91,7 @@ security\:ci:
 			go install golang.org/x/vuln/cmd/govulncheck@latest && \
 			cd /app && govulncheck ./..."
 	@echo "→ [security:pnpm-audit] (Docker: node:22-alpine)..."
-	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app $(NODE_CACHE_VOLS) -w /app \
+	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app -v /app/node_modules $(NODE_CACHE_VOLS) -w /app \
 		node:22-alpine sh -c "\
 			corepack enable && \
 			pnpm install --frozen-lockfile && \
