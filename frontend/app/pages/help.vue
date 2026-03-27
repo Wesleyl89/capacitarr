@@ -12,63 +12,75 @@
 
     <div class="space-y-4">
       <!-- Announcements Archive -->
-      <div
+      <details
         v-if="allAnnouncements.length > 0"
         v-motion
+        open
         :initial="{ opacity: 0, y: 12 }"
         :enter="{
           opacity: 1,
           y: 0,
           transition: { type: 'spring', stiffness: 260, damping: 24, delay: 0 },
         }"
-        data-slot="announcements-archive"
-        class="space-y-3 mb-2"
+        data-slot="card"
+        class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
       >
-        <h2 class="text-lg font-semibold tracking-tight flex items-center gap-2">
-          <MegaphoneIcon class="w-4.5 h-4.5 text-primary" />
-          {{ $t('announcements.title') }}
-        </h2>
-        <div
-          v-for="announcement in allAnnouncements"
-          :key="announcement.id"
-          data-slot="card"
-          class="rounded-xl border bg-card shadow-sm overflow-hidden"
-          :class="
-            announcement.active
-              ? 'border-l-4 border-l-primary border-border'
-              : 'border-border opacity-70'
-          "
+        <summary
+          class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors"
         >
-          <div class="px-5 py-4">
-            <div class="flex items-center gap-2.5 mb-2">
-              <UiBadge :variant="announcement.active ? 'default' : 'secondary'" class="text-[10px]">
-                {{
-                  announcement.active ? $t('announcements.active') : $t('announcements.archived')
-                }}
-              </UiBadge>
-              <UiBadge
-                variant="outline"
-                class="text-[10px]"
-                :class="typeBadgeClass(announcement.type)"
-              >
-                {{ announcement.type }}
-              </UiBadge>
-              <span class="text-xs text-muted-foreground">
-                {{ formatAnnouncementDate(announcement.date) }}
-              </span>
+          <ChevronRightIcon
+            class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-90"
+          />
+          <MegaphoneIcon class="w-4.5 h-4.5 text-primary" />
+          <h3 class="font-semibold text-primary">
+            {{ $t('announcements.title') }}
+          </h3>
+        </summary>
+        <div class="px-5 pb-5 space-y-3">
+          <div
+            v-for="announcement in allAnnouncements"
+            :key="announcement.id"
+            class="rounded-lg border overflow-hidden"
+            :class="
+              announcement.active
+                ? 'border-l-4 border-l-primary border-border'
+                : 'border-border opacity-70'
+            "
+          >
+            <div class="px-4 py-3">
+              <div class="flex items-center gap-2.5 mb-2">
+                <UiBadge
+                  :variant="announcement.active ? 'default' : 'secondary'"
+                  class="text-[10px]"
+                >
+                  {{
+                    announcement.active ? $t('announcements.active') : $t('announcements.archived')
+                  }}
+                </UiBadge>
+                <UiBadge
+                  variant="outline"
+                  class="text-[10px]"
+                  :class="typeBadgeClass(announcement.type)"
+                >
+                  {{ announcement.type }}
+                </UiBadge>
+                <span class="text-xs text-muted-foreground">
+                  {{ formatAnnouncementDate(announcement.date) }}
+                </span>
+              </div>
+              <h3 class="font-semibold text-sm text-foreground mb-1.5">
+                {{ announcement.title }}
+              </h3>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html — HTML is pre-rendered at build time from developer-authored markdown files in frontend/announcements/, not user input -->
+              <div
+                class="text-sm text-muted-foreground leading-relaxed prose-sm [&_a]:text-primary [&_a]:underline [&_strong]:text-foreground [&_strong]:font-medium"
+                v-html="announcement.body"
+              />
             </div>
-            <h3 class="font-semibold text-sm text-foreground mb-1.5">
-              {{ announcement.title }}
-            </h3>
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html — HTML is pre-rendered at build time from developer-authored markdown files in frontend/announcements/, not user input -->
-            <div
-              class="text-sm text-muted-foreground leading-relaxed prose-sm [&_a]:text-primary [&_a]:underline [&_strong]:text-foreground [&_strong]:font-medium"
-              v-html="announcement.body"
-            />
           </div>
         </div>
-      </div>
+      </details>
 
       <!-- How Scoring Works -->
       <details
