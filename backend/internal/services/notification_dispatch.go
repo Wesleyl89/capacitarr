@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
@@ -28,13 +27,13 @@ type VersionChecker interface {
 	CheckForUpdate() (*VersionCheckResult, error)
 }
 
-// NotificationDispatchService subscribes to the event bus and dispatches
-// notifications via the Sender interface. It accumulates cycle events using
-// a two-gate flush pattern (EngineComplete + DeletionBatchComplete) before
-// building and sending a single digest notification per engine cycle.
+// NotificationDispatchService dispatches notifications via the Sender
+// interface. Cycle digest notifications are flushed explicitly by the poller
+// via FlushCycleDigest(), which replaces the previous event-based two-gate
+// accumulation pattern for simpler and more reliable delivery.
 //
 // Immediate alerts (errors, mode changes, server started, threshold breached,
-// update available) are dispatched without waiting for the cycle gates.
+// update available) are dispatched via the event bus without delay.
 type NotificationDispatchService struct {
 	bus            *events.EventBus
 	channels       ChannelProvider
@@ -42,10 +41,9 @@ type NotificationDispatchService struct {
 	senders        map[string]notifications.Sender
 	version        string
 
-	mu          sync.Mutex
-	accumulator *cycleAccumulator
-	ch          chan events.Event
-	done        chan struct{}
+	mu   sync.Mutex
+	ch   chan events.Event
+	done chan struct{}
 }
 
 // NewNotificationDispatchService creates a new dispatch service. The
@@ -87,12 +85,11 @@ func (s *NotificationDispatchService) SetVersion(v string) {
 	s.version = v
 }
 
-// Start subscribes to the event bus and begins the background dispatch loop.
-// Uses a larger buffer (512) than the default (256) because notification
-// dispatch processes events quickly but must not drop gate events during
-// high-volume deletion cycles.
+// Start subscribes to the event bus and begins the background dispatch loop
+// for immediate alert events. Cycle digest notifications are handled
+// separately via FlushCycleDigest().
 func (s *NotificationDispatchService) Start() {
-	s.ch = s.bus.SubscribeWithBuffer(512)
+	s.ch = s.bus.Subscribe()
 	go s.run()
 }
 
@@ -140,76 +137,6 @@ func (s *NotificationDispatchService) run() {
 
 func (s *NotificationDispatchService) handle(event events.Event) {
 	switch e := event.(type) {
-	case events.EngineStartEvent:
-		s.mu.Lock()
-		// Warn if the previous accumulator exists but neither gate fired —
-		// indicates dropped events from the previous cycle (e.g., panic, timeout).
-		if prev := s.accumulator; prev != nil && !prev.engineComplete && !prev.batchComplete {
-			age := time.Since(prev.createdAt).Round(time.Second)
-			slog.Warn("Stale notification accumulator replaced — previous cycle digest was never flushed",
-				"component", "notification_dispatch",
-				"previousMode", prev.executionMode,
-				"age", age.String())
-		}
-		s.accumulator = newCycleAccumulator(e.ExecutionMode)
-		s.mu.Unlock()
-
-	case events.EngineCompleteEvent:
-		s.mu.Lock()
-		if s.accumulator != nil {
-			s.accumulator.evaluated = e.Evaluated
-			s.accumulator.candidates = e.Candidates
-			s.accumulator.durationMs = e.DurationMs
-			s.accumulator.executionMode = e.ExecutionMode
-			s.accumulator.engineComplete = true
-			// Use FreedBytes from the engine event for approval/dry-run modes where
-			// no individual DeletionSuccess/DeletionDryRun events carry size data.
-			if e.FreedBytes > 0 && s.accumulator.totalFreedBytes == 0 {
-				s.accumulator.totalFreedBytes = e.FreedBytes
-			}
-		}
-		s.mu.Unlock()
-		s.tryFlush()
-
-	case events.DeletionSuccessEvent:
-		s.mu.Lock()
-		if s.accumulator != nil {
-			s.accumulator.deletedCount++
-			s.accumulator.totalFreedBytes += e.SizeBytes
-			if e.CollectionGroup != "" {
-				s.accumulator.collectionGroups[e.CollectionGroup] = true
-			}
-		}
-		s.mu.Unlock()
-
-	case events.DeletionDryRunEvent:
-		s.mu.Lock()
-		if s.accumulator != nil {
-			s.accumulator.totalFreedBytes += e.SizeBytes
-		}
-		s.mu.Unlock()
-
-	case events.DeletionFailedEvent:
-		s.mu.Lock()
-		if s.accumulator != nil {
-			s.accumulator.failedCount++
-		}
-		s.mu.Unlock()
-
-	case events.DeletionBatchCompleteEvent:
-		s.mu.Lock()
-		if s.accumulator != nil {
-			s.accumulator.batchComplete = true
-			// Use the batch-level counts if the accumulator doesn't have them
-			// (e.g., for the zero-items case)
-			if s.accumulator.deletedCount == 0 && s.accumulator.failedCount == 0 {
-				s.accumulator.deletedCount = e.Succeeded
-				s.accumulator.failedCount = e.Failed
-			}
-		}
-		s.mu.Unlock()
-		s.tryFlush()
-
 	case events.EngineErrorEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertError,
@@ -276,22 +203,17 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 	}
 }
 
-// tryFlush checks whether both gates are open and, if so, builds and
-// dispatches the cycle digest notification.
-func (s *NotificationDispatchService) tryFlush() {
+// FlushCycleDigest dispatches a cycle digest notification to all enabled
+// channels. Called directly by the poller at the end of each engine cycle,
+// replacing the event-based two-gate accumulation pattern. The poller builds
+// the digest from its own counters, eliminating the fragile gate coordination.
+func (s *NotificationDispatchService) FlushCycleDigest(digest notifications.CycleDigest) {
 	s.mu.Lock()
-	acc := s.accumulator
-	if acc == nil || !acc.engineComplete || !acc.batchComplete {
-		s.mu.Unlock()
-		return
-	}
-	// Consume the accumulator
-	s.accumulator = nil
 	ver := s.version
 	vc := s.versionChecker
 	s.mu.Unlock()
 
-	digest := acc.buildDigest(ver)
+	digest.Version = ver
 
 	// Populate update banner from VersionService
 	if vc != nil {
@@ -447,54 +369,5 @@ func modeChangedMessage(newMode string) string {
 		return "Capacitarr will now queue items for manual approval before deletion."
 	default:
 		return fmt.Sprintf("Execution mode changed to %s.", newMode)
-	}
-}
-
-// =============================================================================
-// cycleAccumulator — unexported helper that tracks events within a single
-// engine cycle, implementing the two-gate flush pattern.
-// =============================================================================
-
-type cycleAccumulator struct {
-	createdAt     time.Time
-	executionMode string
-
-	// Gates
-	engineComplete bool // gate 1: EngineCompleteEvent received
-	batchComplete  bool // gate 2: DeletionBatchCompleteEvent received
-
-	// Engine stats (from EngineCompleteEvent)
-	evaluated  int
-	candidates int
-	durationMs int64
-
-	// Deletion accumulation (from DeletionSuccess/Failed/DryRun events)
-	deletedCount    int
-	failedCount     int
-	totalFreedBytes int64
-
-	// Collection tracking: distinct collection groups seen in this cycle
-	collectionGroups map[string]bool
-}
-
-func newCycleAccumulator(executionMode string) *cycleAccumulator {
-	return &cycleAccumulator{
-		createdAt:        time.Now(),
-		executionMode:    executionMode,
-		collectionGroups: make(map[string]bool),
-	}
-}
-
-func (a *cycleAccumulator) buildDigest(version string) notifications.CycleDigest {
-	return notifications.CycleDigest{
-		ExecutionMode:      a.executionMode,
-		Evaluated:          a.evaluated,
-		Candidates:         a.candidates,
-		Deleted:            a.deletedCount,
-		Failed:             a.failedCount,
-		FreedBytes:         a.totalFreedBytes,
-		DurationMs:         a.durationMs,
-		CollectionsDeleted: len(a.collectionGroups),
-		Version:            version,
 	}
 }

@@ -332,6 +332,7 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 					})
 				}
 
+				atomic.AddInt64(&p.lastRunCollections, 1)
 				slog.Info("Collection expanded for deletion", "component", "poller",
 					"trigger", ev.Item.Title, "collections", collectionGroupName, "memberCount", len(allMembers))
 			}
@@ -364,7 +365,8 @@ func (p *Poller) evaluateAndCleanDisk(group db.DiskGroup, allItems []integration
 					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", pi.item.Title)
 					continue
 				}
-				atomic.AddInt64(&p.lastRunCandidates, 1) // fix: auto mode was missing candidates increment
+				atomic.AddInt64(&p.lastRunCandidates, 1)
+				atomic.AddInt64(&p.lastRunFreedBytes, pi.item.SizeBytes)
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
 			case db.ModeApproval:

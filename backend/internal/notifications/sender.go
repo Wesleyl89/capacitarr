@@ -23,8 +23,8 @@ type Sender interface {
 	SendAlert(config SenderConfig, alert Alert) error
 }
 
-// CycleDigest contains the accumulated data for a single engine cycle
-// notification. The dispatch service builds this from event accumulation.
+// CycleDigest contains the data for a single engine cycle notification.
+// Built by the poller from its own counters and passed to the dispatch service.
 type CycleDigest struct {
 	ExecutionMode      string  `json:"executionMode"`
 	Evaluated          int     `json:"evaluated"`
@@ -60,8 +60,7 @@ const (
 	AlertTest              AlertType = "test"
 )
 
-// Alert represents an immediate notification that does not wait for the
-// two-gate flush (unlike cycle digests).
+// Alert represents an immediate notification dispatched via the event bus.
 type Alert struct {
 	Type    AlertType         `json:"type"`
 	Title   string            `json:"title"`

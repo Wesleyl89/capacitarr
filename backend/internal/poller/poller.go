@@ -11,6 +11,7 @@ import (
 	"capacitarr/internal/engine"
 	"capacitarr/internal/events"
 	"capacitarr/internal/integrations"
+	"capacitarr/internal/notifications"
 	"capacitarr/internal/services"
 )
 
@@ -21,10 +22,11 @@ type Poller struct {
 	done chan struct{}
 
 	// Per-run metrics (reset each engine cycle, synced to EngineService at the end)
-	lastRunEvaluated  int64
-	lastRunCandidates int64
-	lastRunProtected  int64
-	lastRunFreedBytes int64
+	lastRunEvaluated   int64
+	lastRunCandidates  int64
+	lastRunProtected   int64
+	lastRunFreedBytes  int64
+	lastRunCollections int64 // distinct collection group expansions in this cycle
 }
 
 // New creates a new Poller bound to the given service registry.
@@ -113,11 +115,6 @@ func (p *Poller) safePoll() {
 				Error: fmt.Sprintf("panic: %v", r),
 			})
 
-			// Unblock the notification two-gate flush — without this, the
-			// DeletionBatchCompleteEvent gate never fires after a panic and
-			// the cycle digest notification is silently dropped.
-			p.reg.Deletion.SignalBatchSize(0)
-
 			// Clear potentially stale preview cache so the next successful
 			// cycle rebuilds it from scratch.
 			p.reg.Preview.InvalidatePreviewCache("panic recovery")
@@ -155,6 +152,7 @@ func (p *Poller) poll() {
 	atomic.StoreInt64(&p.lastRunCandidates, 0)
 	atomic.StoreInt64(&p.lastRunProtected, 0)
 	atomic.StoreInt64(&p.lastRunFreedBytes, 0)
+	atomic.StoreInt64(&p.lastRunCollections, 0)
 
 	configs, err := p.reg.Integration.ListEnabled()
 	if err != nil {
@@ -333,16 +331,32 @@ func (p *Poller) poll() {
 		slog.Info("Removed orphaned disk groups", "component", "poller", "count", deleted)
 	}
 
-	// Signal the deletion service with the batch size so it can publish
-	// DeletionBatchCompleteEvent when all items are processed. If zero items
-	// were queued, SignalBatchSize(0) publishes the event immediately.
+	// Signal the deletion service with the batch size so it knows how many
+	// items to expect. For auto/dry-run modes, the DeletionService tracks
+	// completion of each item internally.
 	p.reg.Deletion.SignalBatchSize(totalDeletionsQueued)
 
-	// Update engine run stats via service
+	// Load per-run stats from atomic counters
 	evaluated := atomic.LoadInt64(&p.lastRunEvaluated)
 	candidates := atomic.LoadInt64(&p.lastRunCandidates)
 	protected := atomic.LoadInt64(&p.lastRunProtected)
 	freedBytes := atomic.LoadInt64(&p.lastRunFreedBytes)
+	collections := atomic.LoadInt64(&p.lastRunCollections)
+
+	// Flush the cycle digest notification directly from the poller's own
+	// counters, replacing the fragile two-gate event accumulation pattern.
+	// For auto mode, Deleted reflects items queued (actual results complete
+	// asynchronously); for dry-run/approval, Candidates is used in the
+	// notification description instead of Deleted.
+	p.reg.NotificationDispatch.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode:      prefs.ExecutionMode,
+		Evaluated:          int(evaluated),
+		Candidates:         int(candidates),
+		Deleted:            totalDeletionsQueued,
+		FreedBytes:         freedBytes,
+		DurationMs:         time.Since(pollStart).Milliseconds(),
+		CollectionsDeleted: int(collections),
+	})
 
 	// In auto mode, IncrementDeletedStats() accumulates actual freed bytes
 	// per-item as deletions complete. Writing freedBytes here would double-count.

@@ -81,7 +81,7 @@ func newTestDispatch(t *testing.T, channels *mockChannelProvider) (*Notification
 	return svc, externalMock
 }
 
-func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
+func TestNotificationDispatch_FlushCycleDigest(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "Test Discord", Enabled: true, OnCycleDigest: true},
@@ -90,20 +90,15 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	// Simulate a full engine cycle
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	// FlushCycleDigest is called directly by the poller — no event sequence needed.
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
 		Evaluated:     100,
 		Candidates:    3,
+		Deleted:       3,
+		FreedBytes:    3 * 1073741824,
 		DurationMs:    500,
-		ExecutionMode: db.ModeAuto,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	// Gate 2 — no deletion events, just batch complete
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 3, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -116,9 +111,19 @@ func TestNotificationDispatch_TwoGateFlush(t *testing.T) {
 	if digests[0].Candidates != 3 {
 		t.Errorf("expected candidates=3, got %d", digests[0].Candidates)
 	}
+	if digests[0].Deleted != 3 {
+		t.Errorf("expected deleted=3, got %d", digests[0].Deleted)
+	}
+	if digests[0].FreedBytes != 3*1073741824 {
+		t.Errorf("expected freedBytes=%d, got %d", 3*1073741824, digests[0].FreedBytes)
+	}
+	// FlushCycleDigest should set the version from the service
+	if digests[0].Version != "v1.0.0-test" {
+		t.Errorf("expected version='v1.0.0-test', got %q", digests[0].Version)
+	}
 }
 
-func TestNotificationDispatch_ReverseGateOrder(t *testing.T) {
+func TestNotificationDispatch_FlushCycleDigest_DryRun(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true, OnDryRunDigest: true},
@@ -127,32 +132,25 @@ func TestNotificationDispatch_ReverseGateOrder(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeDryRun})
-	time.Sleep(50 * time.Millisecond)
-
-	// Gate 2 fires first
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
-	time.Sleep(50 * time.Millisecond)
-
-	// Gate 1 fires second — should trigger flush
-	svc.bus.Publish(events.EngineCompleteEvent{
-		Evaluated:     50,
-		Candidates:    0,
-		DurationMs:    200,
+	svc.FlushCycleDigest(notifications.CycleDigest{
 		ExecutionMode: db.ModeDryRun,
+		Evaluated:     50,
+		Candidates:    5,
+		FreedBytes:    1073741824,
+		DurationMs:    200,
 	})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
-		t.Fatalf("expected 1 digest (reverse gate order), got %d", len(digests))
+		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
 	if digests[0].ExecutionMode != db.ModeDryRun {
 		t.Errorf("expected execution mode 'dry-run', got %q", digests[0].ExecutionMode)
 	}
 }
 
-func TestNotificationDispatch_Accumulation(t *testing.T) {
+func TestNotificationDispatch_FlushCycleDigest_CollectionGroups(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true},
@@ -161,39 +159,23 @@ func TestNotificationDispatch_Accumulation(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-
-	// 3 successful deletions
-	for i := 0; i < 3; i++ {
-		svc.bus.Publish(events.DeletionSuccessEvent{
-			MediaName: "Serenity",
-			MediaType: "movie",
-			SizeBytes: 1073741824, // 1 GB each
-		})
-	}
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
-		Evaluated:     200,
-		Candidates:    3,
-		DurationMs:    1000,
-		ExecutionMode: db.ModeAuto,
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode:      db.ModeAuto,
+		Evaluated:          200,
+		Candidates:         10,
+		Deleted:            10,
+		FreedBytes:         5 * 1073741824,
+		DurationMs:         1000,
+		CollectionsDeleted: 2,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 3, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
-	if digests[0].Deleted != 3 {
-		t.Errorf("expected deleted=3, got %d", digests[0].Deleted)
-	}
-	if digests[0].FreedBytes != 3*1073741824 {
-		t.Errorf("expected freedBytes=%d, got %d", 3*1073741824, digests[0].FreedBytes)
+	if digests[0].CollectionsDeleted != 2 {
+		t.Errorf("expected collectionsDeleted=2, got %d", digests[0].CollectionsDeleted)
 	}
 }
 
@@ -230,11 +212,13 @@ func TestNotificationDispatch_SubscriptionFiltering(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-	svc.bus.Publish(events.EngineCompleteEvent{Evaluated: 10, Candidates: 0, DurationMs: 100, ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
+	// FlushCycleDigest respects OnCycleDigest=false
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
+		Evaluated:     10,
+		Candidates:    0,
+		DurationMs:    100,
+	})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -312,21 +296,14 @@ func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeApproval})
-	time.Sleep(50 * time.Millisecond)
-
-	// In approval mode, no DeletionDryRun/DeletionSuccess events are published.
-	// FreedBytes comes from the EngineCompleteEvent instead.
-	svc.bus.Publish(events.EngineCompleteEvent{
+	// In approval mode, FreedBytes comes from the poller's counters.
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeApproval,
 		Evaluated:     2232,
 		Candidates:    80,
-		DurationMs:    11900,
-		ExecutionMode: db.ModeApproval,
 		FreedBytes:    5368709120, // ~5 GB potential savings
+		DurationMs:    11900,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -358,19 +335,13 @@ func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) { //nol
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeApproval})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeApproval,
 		Evaluated:     100,
 		Candidates:    5,
-		DurationMs:    500,
-		ExecutionMode: db.ModeApproval,
 		FreedBytes:    1073741824,
+		DurationMs:    500,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -392,19 +363,13 @@ func TestNotificationDispatch_DryRunDigestSuppressed(t *testing.T) { //nolint:du
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeDryRun})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeDryRun,
 		Evaluated:     100,
 		Candidates:    5,
-		DurationMs:    500,
-		ExecutionMode: db.ModeDryRun,
 		FreedBytes:    1073741824,
+		DurationMs:    500,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 0, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -425,18 +390,13 @@ func TestNotificationDispatch_NonDryRunDigestNotAffected(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
 		Evaluated:     50,
 		Candidates:    2,
+		Deleted:       2,
 		DurationMs:    300,
-		ExecutionMode: db.ModeAuto,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 2, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -460,19 +420,13 @@ func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	// Run an auto-mode cycle
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
 		Evaluated:     50,
 		Candidates:    2,
+		Deleted:       2,
 		DurationMs:    300,
-		ExecutionMode: db.ModeAuto,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 2, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -494,22 +448,45 @@ func TestNotificationDispatch_AppriseChannel(t *testing.T) {
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.bus.Publish(events.EngineStartEvent{ExecutionMode: db.ModeAuto})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.EngineCompleteEvent{
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
 		Evaluated:     50,
 		Candidates:    2,
+		Deleted:       2,
 		DurationMs:    300,
-		ExecutionMode: db.ModeAuto,
 	})
-	time.Sleep(50 * time.Millisecond)
-
-	svc.bus.Publish(events.DeletionBatchCompleteEvent{Succeeded: 2, Failed: 0})
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest from apprise channel, got %d", len(digests))
+	}
+}
+
+func TestNotificationDispatch_VersionPopulated(t *testing.T) {
+	// Verify FlushCycleDigest populates the version from the service,
+	// overriding any value in the input digest.
+	channels := &mockChannelProvider{
+		configs: []db.NotificationConfig{
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true},
+		},
+	}
+
+	svc, mock := newTestDispatch(t, channels)
+
+	// Pass a digest with a different version — should be overridden
+	svc.FlushCycleDigest(notifications.CycleDigest{
+		ExecutionMode: db.ModeAuto,
+		Evaluated:     10,
+		Version:       "should-be-overridden",
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	digests := mock.getDigests()
+	if len(digests) != 1 {
+		t.Fatalf("expected 1 digest, got %d", len(digests))
+	}
+	if digests[0].Version != "v1.0.0-test" {
+		t.Errorf("expected version='v1.0.0-test', got %q", digests[0].Version)
 	}
 }

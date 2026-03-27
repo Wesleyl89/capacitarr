@@ -543,9 +543,8 @@ func (e DeletionCancelledEvent) EventMessage() string {
 }
 
 // DeletionBatchCompleteEvent is published when all queued deletions for an
-// engine cycle have been processed (successfully or not). This is the "gate 2"
-// signal that the NotificationDispatchService waits for before flushing the
-// cycle digest notification.
+// engine cycle have been processed (successfully or not). Used by the SSE
+// broadcaster and audit log to signal batch completion.
 type DeletionBatchCompleteEvent struct {
 	Succeeded int `json:"succeeded"`
 	Failed    int `json:"failed"`
