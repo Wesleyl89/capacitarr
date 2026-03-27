@@ -13,11 +13,16 @@ set -eux
 
 echo "=== Site Build ==="
 
-# pnpm is provided by the build environment:
-#   - Cloudflare Pages v3: built-in (set PNPM_VERSION env var in dashboard)
-#   - GitHub Actions: installed via pnpm/action-setup or corepack
-#   - Local: installed via corepack enable
-echo "pnpm version: $(pnpm --version)"
+# Ensure pnpm is available. Install via npm if not present.
+# Cloudflare Pages uses asdf shims that exist but fail with exit code 126,
+# so we test with an actual execution and suppress errors.
+PNPM_VER=$(pnpm --version 2>/dev/null) || true
+if [ -z "$PNPM_VER" ]; then
+  echo "pnpm not available, installing via npm..."
+  npm install -g pnpm
+  PNPM_VER=$(pnpm --version)
+fi
+echo "pnpm version: $PNPM_VER"
 
 # Install dependencies
 cd site
