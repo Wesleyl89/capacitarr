@@ -12,6 +12,7 @@ import {
   GridComponent,
   VisualMapComponent,
   MarkLineComponent,
+  MarkPointComponent,
 } from 'echarts/components';
 import VChart from 'vue-echarts';
 
@@ -27,6 +28,7 @@ use([
   GridComponent,
   VisualMapComponent,
   MarkLineComponent,
+  MarkPointComponent,
 ]);
 
 export default defineNuxtPlugin((nuxtApp) => {

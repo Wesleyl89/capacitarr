@@ -856,6 +856,18 @@ func (s *ApprovalService) ReturnToPending(entryID uint) error {
 	return nil
 }
 
+// RemoveEntry deletes an approval queue entry by ID. Called by the
+// DeletionService after a successful actual deletion to clean up the
+// "approved" entry and prevent orphaned rows that would cause duplicates
+// when the engine re-evaluates.
+func (s *ApprovalService) RemoveEntry(entryID uint) error {
+	result := s.db.Delete(&db.ApprovalQueueItem{}, entryID)
+	if result.Error != nil {
+		return fmt.Errorf("failed to remove approval entry %d: %w", entryID, result.Error)
+	}
+	return nil
+}
+
 // CreateSnoozedEntry creates or updates an approval queue entry with
 // status=rejected and snoozed_until set to now + snoozeDurationHours.
 // If an entry for the same media already exists (any status), it is updated
@@ -874,6 +886,14 @@ func (s *ApprovalService) CreateSnoozedEntry(mediaName, mediaType string, integr
 		}).Error; err != nil {
 			return nil, fmt.Errorf("failed to update snoozed entry: %w", err)
 		}
+
+		s.bus.Publish(events.ApprovalRejectedEvent{
+			EntryID:        existing.ID,
+			MediaName:      mediaName,
+			MediaType:      mediaType,
+			SnoozeDuration: fmt.Sprintf("%dh", snoozeDurationHours),
+		})
+
 		return &snoozedUntil, nil
 	}
 
@@ -888,6 +908,13 @@ func (s *ApprovalService) CreateSnoozedEntry(mediaName, mediaType string, integr
 	if err := s.db.Create(&entry).Error; err != nil {
 		return nil, fmt.Errorf("failed to create snoozed entry: %w", err)
 	}
+
+	s.bus.Publish(events.ApprovalRejectedEvent{
+		EntryID:        entry.ID,
+		MediaName:      mediaName,
+		MediaType:      mediaType,
+		SnoozeDuration: fmt.Sprintf("%dh", snoozeDurationHours),
+	})
 
 	slog.Info("Created snoozed approval entry", "component", "services",
 		"media", mediaName, "type", mediaType, "snoozedUntil", snoozedUntil)

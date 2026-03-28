@@ -114,11 +114,13 @@ func (s *EngineService) UpdateRunStats(id uint, evaluated, candidates, queued in
 }
 
 // GetHistory returns engine run history points within the given duration.
+// Only completed runs (completed_at IS NOT NULL) are included to avoid
+// zero-value data points from in-progress or interrupted runs.
 func (s *EngineService) GetHistory(since time.Duration) ([]EngineHistoryPoint, error) {
 	cutoff := time.Now().UTC().Add(-since)
 
 	var stats []db.EngineRunStats
-	if err := s.db.Where("run_at >= ?", cutoff).
+	if err := s.db.Where("run_at >= ? AND completed_at IS NOT NULL", cutoff).
 		Order("run_at ASC").
 		Find(&stats).Error; err != nil {
 		return nil, fmt.Errorf("failed to query engine history: %w", err)

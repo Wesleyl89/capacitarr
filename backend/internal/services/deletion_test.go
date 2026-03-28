@@ -1367,13 +1367,19 @@ func TestApprovalService_CreateSnoozedEntry_UpdatesExisting(t *testing.T) {
 // Dry-run return-to-approval-queue tests
 // ---------------------------------------------------------------------------
 
-// mockApprovalReturner records calls to ReturnToPending for test assertions.
+// mockApprovalReturner records calls to ReturnToPending and RemoveEntry for test assertions.
 type mockApprovalReturner struct {
 	returnedIDs []uint
+	removedIDs  []uint
 }
 
 func (m *mockApprovalReturner) ReturnToPending(entryID uint) error {
 	m.returnedIDs = append(m.returnedIDs, entryID)
+	return nil
+}
+
+func (m *mockApprovalReturner) RemoveEntry(entryID uint) error {
+	m.removedIDs = append(m.removedIDs, entryID)
 	return nil
 }
 
@@ -1461,7 +1467,7 @@ func TestDeletionService_DryRun_DoesNotReturn_WhenNoApprovalEntry(t *testing.T) 
 	}
 }
 
-func TestDeletionService_ActualDelete_DoesNotReturn_WhenApprovalEntrySet(t *testing.T) {
+func TestDeletionService_ActualDelete_RemovesApprovalEntry(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	auditLog := NewAuditLogService(database)
@@ -1497,6 +1503,14 @@ func TestDeletionService_ActualDelete_DoesNotReturn_WhenApprovalEntrySet(t *test
 	// ReturnToPending should NOT be called for actual deletions
 	if len(returner.returnedIDs) != 0 {
 		t.Errorf("expected 0 ReturnToPending calls for actual deletion, got %d", len(returner.returnedIDs))
+	}
+
+	// RemoveEntry SHOULD be called to clean up the orphaned "approved" row
+	if len(returner.removedIDs) != 1 {
+		t.Fatalf("expected 1 RemoveEntry call, got %d", len(returner.removedIDs))
+	}
+	if returner.removedIDs[0] != 42 {
+		t.Errorf("expected RemoveEntry(42), got RemoveEntry(%d)", returner.removedIDs[0])
 	}
 }
 

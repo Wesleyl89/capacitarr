@@ -1298,6 +1298,50 @@ func TestApprovalService_ReturnToPending_NotFound(t *testing.T) {
 	}
 }
 
+// RemoveEntry tests
+
+func TestApprovalService_RemoveEntry(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+	dgID := seedDiskGroup(t, database)
+
+	// Create and approve an item
+	item := db.ApprovalQueueItem{
+		MediaName: "Firefly", MediaType: "show", SizeBytes: 1000,
+		IntegrationID: intID, ExternalID: "1", Status: db.StatusApproved,
+		DiskGroupID: &dgID,
+	}
+	database.Create(&item)
+
+	// Remove the entry
+	err := svc.RemoveEntry(item.ID)
+	if err != nil {
+		t.Fatalf("RemoveEntry returned error: %v", err)
+	}
+
+	// Verify the entry is gone
+	var count int64
+	database.Model(&db.ApprovalQueueItem{}).Where("id = ?", item.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("expected entry to be deleted, but found %d rows", count)
+	}
+}
+
+func TestApprovalService_RemoveEntry_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	// RemoveEntry on a non-existent ID should not error (DELETE with no match is OK in GORM)
+	err := svc.RemoveEntry(99999)
+	if err != nil {
+		t.Fatalf("RemoveEntry returned unexpected error: %v", err)
+	}
+}
+
 func TestApprovalReturnedToPendingEvent_EventType(t *testing.T) {
 	evt := events.ApprovalReturnedToPendingEvent{
 		EntryID:   1,

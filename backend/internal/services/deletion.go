@@ -118,10 +118,11 @@ type DeletionStatsWriter interface {
 	IncrementDeletionStats(sizeBytes int64) error
 }
 
-// ApprovalReturner allows the DeletionService to return dry-deleted approval
-// queue items back to pending status without importing ApprovalService directly.
+// ApprovalReturner allows the DeletionService to manage approval queue items
+// after deletion without importing ApprovalService directly.
 type ApprovalReturner interface {
 	ReturnToPending(entryID uint) error
+	RemoveEntry(entryID uint) error
 }
 
 // NewDeletionService creates a new DeletionService.
@@ -379,6 +380,20 @@ func (s *DeletionService) drainAll() {
 	}
 	s.graceTimerMu.Unlock()
 	s.graceActive.Store(false)
+
+	// For non-batch items (e.g., approval queue approvals), SignalBatchSize()
+	// was never called, so batchExpected is 0. Initialize batch tracking from
+	// the current queue size so publishProgress() reports meaningful percentages
+	// and checkBatchComplete() fires when all items are processed.
+	if s.batchExpected.Load() == 0 {
+		qs := int64(s.queueLen())
+		if qs > 0 {
+			s.batchExpected.Store(qs)
+			s.batchProcessed.Store(0)
+			s.batchSucceeded.Store(0)
+			s.batchFailed.Store(0)
+		}
+	}
 
 	// Collect dry-run audit entries for batch flush after drain completes.
 	var deferredAuditEntries []db.AuditLogEntry
@@ -675,6 +690,17 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 		CollectionGroup: job.CollectionGroup,
 	})
 	s.publishProgress()
+
+	// Clean up the approval queue entry after successful actual deletion.
+	// Without this, the "approved" entry remains orphaned and the next engine
+	// run creates a duplicate "pending" row (BulkUpsertPending only matches
+	// status='pending'), making the item appear re-added to the approval queue.
+	if job.ApprovalEntryID != 0 && s.approvalReturner != nil {
+		if err := s.approvalReturner.RemoveEntry(job.ApprovalEntryID); err != nil {
+			slog.Error("Failed to clean up approval entry after deletion",
+				"component", "services", "entryID", job.ApprovalEntryID, "error", err)
+		}
+	}
 
 	slog.Info("Deletion completed", "component", "services",
 		"media", job.Item.Title, "action", "Deleted", "freed", job.Item.SizeBytes)

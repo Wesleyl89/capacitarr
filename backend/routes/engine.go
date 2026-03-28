@@ -47,9 +47,16 @@ func RegisterEngineRoutes(g *echo.Group, reg *services.Registry) {
 			rangeParam = "7d"
 		}
 
-		dur, err := parseDuration(rangeParam)
-		if err != nil {
-			return apiError(c, http.StatusBadRequest, "invalid range parameter")
+		var dur time.Duration
+		if rangeParam == "all" {
+			// "All Time" — use a 10-year window to return all stored history
+			dur = 10 * 365 * 24 * time.Hour
+		} else {
+			var err error
+			dur, err = parseDuration(rangeParam)
+			if err != nil {
+				return apiError(c, http.StatusBadRequest, "invalid range parameter")
+			}
 		}
 
 		points, err := reg.Engine.GetHistory(dur)
