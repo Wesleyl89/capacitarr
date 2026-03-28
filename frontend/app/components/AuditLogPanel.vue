@@ -206,15 +206,16 @@
                     >
                       <LayersIcon class="w-3 h-3" />
                     </UiBadge>
-                    <button
+                    <UiButton
                       v-if="vRow.entry.group.seasons.length > 0"
+                      variant="ghost"
                       :aria-label="
                         expandedGroups.has(vRow.entry.group.key)
                           ? 'Collapse seasons'
                           : 'Expand seasons'
                       "
                       :aria-expanded="expandedGroups.has(vRow.entry.group.key)"
-                      class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
+                      class="h-auto p-0 text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
                       @click.stop="toggleGroup(vRow.entry.group.key)"
                     >
                       <ChevronRightIcon
@@ -226,7 +227,7 @@
                           vRow.entry.group.seasons.length !== 1 ? 's' : ''
                         }})</span
                       >
-                    </button>
+                    </UiButton>
                   </div>
                 </UiTableCell>
                 <UiTableCell>

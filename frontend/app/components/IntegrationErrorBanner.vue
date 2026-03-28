@@ -40,13 +40,15 @@
             </NuxtLink>
           </div>
         </div>
-        <button
-          class="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0"
+        <UiButton
+          variant="ghost"
+          size="icon-sm"
+          class="h-auto w-auto text-muted-foreground/60 hover:text-foreground transition-colors shrink-0"
           title="Dismiss"
           @click="dismissed = true"
         >
           <XIcon class="w-4 h-4" />
-        </button>
+        </UiButton>
       </div>
     </UiCardContent>
   </UiCard>

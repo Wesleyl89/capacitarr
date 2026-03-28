@@ -145,6 +145,46 @@ func TestSavePreferences_InvalidTiebreaker(t *testing.T) {
 	}
 }
 
+func TestSavePreferences_InvalidPollInterval(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	body := `{
+		"executionMode": "dry-run",
+		"tiebreakerMethod": "size_desc",
+		"logLevel": "info",
+		"pollIntervalSeconds": 30,
+		"deletionQueueDelaySeconds": 30
+	}`
+	req := testutil.AuthenticatedRequest(t, http.MethodPut, "/api/preferences", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for poll interval below 60, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSavePreferences_InvalidDeletionQueueDelay(t *testing.T) {
+	database := testutil.SetupTestDB(t)
+	e := testutil.SetupTestServer(t, database)
+
+	body := `{
+		"executionMode": "dry-run",
+		"tiebreakerMethod": "size_desc",
+		"logLevel": "info",
+		"pollIntervalSeconds": 60,
+		"deletionQueueDelaySeconds": 5
+	}`
+	req := testutil.AuthenticatedRequest(t, http.MethodPut, "/api/preferences", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for deletion queue delay below 10, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGetPreferences_Unauthenticated(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)

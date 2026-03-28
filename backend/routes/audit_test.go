@@ -276,9 +276,9 @@ func TestGetAuditLogs_Sorting(t *testing.T) {
 
 	// Seed items with distinct sizes
 	logs := []db.AuditLogEntry{
-		{MediaName: "Small", MediaType: "movie", Action: "deleted", SizeBytes: 100},
-		{MediaName: "Large", MediaType: "movie", Action: "deleted", SizeBytes: 9000},
-		{MediaName: "Medium", MediaType: "movie", Action: "deleted", SizeBytes: 5000},
+		{MediaName: "Serenity", MediaType: "movie", Action: "deleted", SizeBytes: 100},
+		{MediaName: "Serenity 2", MediaType: "movie", Action: "deleted", SizeBytes: 9000},
+		{MediaName: "Serenity 3", MediaType: "movie", Action: "deleted", SizeBytes: 5000},
 	}
 	for _, log := range logs {
 		if err := database.Create(&log).Error; err != nil {
@@ -366,7 +366,7 @@ func seedApprovalEntry(t *testing.T, database *gorm.DB) (itemID uint) {
 	}
 
 	entry := db.ApprovalQueueItem{
-		MediaName:     "Approval Test Movie",
+		MediaName:     "Serenity",
 		MediaType:     "movie",
 		ScoreDetails:  `[{"name":"WatchHistory","rawScore":0.5,"weight":10},{"name":"Size","rawScore":0.8,"weight":6}]`,
 		Status:        db.StatusPending,
@@ -448,7 +448,7 @@ func TestApproveEntry_NotPending(t *testing.T) {
 
 	// Create an entry with status "approved" (not "pending")
 	entry := db.ApprovalQueueItem{
-		MediaName:     "Not Pending Movie",
+		MediaName:     "Serenity",
 		MediaType:     "movie",
 		Status:        db.StatusApproved,
 		SizeBytes:     1000000,

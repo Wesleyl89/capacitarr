@@ -71,12 +71,13 @@
               <h3 class="font-semibold text-sm text-foreground mb-1.5">
                 {{ announcement.title }}
               </h3>
-              <!-- eslint-disable-next-line vue/no-v-html -->
+              <!-- eslint-disable vue/no-v-html -->
               <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html — HTML is pre-rendered at build time from developer-authored markdown files in frontend/announcements/, not user input -->
               <div
                 class="text-sm text-muted-foreground leading-relaxed prose-sm [&_a]:text-primary [&_a]:underline [&_strong]:text-foreground [&_strong]:font-medium"
                 v-html="announcement.body"
               />
+              <!-- eslint-enable vue/no-v-html -->
             </div>
           </div>
         </div>

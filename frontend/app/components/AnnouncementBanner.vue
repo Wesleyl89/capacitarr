@@ -22,13 +22,15 @@
       >
         {{ $t('announcements.moreCount', { count: extraCount }) }}
       </NuxtLink>
-      <button
-        class="ml-2 shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+      <UiButton
+        variant="ghost"
+        size="icon-sm"
+        class="ml-2 shrink-0 h-auto w-auto opacity-70 hover:opacity-100 transition-opacity"
         :title="$t('announcements.dismiss')"
         @click="dismiss(topAnnouncement.id)"
       >
         <XIcon class="w-4 h-4" />
-      </button>
+      </UiButton>
     </div>
   </Transition>
 </template>

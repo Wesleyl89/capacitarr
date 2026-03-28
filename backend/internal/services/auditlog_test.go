@@ -124,12 +124,12 @@ func TestAuditLogService_PruneOlderThan(t *testing.T) {
 	// Create entries: one old, one recent
 	now := time.Now().UTC()
 	old := db.AuditLogEntry{
-		MediaName: "Old Movie", MediaType: "movie",
+		MediaName: "Serenity", MediaType: "movie",
 		Action: db.ActionDeleted, SizeBytes: 1000,
 		CreatedAt: now.AddDate(0, 0, -60),
 	}
 	recent := db.AuditLogEntry{
-		MediaName: "Recent Movie", MediaType: "movie",
+		MediaName: "Serenity 2", MediaType: "movie",
 		Action: db.ActionDeleted, SizeBytes: 2000,
 		CreatedAt: now.AddDate(0, 0, -5),
 	}
@@ -151,7 +151,7 @@ func TestAuditLogService_PruneOlderThan(t *testing.T) {
 	if len(remaining) != 1 {
 		t.Fatalf("expected 1 remaining entry, got %d", len(remaining))
 	}
-	if remaining[0].MediaName != "Recent Movie" {
+	if remaining[0].MediaName != "Serenity 2" {
 		t.Errorf("expected recent movie to remain, got %q", remaining[0].MediaName)
 	}
 }
@@ -268,7 +268,7 @@ func TestAuditLogService_PruneOlderThan_ZeroKeepsForever(t *testing.T) {
 
 	// Create an old entry
 	old := db.AuditLogEntry{
-		MediaName: "Ancient Movie", MediaType: "movie",
+		MediaName: "Serenity", MediaType: "movie",
 		Action: db.ActionDeleted, SizeBytes: 1000,
 		CreatedAt: time.Now().UTC().AddDate(-1, 0, 0),
 	}
@@ -337,8 +337,8 @@ func TestAuditLogService_BulkUpsertDryRun(t *testing.T) {
 
 	t.Run("handles mixed creates and updates", func(t *testing.T) {
 		entries := []db.AuditLogEntry{
-			{MediaName: "Serenity", MediaType: "movie", SizeBytes: 4000, Score: 0.8, Trigger: db.TriggerEngine, DryRunReason: "mode"},      // update
-			{MediaName: "New Movie", MediaType: "movie", SizeBytes: 2000, Score: 0.5, Trigger: db.TriggerEngine, DryRunReason: "disabled"}, // create
+			{MediaName: "Serenity", MediaType: "movie", SizeBytes: 4000, Score: 0.8, Trigger: db.TriggerEngine, DryRunReason: "mode"},       // update
+			{MediaName: "Serenity 2", MediaType: "movie", SizeBytes: 2000, Score: 0.5, Trigger: db.TriggerEngine, DryRunReason: "disabled"}, // create
 		}
 		if err := svc.BulkUpsertDryRun(entries); err != nil {
 			t.Fatalf("BulkUpsertDryRun returned error: %v", err)

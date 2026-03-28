@@ -20,11 +20,6 @@ func NewEvaluator() *Evaluator {
 	return &Evaluator{factors: DefaultFactors()}
 }
 
-// NewEvaluatorWithFactors creates an Evaluator with custom scoring factors.
-func NewEvaluatorWithFactors(factors []ScoringFactor) *Evaluator {
-	return &Evaluator{factors: factors}
-}
-
 // EvaluationResult holds the output of an evaluation run.
 type EvaluationResult struct {
 	// Items is the full list of evaluated items, sorted by score descending.

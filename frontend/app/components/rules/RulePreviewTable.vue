@@ -220,9 +220,10 @@
                   <UiTableCell class="font-medium">
                     <div class="flex items-center gap-2">
                       <span class="truncate">{{ vRow.entry.group.entry.item.title }}</span>
-                      <button
+                      <UiButton
                         v-if="vRow.entry.group.seasons.length > 0"
-                        class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
+                        variant="ghost"
+                        class="h-auto p-0 text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
                         @click.stop="togglePreviewGroup(vRow.entry.group.key)"
                       >
                         <ChevronRightIcon
@@ -236,7 +237,7 @@
                             vRow.entry.group.seasons.length !== 1 ? 's' : ''
                           }})</span
                         >
-                      </button>
+                      </UiButton>
                     </div>
                   </UiTableCell>
                   <UiTableCell>

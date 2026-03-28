@@ -97,40 +97,6 @@ func (s *ApprovalService) Reject(entryID uint, snoozeDurationHours int) (*db.App
 	return &entry, nil
 }
 
-// ApproveGroup approves all pending items sharing the given CollectionGroup.
-// Returns the updated entries. If no pending items are found, returns ErrApprovalGroupEmpty.
-func (s *ApprovalService) ApproveGroup(collectionGroup string) ([]db.ApprovalQueueItem, error) {
-	var entries []db.ApprovalQueueItem
-	if err := s.db.Where("collection_group = ? AND status = ?", collectionGroup, db.StatusPending).
-		Find(&entries).Error; err != nil {
-		return nil, fmt.Errorf("failed to query collection group: %w", err)
-	}
-	if len(entries) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrApprovalGroupEmpty, collectionGroup)
-	}
-
-	now := time.Now().UTC()
-	if err := s.db.Model(&db.ApprovalQueueItem{}).
-		Where("collection_group = ? AND status = ?", collectionGroup, db.StatusPending).
-		Updates(map[string]any{"status": db.StatusApproved, "updated_at": now}).Error; err != nil {
-		return nil, fmt.Errorf("failed to approve collection group: %w", err)
-	}
-
-	for _, entry := range entries {
-		s.bus.Publish(events.ApprovalApprovedEvent{
-			EntryID:   entry.ID,
-			MediaName: entry.MediaName,
-			MediaType: entry.MediaType,
-			SizeBytes: entry.SizeBytes,
-		})
-	}
-
-	// Reload updated entries
-	var updated []db.ApprovalQueueItem
-	s.db.Where("collection_group = ? AND status = ?", collectionGroup, db.StatusApproved).Find(&updated)
-	return updated, nil
-}
-
 // RejectGroup rejects all pending items sharing the given CollectionGroup and
 // sets the same snooze duration on each. Returns the updated entries.
 // If no pending items are found, returns ErrApprovalGroupEmpty.
@@ -472,7 +438,9 @@ func (s *ApprovalService) ClearQueue() (int, error) {
 }
 
 // ClearQueueForDiskGroup removes pending and rejected items for a specific disk group.
-// Like ClearQueue, approved items and user-initiated items are preserved.
+// Like ClearQueue, approved items and user-initiated items are preserved. Called by
+// the poller when an individual disk group drops below threshold, allowing per-group
+// cleanup without affecting items queued for disk groups that are still above threshold.
 func (s *ApprovalService) ClearQueueForDiskGroup(diskGroupID uint) (int, error) {
 	result := s.db.Where(
 		"status IN ? AND user_initiated = ? AND disk_group_id = ?",
@@ -593,6 +561,47 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 		EnqueuedMode:    enqueuedMode,
 	}); queueErr != nil {
 		return approved, fmt.Errorf("deletion queue is full: %w", queueErr)
+	}
+
+	return approved, nil
+}
+
+// ExecuteGroupApproval approves all pending items sharing a CollectionGroup.
+// This encapsulates the full workflow: list queue → filter by group → execute
+// each approval (approve + look up integration + queue deletion).
+// Returns the approved items and the count. If no pending items match the group,
+// returns ErrApprovalGroupEmpty.
+func (s *ApprovalService) ExecuteGroupApproval(collectionGroup string, deps ExecuteApprovalDeps) ([]*db.ApprovalQueueItem, error) {
+	items, err := s.ListQueue("pending", 200, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query approval queue: %w", err)
+	}
+
+	var groupIDs []uint
+	for _, item := range items {
+		if item.CollectionGroup == collectionGroup {
+			groupIDs = append(groupIDs, item.ID)
+		}
+	}
+	if len(groupIDs) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrApprovalGroupEmpty, collectionGroup)
+	}
+
+	var approved []*db.ApprovalQueueItem
+	var lastErr error
+	for _, entryID := range groupIDs {
+		result, execErr := s.ExecuteApproval(entryID, deps)
+		if execErr != nil {
+			slog.Error("Group approval: failed to approve entry",
+				"component", "services", "entryID", entryID, "error", execErr)
+			lastErr = execErr
+			continue
+		}
+		approved = append(approved, result)
+	}
+
+	if len(approved) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("failed to approve any items in collection group %q: %w", collectionGroup, lastErr)
 	}
 
 	return approved, nil

@@ -85,16 +85,23 @@ paths:
       operationId: getHealth
       tags: [Health]
       summary: Health check
-      description: Returns "OK" if the server is running. No authentication required.
+      description: Returns health status with event bus diagnostics. No authentication required.
       security: []
       responses:
         "200":
           description: Server is healthy
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: OK
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  eventsDropped:
+                    type: integer
+                    description: Cumulative count of events dropped due to full subscriber buffers
+                    example: 0
 
   /version:
     get:
@@ -721,8 +728,8 @@ paths:
       summary: Update preferences
       description: |
         Updates the global preferences. All weight values must be between 0 and
-        10. The log level is applied immediately. If `pollIntervalSeconds` is
-        less than 30, it defaults to 300.
+        10. The log level is applied immediately. `pollIntervalSeconds` must be
+        at least 60. `deletionQueueDelaySeconds` must be between 10 and 300.
       requestBody:
         required: true
         content:
@@ -1522,7 +1529,7 @@ paths:
       description: |
         Opens a long-lived Server-Sent Events (SSE) connection that streams
         typed events in real-time. Events include engine runs, deletions,
-        config changes, approval actions, and more (44 event types total).
+        config changes, approval actions, and more (53 event types total).
 
         Supports reconnection replay via the `Last-Event-ID` header.
         A keepalive comment is sent every 30 seconds to prevent proxy timeouts.
@@ -1727,7 +1734,7 @@ paths:
       operationId: checkVersion
       tags: [Version]
       summary: Check for updates (cached)
-      description: Returns cached update check results. Checks the GitLab releases API with a 6-hour cache TTL.
+      description: Returns cached update check results. Checks the GitHub releases API with a 6-hour cache TTL.
       responses:
         "200":
           description: Version check result
@@ -1741,7 +1748,7 @@ paths:
       operationId: forceCheckVersion
       tags: [Version]
       summary: Force check for updates (bypass cache)
-      description: Forces a fresh check against the GitLab releases API, bypassing the cache.
+      description: Forces a fresh check against the GitHub releases API, bypassing the cache.
       responses:
         "200":
           description: Version check result
@@ -1780,7 +1787,7 @@ paths:
                 $ref: "#/components/schemas/StatusResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-         "401":
+        "401":
           $ref: "#/components/responses/Unauthorized"
 
   # ===========================================================================
@@ -2179,6 +2186,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     InternalServerError:
       description: Internal server error
       content:
@@ -2387,7 +2400,7 @@ components:
           example: 1
         type:
           type: string
-          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby]
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby, tracearr, jellystat]
           example: sonarr
         name:
           type: string
@@ -2434,7 +2447,7 @@ components:
       properties:
         type:
           type: string
-          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby]
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby, tracearr, jellystat]
         name:
           type: string
         url:
@@ -2465,7 +2478,7 @@ components:
       properties:
         type:
           type: string
-          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby]
+          enum: [plex, sonarr, radarr, lidarr, readarr, tautulli, seerr, jellyfin, emby, tracearr, jellystat]
         url:
           type: string
           format: uri
@@ -3469,6 +3482,8 @@ components:
           type: boolean
         onApprovalActivity:
           type: boolean
+        onIntegrationStatus:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -3505,6 +3520,8 @@ components:
         onUpdateAvailable:
           type: boolean
         onApprovalActivity:
+          type: boolean
+        onIntegrationStatus:
           type: boolean
 
     VersionCheckResult:

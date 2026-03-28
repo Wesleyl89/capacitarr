@@ -153,18 +153,15 @@
             </span>
           </div>
           <ClientOnly>
-            <VChart
-              :option="sparklineEChartsOption"
-              :autoresize="true"
-              style="height: 120px; width: 100%"
-            />
+            <VChart :option="sparklineEChartsOption" :autoresize="true" class="h-[120px] w-full" />
           </ClientOnly>
         </div>
 
         <!-- Toggle for mini sparklines -->
-        <button
+        <UiButton
           v-if="engineHistoryData.length > 0"
-          class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+          variant="ghost"
+          class="h-auto p-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
           @click="showMiniSparklines = !showMiniSparklines"
         >
           <component
@@ -172,7 +169,7 @@
             class="w-3.5 h-3.5"
           />
           {{ showMiniSparklines ? $t('dashboard.hideDetails') : $t('dashboard.showDetails') }}
-        </button>
+        </UiButton>
 
         <!-- Mini sparklines: duration + recent activity (matched heights) -->
         <div
@@ -192,7 +189,7 @@
               <VChart
                 :option="durationSparklineEChartsOption"
                 :autoresize="true"
-                style="height: 70px; width: 100%"
+                class="h-[70px] w-full"
               />
             </ClientOnly>
           </div>

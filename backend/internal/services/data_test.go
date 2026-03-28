@@ -17,13 +17,13 @@ func TestDataService_Reset(t *testing.T) {
 
 	// Audit log entries
 	database.Create(&db.AuditLogEntry{
-		MediaName: "Movie A", MediaType: "movie",
+		MediaName: "Serenity", MediaType: "movie",
 		Action: db.ActionDeleted, SizeBytes: 1000,
 	})
 
 	// Approval queue items
 	database.Create(&db.ApprovalQueueItem{
-		MediaName: "Show B", MediaType: "show",
+		MediaName: "Firefly", MediaType: "show",
 		SizeBytes: 2000, IntegrationID: intID, ExternalID: "1",
 		Status: db.StatusPending,
 	})

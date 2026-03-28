@@ -2,6 +2,8 @@ package services
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -458,22 +460,34 @@ func TestIntegrationService_SyncAll_TestsEnrichmentTypes(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewIntegrationService(database, bus)
 
-	// Tautulli and Overseerr don't implement the full Integration interface,
+	// Use mock servers that return 401 Unauthorized immediately, so the
+	// connection test fails fast without depending on network timeouts.
+	tautulliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer tautulliSrv.Close()
+
+	seerrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer seerrSrv.Close()
+
+	// Tautulli and Seerr don't implement the full Integration interface,
 	// but SyncAll should still test their connections and return results.
-	database.Create(&db.IntegrationConfig{Type: "tautulli", Name: "Firefly Tautulli", URL: "http://localhost:8181", APIKey: "key1", Enabled: true})
-	database.Create(&db.IntegrationConfig{Type: "seerr", Name: "Serenity Overseerr", URL: "http://localhost:5055", APIKey: "key2", Enabled: true})
+	database.Create(&db.IntegrationConfig{Type: "tautulli", Name: "Firefly Tautulli", URL: tautulliSrv.URL, APIKey: "key1", Enabled: true})
+	database.Create(&db.IntegrationConfig{Type: "seerr", Name: "Serenity Seerr", URL: seerrSrv.URL, APIKey: "key2", Enabled: true})
 
 	results, err := svc.SyncAll()
 	if err != nil {
 		t.Fatalf("SyncAll returned error: %v", err)
 	}
-	// Enrichment services now get tested — they'll fail (unreachable) but return results
+	// Enrichment services now get tested — they'll fail (mock returns 401) but return results
 	if len(results) != 2 {
-		t.Errorf("expected 2 sync results (tautulli + overseerr tested), got %d", len(results))
+		t.Errorf("expected 2 sync results (tautulli + seerr tested), got %d", len(results))
 	}
 	for _, r := range results {
 		if r.Status != "error" {
-			t.Errorf("expected error status for %s (unreachable), got %q", r.Type, r.Status)
+			t.Errorf("expected error status for %s (mock 401), got %q", r.Type, r.Status)
 		}
 	}
 }

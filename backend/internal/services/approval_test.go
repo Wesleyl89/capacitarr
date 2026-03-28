@@ -412,7 +412,7 @@ func TestApprovalService_UpsertPending_Create(t *testing.T) {
 	intID := seedIntegration(t, database)
 
 	created, err := svc.UpsertPending(db.ApprovalQueueItem{
-		MediaName:     "New Movie",
+		MediaName:     "Serenity",
 		MediaType:     "movie",
 		SizeBytes:     1000000,
 		Score:         0.90,
@@ -450,7 +450,7 @@ func TestApprovalService_UpsertPending_Update(t *testing.T) {
 
 	// Create first
 	_, err := svc.UpsertPending(db.ApprovalQueueItem{
-		MediaName:     "Existing Movie",
+		MediaName:     "Serenity",
 		MediaType:     "movie",
 		SizeBytes:     1000000,
 		Score:         0.80,
@@ -463,7 +463,7 @@ func TestApprovalService_UpsertPending_Update(t *testing.T) {
 
 	// Upsert again with updated reason and score
 	created, err := svc.UpsertPending(db.ApprovalQueueItem{
-		MediaName:     "Existing Movie",
+		MediaName:     "Serenity",
 		MediaType:     "movie",
 		SizeBytes:     2000000,
 		Score:         0.95,
@@ -522,7 +522,7 @@ func TestApprovalService_IsSnoozed(t *testing.T) {
 	}
 
 	// Different media name should not be snoozed
-	if svc.IsSnoozed("Other Show", "show") {
+	if svc.IsSnoozed("Firefly - Season 2", "show") {
 		t.Error("expected IsSnoozed=false for different media")
 	}
 }
@@ -535,7 +535,7 @@ func TestApprovalService_BulkUnsnooze(t *testing.T) {
 	intID := seedIntegration(t, database)
 
 	// Create 3 items, reject 2 of them
-	for i, name := range []string{"Movie A", "Movie B", "Movie C"} {
+	for i, name := range []string{"Serenity", "Serenity 2", "Serenity 3"} {
 		item := db.ApprovalQueueItem{
 			MediaName: name, MediaType: "movie",
 			SizeBytes: 1000, IntegrationID: intID, ExternalID: string(rune('1' + i)),
@@ -657,7 +657,7 @@ func TestApprovalService_RecoverOrphans(t *testing.T) {
 
 	// Create an approved item (orphaned — no deletion in progress)
 	item := db.ApprovalQueueItem{
-		MediaName: "Orphaned Movie", MediaType: "movie",
+		MediaName: "Serenity", MediaType: "movie",
 		SizeBytes: 1000, IntegrationID: intID, ExternalID: "orphan",
 		Status: db.StatusApproved,
 	}
@@ -927,6 +927,95 @@ func TestApprovalService_ClearQueue_PublishesEvent(t *testing.T) {
 	}
 }
 
+func TestApprovalService_ClearQueueForDiskGroup(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	intID := seedIntegration(t, database)
+
+	// Create two disk groups
+	dg1 := db.DiskGroup{MountPath: "/mnt/media1", TotalBytes: 1e9, UsedBytes: 9e8, ThresholdPct: 80, TargetPct: 70}
+	dg2 := db.DiskGroup{MountPath: "/mnt/media2", TotalBytes: 1e9, UsedBytes: 9e8, ThresholdPct: 80, TargetPct: 70}
+	if err := database.Create(&dg1).Error; err != nil {
+		t.Fatalf("Failed to create disk group 1: %v", err)
+	}
+	if err := database.Create(&dg2).Error; err != nil {
+		t.Fatalf("Failed to create disk group 2: %v", err)
+	}
+
+	// Seed items: 2 pending in group 1, 1 pending in group 2, 1 approved in group 1
+	dg1ID := dg1.ID
+	dg2ID := dg2.ID
+	items := []db.ApprovalQueueItem{
+		{MediaName: "Firefly", MediaType: "show", SizeBytes: 5000, IntegrationID: intID, ExternalID: "1", Status: db.StatusPending, DiskGroupID: &dg1ID},
+		{MediaName: "Serenity", MediaType: "movie", SizeBytes: 3000, IntegrationID: intID, ExternalID: "2", Status: db.StatusPending, DiskGroupID: &dg1ID},
+		{MediaName: "Firefly - Season 1", MediaType: "season", SizeBytes: 8000, IntegrationID: intID, ExternalID: "3", Status: db.StatusPending, DiskGroupID: &dg2ID},
+		{MediaName: "Firefly - Season 2", MediaType: "season", SizeBytes: 4000, IntegrationID: intID, ExternalID: "4", Status: db.StatusApproved, DiskGroupID: &dg1ID},
+	}
+	for i := range items {
+		if err := database.Create(&items[i]).Error; err != nil {
+			t.Fatalf("Failed to create item %d: %v", i, err)
+		}
+	}
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	// Clear only group 1
+	count, err := svc.ClearQueueForDiskGroup(dg1ID)
+	if err != nil {
+		t.Fatalf("ClearQueueForDiskGroup returned error: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 items cleared from group 1, got %d", count)
+	}
+
+	// Verify group 2 item and group 1 approved item remain
+	var remaining []db.ApprovalQueueItem
+	database.Order("external_id ASC").Find(&remaining)
+	if len(remaining) != 2 {
+		t.Fatalf("expected 2 remaining items, got %d", len(remaining))
+	}
+	// Group 2 pending item should be untouched
+	if remaining[0].ExternalID != "3" || remaining[0].Status != db.StatusPending {
+		t.Errorf("expected group 2 pending item (ext ID 3), got ext=%q status=%q", remaining[0].ExternalID, remaining[0].Status)
+	}
+	// Group 1 approved item should be preserved
+	if remaining[1].ExternalID != "4" || remaining[1].Status != db.StatusApproved {
+		t.Errorf("expected group 1 approved item (ext ID 4), got ext=%q status=%q", remaining[1].ExternalID, remaining[1].Status)
+	}
+
+	// Verify event published
+	select {
+	case evt := <-ch:
+		cleared, ok := evt.(events.ApprovalQueueClearedEvent)
+		if !ok {
+			t.Fatalf("expected ApprovalQueueClearedEvent, got %T", evt)
+		}
+		if cleared.Count != 2 {
+			t.Errorf("expected event count 2, got %d", cleared.Count)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for queue cleared event")
+	}
+}
+
+func TestApprovalService_ClearQueueForDiskGroup_NoItems(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewApprovalService(database, bus)
+
+	// Clear a nonexistent disk group — should return 0, no error, no event
+	count, err := svc.ClearQueueForDiskGroup(999)
+	if err != nil {
+		t.Fatalf("ClearQueueForDiskGroup returned error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 items cleared, got %d", count)
+	}
+}
+
 // seedDiskGroup creates a minimal disk group for FK references.
 func seedDiskGroup(t *testing.T, database *gorm.DB) uint {
 	t.Helper()
@@ -962,8 +1051,8 @@ func TestApprovalService_ListPendingForDiskGroup(t *testing.T) {
 	for _, item := range []db.ApprovalQueueItem{
 		{MediaName: "Firefly", MediaType: "show", Status: db.StatusPending, IntegrationID: intID, ExternalID: "1", DiskGroupID: &dgID},
 		{MediaName: "Serenity", MediaType: "movie", Status: db.StatusPending, IntegrationID: intID, ExternalID: "2", DiskGroupID: &dgID},
-		{MediaName: "Other Show", MediaType: "show", Status: db.StatusPending, IntegrationID: intID, ExternalID: "3", DiskGroupID: &otherDGID},
-		{MediaName: "Rejected Show", MediaType: "show", Status: db.StatusRejected, IntegrationID: intID, ExternalID: "4", DiskGroupID: &dgID},
+		{MediaName: "Firefly - Season 2", MediaType: "show", Status: db.StatusPending, IntegrationID: intID, ExternalID: "3", DiskGroupID: &otherDGID},
+		{MediaName: "Firefly - Season 1", MediaType: "show", Status: db.StatusRejected, IntegrationID: intID, ExternalID: "4", DiskGroupID: &dgID},
 	} {
 		if err := database.Create(&item).Error; err != nil {
 			t.Fatalf("Failed to create item: %v", err)
@@ -1264,9 +1353,9 @@ func TestApprovalService_ListSnoozedKeys(t *testing.T) {
 	items := []db.ApprovalQueueItem{
 		{MediaName: "Firefly", MediaType: "show", SizeBytes: 1000, IntegrationID: intID, ExternalID: "1", Status: db.StatusRejected, SnoozedUntil: &snoozedUntil, DiskGroupID: &dgID},
 		{MediaName: "Serenity", MediaType: "movie", SizeBytes: 2000, IntegrationID: intID, ExternalID: "2", Status: db.StatusRejected, SnoozedUntil: &snoozedUntil, DiskGroupID: &dgID},
-		{MediaName: "Other Show", MediaType: "show", SizeBytes: 3000, IntegrationID: intID, ExternalID: "3", Status: db.StatusRejected, SnoozedUntil: &snoozedUntil, DiskGroupID: &otherDGID},
-		{MediaName: "Pending Show", MediaType: "show", SizeBytes: 4000, IntegrationID: intID, ExternalID: "4", Status: db.StatusPending, DiskGroupID: &dgID},
-		{MediaName: "Expired Snooze", MediaType: "movie", SizeBytes: 5000, IntegrationID: intID, ExternalID: "5", Status: db.StatusRejected, SnoozedUntil: &expiredSnooze, DiskGroupID: &dgID},
+		{MediaName: "Firefly - Season 2", MediaType: "show", SizeBytes: 3000, IntegrationID: intID, ExternalID: "3", Status: db.StatusRejected, SnoozedUntil: &snoozedUntil, DiskGroupID: &otherDGID},
+		{MediaName: "Firefly - Season 1", MediaType: "show", SizeBytes: 4000, IntegrationID: intID, ExternalID: "4", Status: db.StatusPending, DiskGroupID: &dgID},
+		{MediaName: "Serenity 2", MediaType: "movie", SizeBytes: 5000, IntegrationID: intID, ExternalID: "5", Status: db.StatusRejected, SnoozedUntil: &expiredSnooze, DiskGroupID: &dgID},
 	}
 	for i := range items {
 		if err := database.Create(&items[i]).Error; err != nil {
@@ -1295,7 +1384,7 @@ func TestApprovalService_ListSnoozedKeys(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListSnoozedKeys returned error: %v", err)
 		}
-		if keys[db.MediaKey("Other Show", "show")] {
+		if keys[db.MediaKey("Firefly - Season 2", "show")] {
 			t.Error("should not include items from other disk group")
 		}
 	})
@@ -1305,7 +1394,7 @@ func TestApprovalService_ListSnoozedKeys(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListSnoozedKeys returned error: %v", err)
 		}
-		if keys[db.MediaKey("Pending Show", "show")] {
+		if keys[db.MediaKey("Firefly - Season 1", "show")] {
 			t.Error("should not include pending items")
 		}
 	})
@@ -1315,7 +1404,7 @@ func TestApprovalService_ListSnoozedKeys(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListSnoozedKeys returned error: %v", err)
 		}
-		if keys[db.MediaKey("Expired Snooze", "movie")] {
+		if keys[db.MediaKey("Serenity 2", "movie")] {
 			t.Error("should not include items with expired snooze")
 		}
 	})
@@ -1328,8 +1417,8 @@ func TestApprovalService_ListSnoozedKeys(t *testing.T) {
 		if len(keys) != 1 {
 			t.Fatalf("expected 1 snoozed key for other DG, got %d", len(keys))
 		}
-		if !keys[db.MediaKey("Other Show", "show")] {
-			t.Error("expected Other Show|show in snoozed keys for other DG")
+		if !keys[db.MediaKey("Firefly - Season 2", "show")] {
+			t.Error("expected Firefly - Season 2|show in snoozed keys for other DG")
 		}
 	})
 }
@@ -1405,8 +1494,8 @@ func TestApprovalService_BulkUpsertPending(t *testing.T) {
 
 	t.Run("handles mixed creates and updates", func(t *testing.T) {
 		items := []db.ApprovalQueueItem{
-			{MediaName: "Firefly", MediaType: "show", SizeBytes: 7000, Score: 0.99, IntegrationID: intID, ExternalID: "1", DiskGroupID: &dgID, Trigger: db.TriggerEngine},   // exists → update
-			{MediaName: "New Movie", MediaType: "movie", SizeBytes: 2000, Score: 0.5, IntegrationID: intID, ExternalID: "3", DiskGroupID: &dgID, Trigger: db.TriggerEngine}, // new → create
+			{MediaName: "Firefly", MediaType: "show", SizeBytes: 7000, Score: 0.99, IntegrationID: intID, ExternalID: "1", DiskGroupID: &dgID, Trigger: db.TriggerEngine},    // exists → update
+			{MediaName: "Serenity 2", MediaType: "movie", SizeBytes: 2000, Score: 0.5, IntegrationID: intID, ExternalID: "3", DiskGroupID: &dgID, Trigger: db.TriggerEngine}, // new → create
 		}
 		created, updated, err := svc.BulkUpsertPending(items)
 		if err != nil {
@@ -1424,7 +1513,7 @@ func TestApprovalService_BulkUpsertPending(t *testing.T) {
 		// Create a rejected item
 		snoozedUntil := time.Now().UTC().Add(24 * time.Hour)
 		rejected := db.ApprovalQueueItem{
-			MediaName: "Rejected Show", MediaType: "show", SizeBytes: 9000,
+			MediaName: "Firefly - Season 1", MediaType: "show", SizeBytes: 9000,
 			IntegrationID: intID, ExternalID: "99", Status: db.StatusRejected,
 			SnoozedUntil: &snoozedUntil, DiskGroupID: &dgID,
 		}
@@ -1434,7 +1523,7 @@ func TestApprovalService_BulkUpsertPending(t *testing.T) {
 
 		// Try to upsert with same media_name/media_type — should create a new pending entry
 		items := []db.ApprovalQueueItem{
-			{MediaName: "Rejected Show", MediaType: "show", SizeBytes: 8000, Score: 0.6, IntegrationID: intID, ExternalID: "99", DiskGroupID: &dgID, Trigger: db.TriggerEngine},
+			{MediaName: "Firefly - Season 1", MediaType: "show", SizeBytes: 8000, Score: 0.6, IntegrationID: intID, ExternalID: "99", DiskGroupID: &dgID, Trigger: db.TriggerEngine},
 		}
 		created, _, err := svc.BulkUpsertPending(items)
 		if err != nil {
@@ -1446,7 +1535,7 @@ func TestApprovalService_BulkUpsertPending(t *testing.T) {
 
 		// Verify the rejected item is unchanged
 		var rejectedEntry db.ApprovalQueueItem
-		database.Where("media_name = ? AND status = ?", "Rejected Show", db.StatusRejected).First(&rejectedEntry)
+		database.Where("media_name = ? AND status = ?", "Firefly - Season 1", db.StatusRejected).First(&rejectedEntry)
 		if rejectedEntry.SizeBytes != 9000 {
 			t.Errorf("rejected item should be unchanged, got SizeBytes=%d", rejectedEntry.SizeBytes)
 		}

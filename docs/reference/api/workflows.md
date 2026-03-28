@@ -66,7 +66,7 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 Note the `id` in the response — you need it for the next steps.
 
-### Step 6: Test the connection
+### Step 5: Test the connection
 
 ```bash
 curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
@@ -81,7 +81,7 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 A successful response confirms Capacitarr can reach your Sonarr instance. If it fails, verify the URL and API key.
 
-### Step 7: Trigger the first engine run
+### Step 6: Trigger the first engine run
 
 ```bash
 curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
@@ -330,7 +330,7 @@ The server replays any events that occurred between the last received ID and now
 
 ### Supported event types
 
-All 39 event types are documented in the [Architecture](../architecture.md#event-types-39-total) page.
+All 53 event types are documented in the [Architecture](../architecture.md#event-types-53-total) page.
 
 ---
 

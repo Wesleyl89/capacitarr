@@ -81,20 +81,24 @@
                         <UiSelectItem value="PB">PB</UiSelectItem>
                       </UiSelectContent>
                     </UiSelect>
-                    <button
-                      class="text-emerald-500 hover:text-emerald-400 transition-colors"
+                    <UiButton
+                      variant="ghost"
+                      size="icon-sm"
+                      class="h-auto w-auto p-0 text-emerald-500 hover:text-emerald-400 transition-colors"
                       title="Apply"
                       @click="applyInlineOverride(dg)"
                     >
                       <component :is="CheckIcon" class="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      class="text-muted-foreground hover:text-foreground transition-colors"
+                    </UiButton>
+                    <UiButton
+                      variant="ghost"
+                      size="icon-sm"
+                      class="h-auto w-auto p-0 text-muted-foreground hover:text-foreground transition-colors"
                       title="Cancel"
                       @click="cancelInlineOverride(dg)"
                     >
                       <component :is="XIcon" class="w-3.5 h-3.5" />
-                    </button>
+                    </UiButton>
                   </template>
                   <template v-else>
                     <span
@@ -111,21 +115,25 @@
                     >
                       {{ formatBytes(effectiveTotal(dg)) }}
                     </span>
-                    <button
-                      class="text-muted-foreground/40 hover:text-foreground transition-colors"
+                    <UiButton
+                      variant="ghost"
+                      size="icon-sm"
+                      class="h-auto w-auto p-0 text-muted-foreground/40 hover:text-foreground transition-colors"
                       title="Edit disk size"
                       @click="startInlineOverride(dg)"
                     >
                       <component :is="PencilIcon" class="w-3 h-3" />
-                    </button>
-                    <button
+                    </UiButton>
+                    <UiButton
                       v-if="hasActiveOverride(dg)"
-                      class="text-muted-foreground/40 hover:text-destructive transition-colors"
+                      variant="ghost"
+                      size="icon-sm"
+                      class="h-auto w-auto p-0 text-muted-foreground/40 hover:text-destructive transition-colors"
                       title="Clear custom size"
                       @click="clearAndSaveOverride(dg)"
                     >
                       <component :is="XIcon" class="w-3 h-3" />
-                    </button>
+                    </UiButton>
                   </template>
                 </div>
               </div>

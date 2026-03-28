@@ -58,14 +58,6 @@ func NewVersionService(preferences PreferencesReader, bus *events.EventBus, appV
 	}
 }
 
-// SetAppVersion sets the application version. Called by main.go after Registry
-// construction when the version string is known.
-func (s *VersionService) SetAppVersion(v string) {
-	s.mu.Lock()
-	s.appVersion = v
-	s.mu.Unlock()
-}
-
 // SetReleasesURL overrides the GitHub releases URL. Intended for use in tests only.
 func (s *VersionService) SetReleasesURL(url string) {
 	s.mu.Lock()

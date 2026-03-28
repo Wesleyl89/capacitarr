@@ -249,7 +249,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 	// Test DATETIME round-trip via AuditLogEntry.CreatedAt
 	now := time.Now().Truncate(time.Second)
 	log := AuditLogEntry{
-		MediaName: "type-test",
+		MediaName: "Firefly",
 		MediaType: "series",
 		Action:    "deleted",
 		SizeBytes: 9876543210, // large INTEGER
@@ -275,8 +275,8 @@ func TestDataTypeRoundTrip(t *testing.T) {
 	}
 
 	// TEXT round-trip
-	if retrieved.MediaName != "type-test" {
-		t.Errorf("TEXT round-trip: expected 'type-test', got %q", retrieved.MediaName)
+	if retrieved.MediaName != "Firefly" {
+		t.Errorf("TEXT round-trip: expected 'Firefly', got %q", retrieved.MediaName)
 	}
 
 	// REAL round-trip via DiskGroup.ThresholdPct
@@ -305,7 +305,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 
 	// NULL round-trip — ScoreDetails is nullable TEXT
 	logWithNull := AuditLogEntry{
-		MediaName: "null-test",
+		MediaName: "Firefly",
 		MediaType: "movie",
 		Action:    "dry_delete",
 	}
@@ -326,7 +326,7 @@ func TestDataTypeRoundTrip(t *testing.T) {
 	// Zero-value DATETIME — verify it doesn't panic or corrupt
 	var zeroTime time.Time
 	logZero := AuditLogEntry{
-		MediaName: "zero-time-test",
+		MediaName: "Firefly",
 		MediaType: "movie",
 		Action:    "deleted",
 		CreatedAt: zeroTime,
@@ -341,8 +341,8 @@ func TestDataTypeRoundTrip(t *testing.T) {
 	}
 
 	// Verify the row was stored and retrieved without error
-	if retrievedZero.MediaName != "zero-time-test" {
-		t.Errorf("Zero-time round-trip: expected 'zero-time-test', got %q", retrievedZero.MediaName)
+	if retrievedZero.MediaName != "Firefly" {
+		t.Errorf("Zero-time round-trip: expected 'Firefly', got %q", retrievedZero.MediaName)
 	}
 }
 

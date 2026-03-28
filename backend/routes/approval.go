@@ -158,24 +158,6 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "collectionGroup is required")
 		}
 
-		// Find pending items in this collection group
-		items, err := reg.Approval.ListQueue("pending", 200, nil)
-		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to query approval queue")
-		}
-
-		var groupItems []uint
-		for _, item := range items {
-			if item.CollectionGroup == body.CollectionGroup {
-				groupItems = append(groupItems, item.ID)
-			}
-		}
-
-		if len(groupItems) == 0 {
-			return apiError(c, http.StatusNotFound, "No pending items found for collection group")
-		}
-
-		// Execute approval for each item in the group
 		deps := services.ExecuteApprovalDeps{
 			Integration: reg.Integration,
 			Deletion:    reg.Deletion,
@@ -183,20 +165,12 @@ func RegisterApprovalRoutes(g *echo.Group, reg *services.Registry) {
 			Settings:    reg.Settings,
 		}
 
-		var approved []any
-		var lastErr error
-		for _, entryID := range groupItems {
-			result, execErr := reg.Approval.ExecuteApproval(entryID, deps)
-			if execErr != nil {
-				slog.Error("Group approval: failed to approve entry", "entryID", entryID, "error", execErr)
-				lastErr = execErr
-				continue
+		approved, err := reg.Approval.ExecuteGroupApproval(body.CollectionGroup, deps)
+		if err != nil {
+			if errors.Is(err, services.ErrApprovalGroupEmpty) {
+				return apiError(c, http.StatusNotFound, "No pending items found for collection group")
 			}
-			approved = append(approved, result)
-		}
-
-		if len(approved) == 0 && lastErr != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to approve any items in collection group")
+			return apiError(c, http.StatusInternalServerError, "Failed to approve collection group")
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

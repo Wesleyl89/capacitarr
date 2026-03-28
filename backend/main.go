@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -500,7 +501,7 @@ func main() {
 	}()
 
 	// Start Server
-	if err := e.Start(":" + cfg.Port); err != nil && err != http.ErrServerClosed {
+	if err := e.Start(":" + cfg.Port); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("Server error", "component", "main", "operation", "start_server", "error", err)
 		os.Exit(1)
 	}

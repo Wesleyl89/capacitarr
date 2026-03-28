@@ -48,14 +48,18 @@ func RegisterPreferenceRoutes(protected *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Log level must be one of: "+db.FormatValidKeys(db.ValidLogLevels))
 		}
 
-		// Validate poll interval (minimum 60s, default 300s)
-		if payload.PollIntervalSeconds < 60 {
+		// Validate poll interval (minimum 60s; default to 300s if omitted/zero)
+		if payload.PollIntervalSeconds == 0 {
 			payload.PollIntervalSeconds = 300
+		} else if payload.PollIntervalSeconds < 60 {
+			return apiError(c, http.StatusBadRequest, "Poll interval must be at least 60 seconds")
 		}
 
-		// Validate deletion queue delay (10-300 seconds, default 30)
-		if payload.DeletionQueueDelaySeconds < 10 || payload.DeletionQueueDelaySeconds > 300 {
+		// Validate deletion queue delay (10-300 seconds; default to 30s if omitted/zero)
+		if payload.DeletionQueueDelaySeconds == 0 {
 			payload.DeletionQueueDelaySeconds = 30
+		} else if payload.DeletionQueueDelaySeconds < 10 || payload.DeletionQueueDelaySeconds > 300 {
+			return apiError(c, http.StatusBadRequest, "Deletion queue delay must be between 10 and 300 seconds")
 		}
 
 		// Delegate to SettingsService (handles DB save, log level change, event publishing)

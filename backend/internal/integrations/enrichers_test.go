@@ -32,8 +32,8 @@ func TestCollectionEnricher_EnrichesItemsWithNoExistingCollections(t *testing.T)
 
 	items := []MediaItem{
 		{Title: "Serenity", TMDbID: 100},
-		{Title: "Firefly Movie", TMDbID: 200},
-		{Title: "Unrelated", TMDbID: 300},
+		{Title: "Serenity 2", TMDbID: 200},
+		{Title: "Serenity 3", TMDbID: 300},
 	}
 
 	if err := enricher.Enrich(items); err != nil {

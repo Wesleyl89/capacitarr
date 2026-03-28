@@ -52,7 +52,7 @@ Obtain a JWT token. No authentication required.
 ```bash
 curl -s -X POST "$CAPACITARR_URL/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"password":"your-password"}' | jq
+  -d '{"username":"admin","password":"your-password"}' | jq
 ```
 
 ```json
@@ -84,7 +84,7 @@ Requires Bearer token authentication.
 curl -s -X PUT "$CAPACITARR_URL/auth/username" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"new-username"}' | jq
+  -d '{"newUsername":"new-username","currentPassword":"your-current-password"}' | jq
 ```
 
 ### Get API key status
@@ -243,7 +243,7 @@ If an engine run is already in progress or queued:
 
 ```bash
 curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/engine/history?limit=20" | jq
+  "$CAPACITARR_URL/engine/history?range=24h" | jq
 ```
 
 ```json
@@ -950,7 +950,7 @@ curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
   "$CAPACITARR_URL/events"
 ```
 
-See the [Architecture](../architecture.md) documentation for the complete list of 39 event types.
+See the [Architecture](../architecture.md) documentation for the complete list of 53 event types.
 
 ---
 

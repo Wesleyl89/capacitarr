@@ -31,6 +31,18 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 		slog.Debug("Disk within threshold, no action needed", "component", "poller",
 			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
 			"threshold", group.ThresholdPct)
+
+		// Clear stale approval queue items for this specific disk group.
+		// Without this, items queued when the group was above threshold would
+		// linger until ALL groups drop below threshold (the global ClearQueue).
+		if cleared, err := p.reg.Approval.ClearQueueForDiskGroup(group.ID); err != nil {
+			slog.Error("Failed to clear approval queue for disk group",
+				"component", "poller", "diskGroupID", group.ID, "error", err)
+		} else if cleared > 0 {
+			slog.Info("Approval queue cleared for disk group (below threshold)",
+				"component", "poller", "mount", group.MountPath, "cleared", cleared)
+		}
+
 		return 0
 	}
 

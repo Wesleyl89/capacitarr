@@ -59,59 +59,16 @@ func analyticsStaleContentHandler(reg *services.Registry) echo.HandlerFunc {
 // query parameter; defaults to the most degraded (highest usage %) disk group.
 func analyticsForecastHandler(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		groups, err := reg.DiskGroup.List()
+		group, err := reg.DiskGroup.GetForecastTarget(parseDiskGroupID(c))
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to list disk groups")
+			return apiError(c, http.StatusNotFound, "Disk group not found")
 		}
-
-		if len(groups) == 0 {
+		if group == nil {
 			// No disk groups configured — return empty forecast
 			return c.JSON(http.StatusOK, &services.CapacityForecast{
 				DaysUntilThreshold: -1,
 				DaysUntilFull:      -1,
 			})
-		}
-
-		// Determine which disk group to use for forecast
-		var group *services.DiskGroupForForecast
-		if dgID := parseDiskGroupID(c); dgID != nil {
-			// Use the specified disk group
-			for i := range groups {
-				if groups[i].ID == *dgID {
-					eff := groups[i].EffectiveTotalBytes()
-					group = &services.DiskGroupForForecast{
-						ID:            groups[i].ID,
-						ThresholdPct:  groups[i].ThresholdPct,
-						TotalCapacity: eff,
-						UsedCapacity:  groups[i].UsedBytes,
-					}
-					break
-				}
-			}
-			if group == nil {
-				return apiError(c, http.StatusNotFound, "Disk group not found")
-			}
-		} else {
-			// Default to the most degraded group (highest usage percentage)
-			bestIdx := 0
-			bestPct := 0.0
-			for i, g := range groups {
-				eff := g.EffectiveTotalBytes()
-				if eff > 0 {
-					pct := float64(g.UsedBytes) / float64(eff) * 100
-					if pct > bestPct {
-						bestPct = pct
-						bestIdx = i
-					}
-				}
-			}
-			eff := groups[bestIdx].EffectiveTotalBytes()
-			group = &services.DiskGroupForForecast{
-				ID:            groups[bestIdx].ID,
-				ThresholdPct:  groups[bestIdx].ThresholdPct,
-				TotalCapacity: eff,
-				UsedCapacity:  groups[bestIdx].UsedBytes,
-			}
 		}
 
 		forecast, err := reg.Metrics.GetCapacityForecast(group.ThresholdPct, group.TotalCapacity, group.UsedCapacity)

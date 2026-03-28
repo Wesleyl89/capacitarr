@@ -119,6 +119,6 @@ The 2.0.0 release includes the following breaking changes from the pre-release (
 ### Architecture
 
 - All business logic moved from route handlers to a service layer
-- Event bus replaces direct `LogActivity()` calls — 39 typed event types
+- Event bus replaces direct `LogActivity()` calls — 53 typed event types
 - SSE replaces polling for real-time UI updates
 - Notification dispatch is event-driven (subscriber) instead of inline calls

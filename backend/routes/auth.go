@@ -12,8 +12,8 @@ import (
 	"capacitarr/internal/services"
 )
 
-// LoginRequest holds the JSON body of login requests.
-type LoginRequest struct {
+// loginRequest holds the JSON body of login requests.
+type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -58,7 +58,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	loginRL := newIPRateLimiter(10, 15*time.Minute)
 
 	public.POST("/auth/login", func(c echo.Context) error {
-		var req LoginRequest
+		var req loginRequest
 		if err := c.Bind(&req); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}

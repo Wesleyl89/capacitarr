@@ -119,7 +119,7 @@ security\:zap:
 	mkdir -p $(CURDIR)/zap-out
 	chmod 777 $(CURDIR)/zap-out
 	docker run --rm --network=host \
-		-v $(CURDIR)/docs/api/openapi.yaml:/zap/openapi.yaml:ro \
+		-v $(CURDIR)/docs/reference/api/openapi.yaml:/zap/openapi.yaml:ro \
 		-v $(CURDIR)/zap-out:/zap/wrk:rw \
 		ghcr.io/zaproxy/zaproxy:stable \
 		zap-api-scan.py \

@@ -19,12 +19,14 @@
       >
         <component :is="iconMap[toast.type]" class="mt-0.5 h-5 w-5 shrink-0" />
         <span class="flex-1 text-sm">{{ toast.message }}</span>
-        <button
-          class="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100 transition-opacity"
+        <UiButton
+          variant="ghost"
+          size="icon-sm"
+          class="shrink-0 rounded h-auto w-auto p-0.5 opacity-60 hover:opacity-100 transition-opacity"
           @click="removeToast(toast.id)"
         >
           <XIcon class="h-4 w-4" />
-        </button>
+        </UiButton>
       </div>
     </TransitionGroup>
   </div>

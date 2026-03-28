@@ -59,8 +59,6 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		req.ID = 0 // ensure auto-increment
-		req.CreatedAt = time.Now()
-		req.UpdatedAt = time.Now()
 
 		created, createErr := reg.NotificationChannel.Create(req)
 		if createErr != nil {
@@ -119,6 +117,8 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 		existing.OnThresholdBreach = req.OnThresholdBreach
 		existing.OnUpdateAvailable = req.OnUpdateAvailable
 		existing.OnApprovalActivity = req.OnApprovalActivity
+		existing.OnDryRunDigest = req.OnDryRunDigest
+		existing.OnIntegrationStatus = req.OnIntegrationStatus
 		existing.UpdatedAt = time.Now()
 
 		updated, updateErr := reg.NotificationChannel.Update(existing.ID, *existing)

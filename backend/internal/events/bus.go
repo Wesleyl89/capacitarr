@@ -81,23 +81,6 @@ func (b *EventBus) Subscribe() chan Event {
 	return ch
 }
 
-// SubscribeWithBuffer creates a new subscriber channel with a custom buffer size.
-// Use this for subscribers that may process events more slowly or need extra
-// capacity during high-volume deletion cycles (e.g., notification dispatch).
-// The caller must eventually call Unsubscribe to release resources.
-func (b *EventBus) SubscribeWithBuffer(size int) chan Event {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	ch := make(chan Event, size)
-	if !b.closed {
-		b.subscribers[ch] = struct{}{}
-	} else {
-		close(ch)
-	}
-	return ch
-}
-
 // Unsubscribe removes a subscriber channel and closes it.
 // It is safe to call Unsubscribe multiple times for the same channel.
 func (b *EventBus) Unsubscribe(ch chan Event) {

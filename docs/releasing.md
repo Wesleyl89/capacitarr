@@ -128,7 +128,7 @@ These jobs are defined in `.github/workflows/ci.yml`. Lint and test jobs run in 
 | Job | Group | Tool / Action | Purpose |
 |-----|-------|---------------|---------|
 | `lint-go` | lint | `golangci/golangci-lint-action` (v2.11.4) | Go linting |
-| `lint-frontend` | lint | pnpm + Node.js 22 | ESLint + Prettier + TypeScript typecheck |
+| `lint-frontend` | lint | pnpm + Node.js 24 | ESLint + Prettier + TypeScript typecheck |
 | `test-go` | test | Go 1.26 | Go unit tests |
 | `test-frontend` | test | pnpm + Vitest | Frontend unit tests |
 | `build-docker` | build | `docker/setup-buildx-action` | Multi-arch Docker smoke test (no push) |

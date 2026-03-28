@@ -46,9 +46,8 @@
       <div class="flex flex-col items-center sm:flex-row sm:items-center gap-3">
         <!-- ECharts Gauge Arc -->
         <div
-          class="shrink-0 rounded-full"
+          class="shrink-0 rounded-full w-[140px] h-[105px]"
           :class="{ 'gauge-critical': rawUsagePct >= (group.thresholdPct || 85) }"
-          style="width: 140px; height: 105px"
         >
           <ClientOnly>
             <VChart :option="gaugeOption" :autoresize="true" class="h-full w-full" />

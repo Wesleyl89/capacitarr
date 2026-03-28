@@ -1103,16 +1103,16 @@ table tr {
 @keyframes engine-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    box-shadow: 0 0 0 0 oklch(from var(--color-primary) l c h / 0.4);
   }
   50% {
-    box-shadow: 0 0 12px 4px hsl(var(--primary) / 0.25);
+    box-shadow: 0 0 12px 4px oklch(from var(--color-primary) l c h / 0.25);
   }
 }
 
 .engine-running-glow {
   animation: engine-pulse 2s ease-in-out infinite;
-  border-color: hsl(var(--primary) / 0.5);
+  border-color: oklch(from var(--color-primary) l c h / 0.5);
 }
 
 /* Update Available — breathing pulse on the version icon */

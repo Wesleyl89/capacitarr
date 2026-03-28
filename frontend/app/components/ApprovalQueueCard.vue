@@ -439,9 +439,10 @@ onUnmounted(() => {
                   <div class="flex-1 min-w-0 cursor-pointer" @click="showDetail(group)">
                     <span class="inline-flex items-center gap-1.5">
                       <span class="text-sm font-medium truncate">{{ group.showTitle }}</span>
-                      <button
+                      <UiButton
                         v-if="group.seasonCount > 0"
-                        class="text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
+                        variant="ghost"
+                        class="h-auto p-0 text-muted-foreground hover:text-foreground transition-colors shrink-0 inline-flex items-center gap-0.5"
                         :aria-label="
                           expandedKeys.has(group.key) ? 'Collapse seasons' : 'Expand seasons'
                         "
@@ -457,7 +458,7 @@ onUnmounted(() => {
                             group.seasonCount !== 1 ? 's' : ''
                           }})</span
                         >
-                      </button>
+                      </UiButton>
                       <UiBadge
                         variant="secondary"
                         class="capitalize text-[10px] px-1.5 py-0 shrink-0"

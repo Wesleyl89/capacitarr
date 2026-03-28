@@ -100,7 +100,7 @@ Gitleaks scans the entire git history for accidentally committed secrets. The fo
 | Allowlisted Path Pattern | Reason |
 |--------------------------|--------|
 | `*_test.go` | Go test files contain fake API keys (`valid-api-key-12345`, `secret12345678`) and test JWT tokens used as fixtures in middleware, integration, and auth tests |
-| `docs/api/` | API documentation contains example JWT tokens (`eyJhbGciOiJIUzI1NiIs...`) and example API keys (`ck_a1b2c3d4e5f6...`) in curl command examples |
+| `docs/reference/api/` | API documentation contains example JWT tokens (`eyJhbGciOiJIUzI1NiIs...`) and example API keys (`ck_a1b2c3d4e5f6...`) in curl command examples |
 | `docs/plans/` | Plan documents may reference example credentials in design discussions |
 
 **All allowlisted patterns are documented in `.gitleaks.toml` with rationale.** Gitleaks remains active for all production source code, configuration files, and scripts.
@@ -126,14 +126,13 @@ Semgrep scans **614 files** (every file tracked by git except the marketing site
 
 | File | Line | Semgrep Rule | Rationale |
 |------|------|-------------|-----------|
-| `backend/internal/testutil/testutil.go` | 259 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | `TestJWTSecret` is a test-only constant used to sign JWT tokens in unit tests. It is never used in production code. |
+| `backend/internal/testutil/testutil.go` | 246 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | `TestJWTSecret` is a test-only constant used to sign JWT tokens in unit tests. It is never used in production code. |
 | `backend/routes/auth.go` | 92 | `go.lang.security.audit.net.cookie-missing-secure` | The `Secure` flag is set to `cfg.SecureCookies` which evaluates to `true` when `SECURE_COOKIES=true`. Semgrep cannot evaluate runtime configuration. |
 | `backend/routes/auth.go` | 106 | `cookie-missing-httponly`, `cookie-missing-secure` | The `authenticated` cookie is intentionally non-HttpOnly so the Vue SPA can detect auth state via JavaScript. It contains no secrets (just the string `"true"`). The JWT cookie (which holds the actual token) IS HttpOnly. `Secure` is conditional as above. |
 | `backend/routes/middleware_test.go` | 130 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | Test intentionally signs a JWT with the wrong secret (`"wrong-secret"`) to verify the middleware rejects tokens signed with incorrect keys. |
 | `backend/routes/middleware_test.go` | 233 | `cookie-missing-httponly`, `cookie-missing-secure` | Test request attaches a JWT cookie to simulate browser behavior. HttpOnly/Secure are server-side attributes set when the cookie is issued by the login handler, not when the browser sends the cookie back. |
-| `backend/internal/db/migrate.go` | 94 | `go.lang.security.audit.database.string-formatted-query` | `hasColumn` uses `PRAGMA table_info(engine_run_stats)` with a hardcoded table name, not user input. The `nosemgrep` annotation is on the line above the query to suppress the false positive. |
-| `frontend/app/composables/useEventStream.ts` | 180 | `unsafe-formatstring` | Template literal in `console.warn` uses `eventType` which is an internal SSE event type name from the server's event bus, not user-supplied input. |
-| `frontend/app/pages/help.vue` | 66 | `avoid-v-html` | HTML is pre-rendered at build time by the Vite announcements plugin from developer-authored markdown files in `frontend/announcements/`. Content is never user-supplied; it ships with each release and is version-controlled. |
+| `frontend/app/composables/useEventStream.ts` | 214 | `unsafe-formatstring` | Template literal in `console.warn` uses `eventType` which is an internal SSE event type name from the server's event bus, not user-supplied input. |
+| `frontend/app/pages/help.vue` | 75 | `avoid-v-html` | HTML is pre-rendered at build time by the Vite announcements plugin from developer-authored markdown files in `frontend/announcements/`. Content is never user-supplied; it ships with each release and is version-controlled. |
 
 **Inline `nolint` annotations — every suppressed golangci-lint finding with rationale:**
 
@@ -143,21 +142,20 @@ Semgrep scans **614 files** (every file tracked by git except the marketing site
 | `backend/internal/config/config.go` | 85 | gosec G706 | Logging trusted env var header name (`AUTH_HEADER`), not user input |
 | `backend/internal/config/config.go` | 92 | gosec G706 | Security warning logs trusted env var header name, not user input |
 | `backend/internal/engine/score_test.go` | 29 | unparam | `value` is always 10 in tests but the parameter documents intent for the helper function |
-| `backend/internal/events/sse_broadcaster.go` | 99 | errcheck | `json.Marshal` of a `string` value cannot fail |
+| `backend/internal/events/sse_broadcaster.go` | 262 | errcheck | `json.Marshal` of a `string` value cannot fail |
 | `backend/internal/integrations/arr_helpers.go` | 246 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
 | `backend/internal/integrations/httpclient.go` | 42 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
 | `backend/internal/integrations/httpclient.go` | 50 | gosec G706 | Sanitized URL, HTTP status code, and duration are safe to log |
 | `backend/internal/integrations/jellystat_test.go` | 11 | gosec G101 | `testJellystatAPIKey` is a test fixture constant, not a real credential |
-| `backend/internal/integrations/plex.go` | 208 | exhaustive | Plex API only returns `movie`, `show`, `season`, and `episode` media types |
-| `backend/internal/integrations/sonarr.go` | 199 | exhaustive | Sonarr integration only handles `show` and `season` types |
-| `backend/internal/integrations/sonarr.go` | 247 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
+| `backend/internal/integrations/plex.go` | 217 | exhaustive | Plex API only returns `movie`, `show`, `season`, and `episode` media types |
+| `backend/internal/integrations/sonarr.go` | 164 | exhaustive | Sonarr integration only handles `show` and `season` types |
+| `backend/internal/integrations/sonarr.go` | 212 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
 | `backend/internal/notifications/httpclient.go` | 52 | gosec G107 | URL is from admin-configured webhook notification settings |
 | `backend/internal/services/auth.go` | 213 | gosec G706 | Username is from a trusted reverse proxy header, not user-supplied |
-| `backend/internal/services/deletion.go` | 395 | errcheck | `rate.Limiter.Wait` with `context.Background()` never returns non-nil error |
-| `backend/internal/services/notification_dispatch_test.go` | 347 | dupl | Test structure intentionally similar to related dispatch tests |
-| `backend/internal/services/notification_dispatch_test.go` | 382 | dupl | Test structure intentionally similar to related dispatch tests |
-| `backend/internal/services/version.go` | 161 | gosec G107 | URL is set at construction time (`DefaultGitLabReleasesURL`), not user-tainted |
-| `backend/internal/services/version.go` | 173 | gosec G706 | Status code is a server-side integer, not user-tainted input |
+| `backend/internal/services/notification_dispatch_test.go` | 325 | dupl | Test structure intentionally similar to related dispatch tests |
+| `backend/internal/services/notification_dispatch_test.go` | 354 | dupl | Test structure intentionally similar to related dispatch tests |
+| `backend/internal/services/version.go` | 153 | gosec G107 | URL is set at construction time (`DefaultGitHubReleasesURL`), not user-tainted |
+| `backend/internal/services/version.go` | 165 | gosec G706 | Status code is a server-side integer, not user-tainted input |
 | `backend/routes/auth.go` | 92 | gosec | `Secure` flag conditionally set via `cfg.SecureCookies` — not all self-hosted environments use HTTPS. Also suppresses Semgrep (see nosemgrep table above) |
 | `backend/routes/auth.go` | 106 | gosec | `HttpOnly` intentionally `false`: cookie contains no secrets (just `"true"`), allows SPA auth state detection. `Secure` conditional as above. Also suppresses Semgrep (see nosemgrep table above) |
 | `backend/routes/security_test.go` | 194 | gosec G101 | Test fixture API key in integration creation request body, not a real credential |
@@ -216,7 +214,7 @@ When transitive npm dependencies have known vulnerabilities but the upstream par
 | `minimatch` | `>=5.1.8` / `>=9.0.7` / `>=10.2.3` (per-major) | [GHSA-7r86-cg39-jmmj](https://github.com/advisories/GHSA-7r86-cg39-jmmj), [GHSA-23c5-xmqv-rm74](https://github.com/advisories/GHSA-23c5-xmqv-rm74) | High | `nuxt > nitropack > @vercel/nft > glob`, `@nuxt/eslint` |
 | `picomatch` | `2.3.2` (for <2.3.2) / `4.0.4` (for >=4.0.0 <4.0.4) | [GHSA-c2c7-rcm5-vvqj](https://github.com/advisories/GHSA-c2c7-rcm5-vvqj), [GHSA-3v7f-55p6-f55p](https://github.com/advisories/GHSA-3v7f-55p6-f55p) | High / Moderate | `@vite-pwa/nuxt > workbox-build > @rollup/pluginutils`, `nuxt > unstorage > anymatch` |
 | `rollup` | `>=4.59.0` | [GHSA-mw96-cpmx-2vgc](https://github.com/advisories/GHSA-mw96-cpmx-2vgc) | High | `nuxt > vite` |
-| `serialize-javascript` | `>=7.0.3` | [GHSA-5c6j-r48x-rmvq](https://github.com/advisories/GHSA-5c6j-r48x-rmvq) | High | `nuxt > nitropack > @rollup/plugin-terser` |
+| `serialize-javascript` | `>=7.0.5` | [GHSA-5c6j-r48x-rmvq](https://github.com/advisories/GHSA-5c6j-r48x-rmvq), [GHSA-qj8w-gfj5-8c6v](https://github.com/advisories/GHSA-qj8w-gfj5-8c6v) | Moderate | `@vite-pwa/nuxt > vite-plugin-pwa > workbox-build > @rollup/plugin-terser` |
 | `svgo` | `>=4.0.1` | [GHSA-xpqw-6gx7-v673](https://github.com/advisories/GHSA-xpqw-6gx7-v673) | High | `nuxt > @nuxt/vite-builder > cssnano > postcss-svgo` |
 | `simple-git` | `>=3.32.3` | [GHSA-r275-fr43-pm7q](https://github.com/advisories/GHSA-r275-fr43-pm7q) | Critical | `nuxt > @nuxt/devtools` |
 | `tar` | `>=7.5.11` | [GHSA-9ppj-qmqm-q256](https://github.com/advisories/GHSA-9ppj-qmqm-q256) | High | `nuxt > nitropack > @vercel/nft > @mapbox/node-pre-gyp` |
@@ -311,10 +309,15 @@ Pinned Docker image versions are **re-evaluated on a regular basis** to pick up 
 | `semgrep/semgrep` | `1.155.0` | Multi-language SAST scanning |
 | `orhunp/git-cliff` | `2.12.0` | Changelog generation from commits |
 | `goreleaser/goreleaser` | `v2.14.1` | Cross-compiled release binary builds |
-| `docker` | `27` | Docker-in-Docker for image builds |
-| `alpine` | `3.21` | Lightweight base for CI utility jobs |
+| `ghcr.io/zaproxy/zaproxy` | `stable` | OWASP ZAP DAST scanning (see note below) |
+| `alpine` | `3.21` | Production runtime base image (digest-pinned in Dockerfile) |
 | `node` | `24-alpine` | Frontend build and test |
 | `golang` | `1.26-alpine` | Backend build and test |
+| `pnpm` (CLI) | `10.32.1` | Node.js package manager (pinned in Makefile and Dockerfile) |
+
+> **Note on ZAP `:stable` tag:** The OWASP ZAP proxy image (`ghcr.io/zaproxy/zaproxy`) uses the `:stable` tag because ZAP does not publish individually versioned image tags. The `:stable` tag tracks the latest stable release. This is an accepted exception to the pinning policy — ZAP is used only for local DAST scanning (`make security:zap`), not in CI pipelines, so a compromised image cannot affect builds or releases.
+
+**Next reassessment date:** 2026-04-27
 
 ### Important Caveats
 

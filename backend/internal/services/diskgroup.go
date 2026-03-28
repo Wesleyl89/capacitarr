@@ -53,6 +53,56 @@ func (s *DiskGroupService) List() ([]db.DiskGroup, error) {
 	return groups, nil
 }
 
+// GetForecastTarget resolves the disk group to use for capacity forecasting.
+// If diskGroupID is non-nil, returns that specific group. Otherwise, returns
+// the most degraded group (highest usage percentage). Returns an error if
+// no disk groups exist or the specified group is not found.
+func (s *DiskGroupService) GetForecastTarget(diskGroupID *uint) (*DiskGroupForForecast, error) {
+	groups, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	if len(groups) == 0 {
+		return nil, nil // No disk groups — caller should return empty forecast
+	}
+
+	if diskGroupID != nil {
+		for i := range groups {
+			if groups[i].ID == *diskGroupID {
+				eff := groups[i].EffectiveTotalBytes()
+				return &DiskGroupForForecast{
+					ID:            groups[i].ID,
+					ThresholdPct:  groups[i].ThresholdPct,
+					TotalCapacity: eff,
+					UsedCapacity:  groups[i].UsedBytes,
+				}, nil
+			}
+		}
+		return nil, fmt.Errorf("disk group %d not found", *diskGroupID)
+	}
+
+	// Default: most degraded group (highest usage percentage)
+	bestIdx := 0
+	bestPct := 0.0
+	for i, g := range groups {
+		eff := g.EffectiveTotalBytes()
+		if eff > 0 {
+			pct := float64(g.UsedBytes) / float64(eff) * 100
+			if pct > bestPct {
+				bestPct = pct
+				bestIdx = i
+			}
+		}
+	}
+	eff := groups[bestIdx].EffectiveTotalBytes()
+	return &DiskGroupForForecast{
+		ID:            groups[bestIdx].ID,
+		ThresholdPct:  groups[bestIdx].ThresholdPct,
+		TotalCapacity: eff,
+		UsedCapacity:  groups[bestIdx].UsedBytes,
+	}, nil
+}
+
 // GetByID returns a single disk group by ID.
 func (s *DiskGroupService) GetByID(id uint) (*db.DiskGroup, error) {
 	var group db.DiskGroup

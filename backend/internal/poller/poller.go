@@ -308,11 +308,10 @@ func (p *Poller) poll() {
 		totalDeletionsQueued += p.evaluateAndCleanDisk(&acc, *group, fetched.allItems, fetched.registry, runStatsID, prefs, weights, rules, evalCtx)
 	}
 
-	// Clear the approval queue only when ALL disk groups are below threshold.
-	// This uses global ClearQueue() to wipe all pending/rejected items since
-	// no disk group needs action. Items are scoped to disk groups via DiskGroupID,
-	// so per-group clearing happens automatically during next evaluation when
-	// individual groups drop below threshold.
+	// Final sweep: clear any remaining approval queue items when ALL disk groups
+	// are below threshold. Per-group clearing happens in evaluateAndCleanDisk via
+	// ClearQueueForDiskGroup, but this global pass catches edge cases (e.g., items
+	// whose disk group was removed between cycles).
 	if !anyThresholdBreached && len(mediaMounts) > 0 {
 		if cleared, err := p.reg.Approval.ClearQueue(); err != nil {
 			slog.Error("Failed to clear approval queue", "component", "poller", "error", err)
