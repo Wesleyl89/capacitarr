@@ -1,4 +1,19 @@
 <script setup lang="ts">
+interface RepoStatsData {
+  stars: number
+  forks: number
+  version: string | null
+  fetchedAt: string
+}
+
+let repoStats: RepoStatsData = { stars: 0, forks: 0, version: null, fetchedAt: '' }
+try {
+  repoStats = await import('~/repo-stats.json').then(m => m.default) as RepoStatsData
+}
+catch {
+  // Stats file not available — use fallback zeros
+}
+
 interface Stat {
   value: number
   suffix?: string
@@ -7,10 +22,10 @@ interface Stat {
 }
 
 const stats: Stat[] = [
-  { value: 9, suffix: '+', label: 'Integrations', icon: 'i-lucide-plug' },
-  { value: 6, label: 'Scoring Dimensions', icon: 'i-lucide-sliders-horizontal' },
-  { value: 100, suffix: '%', label: 'Open Source', icon: 'i-lucide-code-2' },
-  { value: 0, suffix: '', label: 'Required Cloud Services', icon: 'i-lucide-cloud-off' },
+  { value: 11, suffix: '+', label: 'Integrations', icon: 'i-lucide-plug' },
+  { value: 7, label: 'Scoring Dimensions', icon: 'i-lucide-sliders-horizontal' },
+  { value: repoStats.stars, suffix: '', label: 'GitHub Stars', icon: 'i-lucide-star' },
+  { value: repoStats.forks, suffix: '', label: 'Forks', icon: 'i-lucide-git-fork' },
 ]
 
 const containerRef = ref<HTMLElement | null>(null)

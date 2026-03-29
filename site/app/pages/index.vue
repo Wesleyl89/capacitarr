@@ -1,4 +1,19 @@
 <script setup lang="ts">
+interface RepoStatsData {
+  stars: number
+  forks: number
+  version: string | null
+  fetchedAt: string
+}
+
+let repoStats: RepoStatsData = { stars: 0, forks: 0, version: null, fetchedAt: '' }
+try {
+  repoStats = await import('~/repo-stats.json').then(m => m.default) as RepoStatsData
+}
+catch {
+  // Stats file not available — use fallback zeros
+}
+
 useSeoMeta({
   titleTemplate: '',
   title: 'Capacitarr — Intelligent Media Library Management',
@@ -150,6 +165,22 @@ observe(ctaRef, ctaVisible)
           >
             View on GitHub
           </UButton>
+        </div>
+
+        <!-- Social proof micro-bar -->
+        <div v-if="repoStats.stars > 0 || repoStats.version" class="hero-social-proof">
+          <span v-if="repoStats.version" class="hero-proof-item">
+            <UIcon name="i-lucide-tag" class="size-3.5" />
+            {{ repoStats.version }}
+          </span>
+          <span v-if="repoStats.stars > 0" class="hero-proof-item">
+            <UIcon name="i-lucide-star" class="size-3.5" />
+            {{ repoStats.stars.toLocaleString() }} stars
+          </span>
+          <span v-if="repoStats.forks > 0" class="hero-proof-item">
+            <UIcon name="i-lucide-git-fork" class="size-3.5" />
+            {{ repoStats.forks.toLocaleString() }} forks
+          </span>
         </div>
 
         <!-- Hero screenshot gallery -->
@@ -499,6 +530,28 @@ observe(ctaRef, ctaVisible)
 
 .hero-cta-primary {
   box-shadow: 0 0 20px -5px rgba(139, 92, 246, 0.4);
+}
+
+/* Social proof micro-bar */
+.hero-social-proof {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-neutral-400);
+}
+
+:root.dark .hero-social-proof {
+  color: var(--color-neutral-500);
+}
+
+.hero-proof-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 /* Hero gallery wrapper */

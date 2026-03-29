@@ -5,6 +5,8 @@
 [![License][license-badge]][license-url]
 [![Docker Hub][dockerhub-badge]][dockerhub-url]
 [![Security][security-badge]][security-url]
+[![GitHub Stars][stars-badge]][stars-url]
+[![GitHub Last Commit][lastcommit-badge]][lastcommit-url]
 
 > *Intelligent media library capacity manager for the \*arr ecosystem.*
 
@@ -68,6 +70,20 @@ Developed with AI assistance. Hardened with 7 blocking SAST/SCA tools, DAST scan
 
 [Discord](https://discord.gg/fbFkND5qgt) · [Reddit](https://www.reddit.com/r/capacitarr/) · [Contributing](CONTRIBUTING.md)
 
+## 📊 Activity
+
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/7203908b271be233de70d8c6f15d716c661f5bbe.svg "Repobeats analytics image")
+
+## ⭐ Star History
+
+<a href="https://star-history.com/#Ghent/capacitarr&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ghent/capacitarr&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Ghent/capacitarr&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Ghent/capacitarr&type=Date" />
+ </picture>
+</a>
+
 ## 🇺🇦 Ukraine
 
 I stand with Ukraine. This project is built with the belief that freedom, sovereignty, and self-determination matter — for people and for software.
@@ -96,3 +112,7 @@ If you still want to support development directly: [GitHub Sponsors](https://git
 [dockerhub-url]: https://hub.docker.com/r/ghentstarshadow/capacitarr
 [security-badge]: https://img.shields.io/badge/security-hardened-brightgreen?logo=owasp&logoColor=white
 [security-url]: SECURITY.md
+[stars-badge]: https://img.shields.io/github/stars/Ghent/capacitarr?style=flat&logo=github&label=stars
+[stars-url]: https://github.com/Ghent/capacitarr/stargazers
+[lastcommit-badge]: https://img.shields.io/github/last-commit/Ghent/capacitarr?logo=github
+[lastcommit-url]: https://github.com/Ghent/capacitarr/commits/main

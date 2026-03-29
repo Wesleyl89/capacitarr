@@ -8,8 +8,7 @@ Thank you to everyone who has contributed to Capacitarr!
 
 ## Contributors
 
-<!-- Add contributors here as they contribute to the project -->
-<!-- Format: - **Name** (@username) — Brief description of contribution -->
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/7203908b271be233de70d8c6f15d716c661f5bbe.svg "Repobeats analytics image")
 
 ## Credits & Acknowledgments
 
