@@ -1,10 +1,11 @@
 // Shared constants for the Capacitarr frontend.
 // These mirror the backend constants in internal/db/models.go and must be kept in sync.
 
-// Execution modes — used in PreferenceSet.executionMode field.
+// Execution modes — used in DiskGroup.mode and PreferenceSet.defaultDiskGroupMode.
 export const MODE_AUTO = 'auto' as const;
 export const MODE_DRY_RUN = 'dry-run' as const;
 export const MODE_APPROVAL = 'approval' as const;
+export const MODE_SUNSET = 'sunset' as const;
 
 // Tiebreaker methods — used in PreferenceSet.tiebreakerMethod field.
 export const TIEBREAKER_SIZE_DESC = 'size_desc' as const;

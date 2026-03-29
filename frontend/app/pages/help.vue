@@ -510,6 +510,13 @@
                 {{ $t('help.executionModes.autoDesc') }}</span
               >
             </li>
+            <li class="flex items-start gap-2">
+              <span class="mt-1 w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+              <span
+                ><strong class="text-foreground">{{ $t('help.executionModes.sunset') }}</strong> —
+                {{ $t('help.executionModes.sunsetDesc') }}</span
+              >
+            </li>
           </ul>
           <div class="mt-2 rounded-lg border border-border bg-muted/50 p-3">
             <p class="flex items-start gap-2">

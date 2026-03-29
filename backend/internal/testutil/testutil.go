@@ -104,7 +104,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	// Seed default preferences (mirrors db.Init behaviour)
 	pref := db.PreferenceSet{
 		ID:                    1,
-		ExecutionMode:         db.ModeDryRun,
+		DefaultDiskGroupMode:  db.ModeDryRun,
 		LogLevel:              db.LogLevelInfo,
 		AuditLogRetentionDays: 30,
 		PollIntervalSeconds:   300,
@@ -226,6 +226,7 @@ func SetupTestServerWithRegistry(t *testing.T, database *gorm.DB) (*echo.Echo, *
 	routes.RegisterVersionRoutes(protected, reg)
 	routes.RegisterBackupRoutes(protected, reg, "v0.0.0-test")
 	routes.RegisterDeletionQueueRoutes(protected, reg)
+	routes.RegisterSunsetRoutes(protected, reg)
 	routes.RegisterAnalyticsRoutes(protected, reg)
 	routes.RegisterPreviewRoutes(protected, reg)
 	routes.RegisterMigrationRoutes(api, protected, reg)

@@ -42,7 +42,7 @@ type Result struct {
 // The source database is opened read-only. Only configuration data is imported:
 //   - IntegrationConfig (with overseerr → seerr type transformation)
 //   - DiskGroup (thresholds, target percentages, and overrides)
-//   - PreferenceSet (with execution_mode forced to dry-run for safety)
+//   - PreferenceSet (with default_disk_group_mode forced to dry-run for safety)
 //   - CustomRule (re-linked to new integration IDs via old→new mapping)
 //   - NotificationConfig (with OnIntegrationStatus defaulting to true)
 //
@@ -106,7 +106,7 @@ func MigrateFrom(sourcePath string, destDB *gorm.DB) (*Result, error) {
 	}
 	result.DiskGroupsImported = dgCount
 
-	// Import preferences (execution_mode forced to dry-run for safety)
+	// Import preferences (default_disk_group_mode forced to dry-run for safety)
 	if err := importPreferences(ctx, sourceSQLDB, destDB); err != nil {
 		slog.Warn("Failed to import preferences", "component", "migration", "error", err)
 	} else {
@@ -313,7 +313,7 @@ func importPreferences(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) error 
 		"log_level":                source.LogLevel,
 		"audit_log_retention_days": source.AuditLogRetentionDays,
 		"poll_interval_seconds":    source.PollIntervalSeconds,
-		"execution_mode":           db.ModeDryRun, // Safety: force dry-run after migration
+		"default_disk_group_mode":  db.ModeDryRun, // Safety: force dry-run after migration
 		"tiebreaker_method":        source.TiebreakerMethod,
 		"deletions_enabled":        source.DeletionsEnabled,
 		"snooze_duration_hours":    source.SnoozeDurationHours,

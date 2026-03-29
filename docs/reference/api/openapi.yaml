@@ -1867,6 +1867,95 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   # ===========================================================================
+  # Sunset Queue
+  # ===========================================================================
+  /sunset-queue:
+    get:
+      operationId: listSunsetQueue
+      tags: [Sunset Queue]
+      summary: List all sunset queue items with countdown
+      responses:
+        "200":
+          description: Sunset queue items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SunsetQueueItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sunset-queue/{id}:
+    delete:
+      operationId: cancelSunsetItem
+      tags: [Sunset Queue]
+      summary: Cancel a sunset queue item (remove from queue, restore label)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item cancelled
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: rescheduleSunsetItem
+      tags: [Sunset Queue]
+      summary: Reschedule a sunset item (change deletion date)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deletionDate:
+                  type: string
+                  format: date
+                  description: New deletion date (YYYY-MM-DD)
+              required:
+                - deletionDate
+      responses:
+        "200":
+          description: Item rescheduled
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /sunset-queue/clear:
+    post:
+      operationId: clearSunsetQueue
+      tags: [Sunset Queue]
+      summary: Cancel all sunset queue items
+      responses:
+        "200":
+          description: Queue cleared
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sunset-queue/restore-posters:
+    post:
+      operationId: restoreAllPosters
+      tags: [Sunset Queue]
+      summary: Restore all original posters (emergency)
+      responses:
+        "200":
+          description: Posters restored
+        "503":
+          description: Poster overlay service unavailable
+
+  # ===========================================================================
   # Deletion Queue
   # ===========================================================================
   /deletion-queue:
@@ -2568,9 +2657,10 @@ components:
           minimum: 60
           default: 300
           example: 300
-        executionMode:
+        defaultDiskGroupMode:
           type: string
-          enum: [dry-run, approval, auto]
+          description: Default execution mode for newly discovered disk groups
+          enum: [dry-run, approval, auto, sunset]
           default: dry-run
         tiebreakerMethod:
           type: string
@@ -2611,7 +2701,7 @@ components:
           format: date-time
       required:
         - logLevel
-        - executionMode
+        - defaultDiskGroupMode
         - tiebreakerMethod
 
     # ---- Rules ----
@@ -3112,9 +3202,9 @@ components:
     WorkerStats:
       type: object
       properties:
-        executionMode:
+        defaultDiskGroupMode:
           type: string
-          enum: [dry-run, approval, auto]
+          enum: [dry-run, approval, auto, sunset]
           example: dry-run
         isRunning:
           type: boolean
@@ -3169,7 +3259,7 @@ components:
           format: int64
           description: Total items that failed during deletion
       required:
-        - executionMode
+        - defaultDiskGroupMode
         - isRunning
         - pollIntervalSeconds
         - queueDepth

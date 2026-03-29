@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -70,4 +71,49 @@ func DoAPIRequest(url, headerKey, headerValue string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// DoAPIRequestWithBody creates an HTTP request with the specified method, body,
+// and auth header. Used for POST/PUT operations (label management, item updates).
+// Accepts non-200 success codes (200, 204) since some APIs return 204 No Content.
+func DoAPIRequestWithBody(method, url string, body []byte, headerKey, headerValue string) error {
+	start := time.Now()
+	sanitizedURL := logger.SanitizeURL(url)
+
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), method, url, bodyReader)
+	if err != nil {
+		return err
+	}
+	if headerKey != "" {
+		req.Header.Set(headerKey, headerValue)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
+	if err != nil {
+		slog.Debug("Integration API request failed", "component", "integrations",
+			"method", method, "url", sanitizedURL, "error", err, "duration", time.Since(start).String())
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	slog.Debug("Integration API response", "component", "integrations",
+		"method", method, "url", sanitizedURL, "status", resp.StatusCode, "duration", time.Since(start).String())
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key or token")
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }

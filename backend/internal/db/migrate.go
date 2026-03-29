@@ -32,7 +32,11 @@ func RunMigrations(sqlDB *sql.DB) error {
 
 	// Post-migration schema fixups — idempotent DDL that checks column existence.
 	if err := fixupEngineRunStats(sqlDB); err != nil {
-		return fmt.Errorf("post-migration fixup: %w", err)
+		return fmt.Errorf("post-migration fixup (engine_run_stats): %w", err)
+	}
+
+	if err := fixupDefaultDiskGroupModeRename(sqlDB); err != nil {
+		return fmt.Errorf("post-migration fixup (default_disk_group_mode): %w", err)
 	}
 
 	slog.Info("Database migrations applied successfully", "component", "db")
@@ -88,12 +92,51 @@ func fixupEngineRunStats(sqlDB *sql.DB) error {
 	return nil
 }
 
+// fixupDefaultDiskGroupModeRename renames execution_mode → default_disk_group_mode
+// on preference_sets and resets the value to "dry-run". This is part of the 3.0
+// migration: execution mode moves from a global preference to a per-disk-group
+// field. The global column becomes "default_disk_group_mode" — used only as the
+// default for newly auto-discovered disk groups.
+//
+// Fresh installs already have the correct column from the GORM model. This fixup
+// only affects databases upgrading from 2.x where "execution_mode" still exists.
+// Requires SQLite 3.25.0+ for ALTER TABLE RENAME COLUMN.
+func fixupDefaultDiskGroupModeRename(sqlDB *sql.DB) error {
+	hasOld := hasColumnInTable(sqlDB, "preference_sets", "execution_mode")
+	hasNew := hasColumnInTable(sqlDB, "preference_sets", "default_disk_group_mode")
+
+	if !hasOld || hasNew {
+		// Fresh install (has new column from GORM model) or already renamed — nothing to do
+		return nil
+	}
+
+	ctx := context.Background()
+
+	slog.Info("Renaming preference_sets.execution_mode → default_disk_group_mode", "component", "db")
+	if _, err := sqlDB.ExecContext(ctx, "ALTER TABLE preference_sets RENAME COLUMN execution_mode TO default_disk_group_mode"); err != nil {
+		return fmt.Errorf("rename execution_mode→default_disk_group_mode: %w", err)
+	}
+
+	// Safety reset: all disk groups start in dry-run after the 3.0 upgrade.
+	// The per-group mode is a fundamentally different execution model; carrying
+	// forward "auto" or "approval" risks unexpected behavior.
+	slog.Info("Resetting default_disk_group_mode to dry-run for 3.0 upgrade safety", "component", "db")
+	if _, err := sqlDB.ExecContext(ctx, "UPDATE preference_sets SET default_disk_group_mode = 'dry-run'"); err != nil {
+		return fmt.Errorf("reset default_disk_group_mode to dry-run: %w", err)
+	}
+
+	return nil
+}
+
 // tableColumnChecker returns a function that queries PRAGMA table_info for
 // a specific hardcoded table. Each entry uses a string-literal query so
 // no runtime string formatting touches the SQL.
 var tableColumnCheckers = map[string]func(*sql.DB) (*sql.Rows, error){
 	"engine_run_stats": func(db *sql.DB) (*sql.Rows, error) {
 		return db.QueryContext(context.Background(), "PRAGMA table_info(engine_run_stats)")
+	},
+	"preference_sets": func(db *sql.DB) (*sql.Rows, error) {
+		return db.QueryContext(context.Background(), "PRAGMA table_info(preference_sets)")
 	},
 }
 

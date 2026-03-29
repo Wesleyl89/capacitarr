@@ -879,3 +879,202 @@ func (e ServerStartedEvent) EventMessage() string {
 	}
 	return "Server started"
 }
+
+// =============================================================================
+// Sunset Events
+// =============================================================================
+
+// SunsetCreatedEvent is published when an item is added to the sunset queue.
+type SunsetCreatedEvent struct {
+	MediaName     string `json:"mediaName"`
+	MediaType     string `json:"mediaType"`
+	DiskGroupID   uint   `json:"diskGroupId"`
+	DaysRemaining int    `json:"daysRemaining"`
+	DeletionDate  string `json:"deletionDate"`
+}
+
+// EventType implements Event.
+func (e SunsetCreatedEvent) EventType() string { return "sunset_created" }
+
+// EventMessage implements Event.
+func (e SunsetCreatedEvent) EventMessage() string {
+	return fmt.Sprintf("%s added to sunset queue — leaving in %d days", e.MediaName, e.DaysRemaining)
+}
+
+// SunsetCancelledEvent is published when a sunset item is cancelled (removed from queue).
+type SunsetCancelledEvent struct {
+	MediaName   string `json:"mediaName"`
+	MediaType   string `json:"mediaType"`
+	DiskGroupID uint   `json:"diskGroupId"`
+}
+
+// EventType implements Event.
+func (e SunsetCancelledEvent) EventType() string { return "sunset_cancelled" }
+
+// EventMessage implements Event.
+func (e SunsetCancelledEvent) EventMessage() string {
+	return fmt.Sprintf("%s removed from sunset queue", e.MediaName)
+}
+
+// SunsetExpiredEvent is published when a sunset countdown expires and the item
+// is handed to DeletionService for actual removal.
+type SunsetExpiredEvent struct {
+	MediaName   string `json:"mediaName"`
+	MediaType   string `json:"mediaType"`
+	DiskGroupID uint   `json:"diskGroupId"`
+	SizeBytes   int64  `json:"sizeBytes"`
+}
+
+// EventType implements Event.
+func (e SunsetExpiredEvent) EventType() string { return "sunset_expired" }
+
+// EventMessage implements Event.
+func (e SunsetExpiredEvent) EventMessage() string {
+	return fmt.Sprintf("%s sunset countdown expired — queued for deletion", e.MediaName)
+}
+
+// SunsetRescheduledEvent is published when a sunset item's deletion date is changed.
+type SunsetRescheduledEvent struct {
+	MediaName        string `json:"mediaName"`
+	MediaType        string `json:"mediaType"`
+	DiskGroupID      uint   `json:"diskGroupId"`
+	NewDaysRemaining int    `json:"newDaysRemaining"`
+	NewDeletionDate  string `json:"newDeletionDate"`
+}
+
+// EventType implements Event.
+func (e SunsetRescheduledEvent) EventType() string { return "sunset_rescheduled" }
+
+// EventMessage implements Event.
+func (e SunsetRescheduledEvent) EventMessage() string {
+	return fmt.Sprintf("%s rescheduled — now leaving in %d days", e.MediaName, e.NewDaysRemaining)
+}
+
+// SunsetEscalatedEvent is published when a sunset-mode disk group breaches
+// thresholdPct and items are force-expired to free space down to targetPct.
+type SunsetEscalatedEvent struct {
+	DiskGroupID  uint  `json:"diskGroupId"`
+	ItemsExpired int   `json:"itemsExpired"`
+	BytesFreed   int64 `json:"bytesFreed"`
+}
+
+// EventType implements Event.
+func (e SunsetEscalatedEvent) EventType() string { return "sunset_escalated" }
+
+// EventMessage implements Event.
+func (e SunsetEscalatedEvent) EventMessage() string {
+	return fmt.Sprintf("Sunset escalation: %d items force-expired to free space", e.ItemsExpired)
+}
+
+// SunsetMisconfiguredEvent is published when the engine skips a sunset-mode
+// disk group because sunsetPct is NULL (not yet configured by the user).
+type SunsetMisconfiguredEvent struct {
+	DiskGroupID uint   `json:"diskGroupId"`
+	MountPath   string `json:"mountPath"`
+}
+
+// EventType implements Event.
+func (e SunsetMisconfiguredEvent) EventType() string { return "sunset_misconfigured" }
+
+// EventMessage implements Event.
+func (e SunsetMisconfiguredEvent) EventMessage() string {
+	return fmt.Sprintf("Sunset mode skipped for %s — sunset threshold not configured", e.MountPath)
+}
+
+// SunsetLabelAppliedEvent is published when the sunset label is applied to an
+// item in a media server.
+type SunsetLabelAppliedEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+	Label         string `json:"label"`
+}
+
+// EventType implements Event.
+func (e SunsetLabelAppliedEvent) EventType() string { return "sunset_label_applied" }
+
+// EventMessage implements Event.
+func (e SunsetLabelAppliedEvent) EventMessage() string {
+	return fmt.Sprintf("Label %q applied to %s", e.Label, e.MediaName)
+}
+
+// SunsetLabelRemovedEvent is published when the sunset label is removed from an
+// item in a media server.
+type SunsetLabelRemovedEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+	Label         string `json:"label"`
+}
+
+// EventType implements Event.
+func (e SunsetLabelRemovedEvent) EventType() string { return "sunset_label_removed" }
+
+// EventMessage implements Event.
+func (e SunsetLabelRemovedEvent) EventMessage() string {
+	return fmt.Sprintf("Label %q removed from %s", e.Label, e.MediaName)
+}
+
+// SunsetLabelFailedEvent is published when a label operation fails on a media server.
+type SunsetLabelFailedEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+	Label         string `json:"label"`
+	Error         string `json:"error"`
+}
+
+// EventType implements Event.
+func (e SunsetLabelFailedEvent) EventType() string { return "sunset_label_failed" }
+
+// EventMessage implements Event.
+func (e SunsetLabelFailedEvent) EventMessage() string {
+	return fmt.Sprintf("Failed to apply label %q to %s: %s", e.Label, e.MediaName, e.Error)
+}
+
+// =============================================================================
+// Poster Overlay Events
+// =============================================================================
+
+// PosterOverlayAppliedEvent is published when an overlay poster is uploaded
+// to a media server.
+type PosterOverlayAppliedEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+	DaysRemaining int    `json:"daysRemaining"`
+}
+
+// EventType implements Event.
+func (e PosterOverlayAppliedEvent) EventType() string { return "poster_overlay_applied" }
+
+// EventMessage implements Event.
+func (e PosterOverlayAppliedEvent) EventMessage() string {
+	return fmt.Sprintf("Poster overlay applied to %s — leaving in %d days", e.MediaName, e.DaysRemaining)
+}
+
+// PosterOverlayRestoredEvent is published when an original poster is restored
+// on a media server (after cancel, expiry, or escalation).
+type PosterOverlayRestoredEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+}
+
+// EventType implements Event.
+func (e PosterOverlayRestoredEvent) EventType() string { return "poster_overlay_restored" }
+
+// EventMessage implements Event.
+func (e PosterOverlayRestoredEvent) EventMessage() string {
+	return fmt.Sprintf("Original poster restored for %s", e.MediaName)
+}
+
+// PosterOverlayFailedEvent is published when a poster overlay operation fails.
+type PosterOverlayFailedEvent struct {
+	MediaName     string `json:"mediaName"`
+	IntegrationID uint   `json:"integrationId"`
+	Error         string `json:"error"`
+}
+
+// EventType implements Event.
+func (e PosterOverlayFailedEvent) EventType() string { return "poster_overlay_failed" }
+
+// EventMessage implements Event.
+func (e PosterOverlayFailedEvent) EventMessage() string {
+	return fmt.Sprintf("Poster overlay failed for %s: %s", e.MediaName, e.Error)
+}

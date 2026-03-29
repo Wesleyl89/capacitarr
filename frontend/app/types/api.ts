@@ -42,6 +42,8 @@ export interface DiskGroup {
   totalBytesOverride?: number | null;
   thresholdPct: number;
   targetPct: number;
+  mode: string;
+  sunsetPct?: number | null;
   integrations?: DiskGroupIntegration[];
   createdAt: string;
   updatedAt: string;
@@ -56,12 +58,15 @@ export interface PreferenceSet {
   logLevel: string;
   auditLogRetentionDays: number;
   pollIntervalSeconds: number;
-  executionMode: string;
+  defaultDiskGroupMode: string;
   tiebreakerMethod: string;
   deletionsEnabled: boolean;
   snoozeDurationHours: number;
   deletionQueueDelaySeconds: number;
   checkForUpdates: boolean;
+  sunsetDays: number;
+  sunsetLabel: string;
+  posterOverlayEnabled: boolean;
   updatedAt: string;
 }
 
@@ -162,7 +167,7 @@ export interface ActivityEvent {
 // ---------------------------------------------------------------------------
 
 export interface WorkerStats {
-  executionMode: string;
+  defaultDiskGroupMode: string;
   isRunning: boolean;
   pollIntervalSeconds: number;
   queueDepth: number;
@@ -353,12 +358,43 @@ export interface PreferencesExport {
   ratingWeight: number;
   timeInLibraryWeight: number;
   seriesStatusWeight: number;
-  executionMode: string;
+  defaultDiskGroupMode: string;
   tiebreakerMethod: string;
   deletionsEnabled: boolean;
   snoozeDurationHours: number;
   checkForUpdates: boolean;
+  sunsetDays?: number;
+  sunsetLabel?: string;
+  posterOverlayEnabled?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Sunset Queue
+// ---------------------------------------------------------------------------
+
+export interface SunsetQueueItem {
+  id: number;
+  mediaName: string;
+  mediaType: string;
+  tmdbId?: number;
+  integrationId: number;
+  sizeBytes: number;
+  score: number;
+  scoreDetails?: string;
+  posterUrl?: string;
+  diskGroupId: number;
+  collectionGroup?: string;
+  trigger: string;
+  deletionDate: string;
+  daysRemaining: number;
+  labelApplied: boolean;
+  posterOverlayActive: boolean;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Settings Backup Rules
+// ---------------------------------------------------------------------------
 
 export interface RuleExport {
   field: string;

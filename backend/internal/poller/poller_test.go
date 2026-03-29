@@ -41,7 +41,7 @@ func setupPollerTestDB(t *testing.T) (*gorm.DB, *services.Registry) {
 
 	pref := db.PreferenceSet{
 		ID:                    1,
-		ExecutionMode:         db.ModeDryRun,
+		DefaultDiskGroupMode:  db.ModeDryRun,
 		LogLevel:              db.LogLevelInfo,
 		AuditLogRetentionDays: 30,
 		PollIntervalSeconds:   300,

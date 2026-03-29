@@ -149,7 +149,7 @@ curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
   -H "Content-Type: application/json" \
   "$CAPACITARR_URL/preferences" \
   -d '{
-    "executionMode": "dry-run",
+    "defaultDiskGroupMode": "dry-run",
     "tiebreakerMethod": "size_desc"
   }' | jq
 ```
@@ -338,22 +338,22 @@ All 53 event types are documented in the [Architecture](../architecture.md#event
 
 If the engine is actively deleting media and you need it to stop immediately, switch the execution mode to `dry-run`.
 
-### Step 1: Set execution mode to dry-run
+### Step 1: Set default disk group mode to dry-run
 
 ```bash
 curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
   -H "Content-Type: application/json" \
   "$CAPACITARR_URL/preferences" \
-  -d '{"executionMode":"dry-run"}' | jq
+  -d '{"defaultDiskGroupMode":"dry-run"}' | jq
 ```
 
-This takes effect immediately. The engine will continue to score media but will not delete anything.
+This sets the default mode for newly discovered disk groups. Existing disk groups retain their per-group mode setting.
 
 ### Step 2: Verify the change
 
 ```bash
 curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  "$CAPACITARR_URL/preferences" | jq '.executionMode'
+  "$CAPACITARR_URL/preferences" | jq '.defaultDiskGroupMode'
 ```
 
 Expect: `"dry-run"`
@@ -375,7 +375,7 @@ Once you have reviewed and adjusted your configuration, switch back to auto mode
 curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
   -H "Content-Type: application/json" \
   "$CAPACITARR_URL/preferences" \
-  -d '{"executionMode":"auto"}' | jq
+  -d '{"defaultDiskGroupMode":"auto"}' | jq
 ```
 
 ---

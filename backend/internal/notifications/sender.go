@@ -57,6 +57,7 @@ const (
 	AlertUpdateAvailable   AlertType = "update_available"
 	AlertApprovalActivity  AlertType = "approval_activity"
 	AlertIntegrationStatus AlertType = "integration_status"
+	AlertSunsetActivity    AlertType = "sunset_activity"
 	AlertTest              AlertType = "test"
 )
 
@@ -87,6 +88,8 @@ func TriggerLabel(t AlertType) string {
 		return "Approval Activity"
 	case AlertIntegrationStatus:
 		return "Integration Status"
+	case AlertSunsetActivity:
+		return "Sunset Activity"
 	case AlertTest:
 		return "Test"
 	default:
@@ -247,6 +250,8 @@ func alertColor(t AlertType) int {
 		return ColorAmber
 	case AlertIntegrationStatus:
 		return ColorOrange
+	case AlertSunsetActivity:
+		return ColorAmber
 	case AlertTest:
 		return ColorBlue
 	default:

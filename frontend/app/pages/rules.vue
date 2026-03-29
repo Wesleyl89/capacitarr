@@ -94,7 +94,7 @@ function onDiskGroupUpdated(updated: DiskGroup) {
 // Preferences (non-weight settings — still used for execution mode, etc.)
 // ---------------------------------------------------------------------------
 const prefs = reactive({
-  executionMode: MODE_DRY_RUN,
+  defaultDiskGroupMode: MODE_DRY_RUN,
   tiebreakerMethod: TIEBREAKER_SIZE_DESC,
   logLevel: 'info',
   auditLogRetentionDays: 30,

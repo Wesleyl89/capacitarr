@@ -85,16 +85,35 @@ type ImportResult struct {
 
 // PreferencesExport contains all PreferenceSet fields except ID and UpdatedAt,
 // plus scoring factor weights as a dynamic map.
+//
+// For backward compatibility with 2.x backup files, ExecutionMode is kept as a
+// fallback field during import. New backups write DefaultDiskGroupMode.
 type PreferencesExport struct {
 	LogLevel              string         `json:"logLevel"`
 	AuditLogRetentionDays int            `json:"auditLogRetentionDays"`
 	PollIntervalSeconds   int            `json:"pollIntervalSeconds"`
-	ExecutionMode         string         `json:"executionMode"`
+	DefaultDiskGroupMode  string         `json:"defaultDiskGroupMode"`
+	ExecutionMode         string         `json:"executionMode,omitempty"` // 2.x compat: read during import, not written in 3.x exports
 	TiebreakerMethod      string         `json:"tiebreakerMethod"`
 	DeletionsEnabled      bool           `json:"deletionsEnabled"`
 	SnoozeDurationHours   int            `json:"snoozeDurationHours"`
 	CheckForUpdates       bool           `json:"checkForUpdates"`
+	SunsetDays            int            `json:"sunsetDays,omitempty"`
+	SunsetLabel           string         `json:"sunsetLabel,omitempty"`
+	PosterOverlayEnabled  bool           `json:"posterOverlayEnabled,omitempty"`
 	FactorWeights         map[string]int `json:"factorWeights,omitempty"` // factor_key → weight (0-10)
+}
+
+// EffectiveMode returns the disk group mode from the export, handling backward
+// compatibility with 2.x backups that used ExecutionMode instead of DefaultDiskGroupMode.
+func (p PreferencesExport) EffectiveMode() string {
+	if p.DefaultDiskGroupMode != "" {
+		return p.DefaultDiskGroupMode
+	}
+	if p.ExecutionMode != "" {
+		return p.ExecutionMode
+	}
+	return db.ModeDryRun
 }
 
 // RuleExport is a single rule in the portable export format.
@@ -194,11 +213,14 @@ func (s *BackupService) Export(sections ExportSections, appVersion string) (*Set
 			LogLevel:              pref.LogLevel,
 			AuditLogRetentionDays: pref.AuditLogRetentionDays,
 			PollIntervalSeconds:   pref.PollIntervalSeconds,
-			ExecutionMode:         pref.ExecutionMode,
+			DefaultDiskGroupMode:  pref.DefaultDiskGroupMode,
 			TiebreakerMethod:      pref.TiebreakerMethod,
 			DeletionsEnabled:      pref.DeletionsEnabled,
 			SnoozeDurationHours:   pref.SnoozeDurationHours,
 			CheckForUpdates:       pref.CheckForUpdates,
+			SunsetDays:            pref.SunsetDays,
+			SunsetLabel:           pref.SunsetLabel,
+			PosterOverlayEnabled:  pref.PosterOverlayEnabled,
 			FactorWeights:         weightsMap,
 		}
 	}
@@ -451,7 +473,7 @@ func (s *BackupService) importPreferences(tx *gorm.DB, p *PreferencesExport) err
 	pref.LogLevel = p.LogLevel
 	pref.AuditLogRetentionDays = p.AuditLogRetentionDays
 	pref.PollIntervalSeconds = p.PollIntervalSeconds
-	pref.ExecutionMode = p.ExecutionMode
+	pref.DefaultDiskGroupMode = p.EffectiveMode()
 	pref.TiebreakerMethod = p.TiebreakerMethod
 	pref.DeletionsEnabled = p.DeletionsEnabled
 	pref.SnoozeDurationHours = p.SnoozeDurationHours
@@ -1019,7 +1041,7 @@ func (s *BackupService) previewPreferences(p *PreferencesExport) *PreferencesRes
 	}
 
 	addChange("logLevel", pref.LogLevel, p.LogLevel)
-	addChange("executionMode", pref.ExecutionMode, p.ExecutionMode)
+	addChange("defaultDiskGroupMode", pref.DefaultDiskGroupMode, p.EffectiveMode())
 	addChange("tiebreakerMethod", pref.TiebreakerMethod, p.TiebreakerMethod)
 	addChange("pollIntervalSeconds", fmt.Sprintf("%d", pref.PollIntervalSeconds), fmt.Sprintf("%d", p.PollIntervalSeconds))
 	addChange("auditLogRetentionDays", fmt.Sprintf("%d", pref.AuditLogRetentionDays), fmt.Sprintf("%d", p.AuditLogRetentionDays))

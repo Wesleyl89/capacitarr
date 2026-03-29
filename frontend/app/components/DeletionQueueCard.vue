@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MODE_DRY_RUN, MODE_APPROVAL } from '~/constants';
+import { MODE_DRY_RUN, MODE_APPROVAL, MODE_SUNSET } from '~/constants';
 import {
   Trash2Icon,
   XIcon,
@@ -40,6 +40,8 @@ const emptyStateMessage = computed(() => {
       return t('deletion.emptyInApproval');
     case MODE_DRY_RUN:
       return t('deletion.emptyInDryRun');
+    case MODE_SUNSET:
+      return t('deletion.emptyInSunset');
     default:
       return t('deletion.noItems');
   }

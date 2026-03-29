@@ -25,8 +25,9 @@ var ValidEffects = map[string]bool{
 }
 
 // ValidExecutionModes defines the allowed engine execution modes.
+// Used for validating both DiskGroup.Mode and PreferenceSet.DefaultDiskGroupMode.
 var ValidExecutionModes = map[string]bool{
-	ModeDryRun: true, ModeApproval: true, ModeAuto: true,
+	ModeDryRun: true, ModeApproval: true, ModeAuto: true, ModeSunset: true,
 }
 
 // ValidTiebreakerMethods defines the allowed tiebreaker sort methods.

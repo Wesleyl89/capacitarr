@@ -1,6 +1,6 @@
 # Sunset Deletion with Media Server Labels & Poster Overlays
 
-**Status:** 📋 Investigative / Draft
+**Status:** ✅ Complete
 **Scope:** Capacitarr 3.x (breaking change: per-disk-group execution modes)
 **Created:** 2026-03-28
 
@@ -31,7 +31,7 @@ The term **"sunset"** is used internally to describe the countdown/deferral life
 | **Threshold ordering** | `sunsetPct < targetPct < thresholdPct` | Escalation only frees down to `targetPct` (above sunset threshold), preserving the sunset queue. Items promised "leaving in 20 days" keep their promise unless things get catastrophic. |
 | **`sunsetPct` default** | `NULL` (not 0) | A default of 0 is dangerous — every engine cycle would see `usedPct >= 0%` and start sunsetting immediately. NULL means sunset mode won't activate until the user explicitly configures the threshold. Engine publishes a warning event if mode is `sunset` but `sunsetPct` is NULL. |
 | **TEXT for mode/status columns** | TEXT with Go-level validation (not SQL ENUM/CHECK) | SQLite has no native ENUM type. All constrained string fields in the codebase use the same pattern. CHECK constraints could be added project-wide as a separate effort. |
-| **Global `ExecutionMode`** | Renamed to `DefaultMode` on `PreferenceSet`; used only as default for new disk group creation | Existing global mode migrates to each disk group at upgrade time |
+| **Global `ExecutionMode`** | Renamed to `DefaultDiskGroupMode` on `PreferenceSet`; used only as default for new disk group creation | Existing global mode migrates to each disk group at upgrade time |
 | **Per-disk-group rules** | Deferred to separate plan | Rules are currently per-integration; scoring weights are global. Per-disk-group weight overrides are a legitimate need but independent of sunset. Sunset works correctly with global scoring. |
 
 ---
@@ -73,9 +73,9 @@ When a sunset-mode disk group breaches the deletion threshold while sunset items
 ```mermaid
 flowchart TD
     BREACH["Disk exceeds thresholdPct<br/>while sunset items exist"]
-    STEP1["1. Delete expired sunset items<br/>(countdown already finished)"]
-    STEP2["2. Delete oldest sunset items<br/>(longest in queue, most warning given)"]
-    STEP3["3. Normal immediate deletion<br/>(score-based, no sunset)"]
+    STEP1["1. Delete expired sunset items<br/>countdown already finished"]
+    STEP2["2. Delete oldest sunset items<br/>longest in queue, most warning given"]
+    STEP3["3. Normal immediate deletion<br/>score-based, no sunset period"]
     CHECK1{Freed to targetPct?}
     CHECK2{Freed to targetPct?}
 
@@ -97,7 +97,7 @@ Note: Escalation targets `targetPct`, **not** `sunsetPct`. Items in the sunset q
 
 ### The Change
 
-The global `ExecutionMode` on `PreferenceSet` is replaced by a per-disk-group `Mode` field. Each disk group independently runs in its own mode. The global setting becomes `DefaultMode` — used only as the default when new disk groups are auto-discovered.
+The global `ExecutionMode` on `PreferenceSet` is replaced by a per-disk-group `Mode` field. Each disk group independently runs in its own mode. The global setting becomes `DefaultDiskGroupMode` — used only as the default when new disk groups are auto-discovered.
 
 ### Mode Definitions
 
@@ -139,7 +139,7 @@ flowchart TD
         SU_DEL_THRESH{"usedPct >= thresholdPct?"}
         SU_ESCALATE["Escalation ladder:<br/>expired → oldest → immediate<br/>(free to targetPct only)"]
         SU_SUN_THRESH{"usedPct >= sunsetPct?"}
-        SU_QUEUE["Score + queue to sunset_queue<br/>(deletion_date = now + sunsetDays)<br/>+ apply label to media server"]
+        SU_QUEUE["Score + queue to sunset_queue<br/>deletion_date = now + sunsetDays<br/>+ apply label to media server"]
         SU_SKIP["No action"]
     end
 
@@ -180,14 +180,133 @@ flowchart TD
 
 | Column | Change | Description |
 |--------|--------|-------------|
-| `execution_mode` | Renamed to `default_mode` | Used only as default for new disk group creation; no longer the runtime mode |
+| `execution_mode` | Renamed to `default_disk_group_mode` | Used only as default for new disk group creation; no longer the runtime mode |
 
 ### Migration Path (2.x → 3.0)
 
-1. Add `mode` column to `disk_groups`, defaulting to `"dry-run"`
-2. Copy the current `preference_sets.execution_mode` value to every existing `disk_groups.mode` row
-3. Rename `execution_mode` to `default_mode` on `preference_sets`
-4. API deprecation: the global mode read/write endpoints continue to work for one minor version, proxying to `default_mode`
+The codebase uses [Goose](https://github.com/pressly/goose) (SQL-only mode) with embedded SQL files in `backend/internal/db/migrations/`. The current highest migration is `00005_schema_info.sql`. Goose automatically tracks applied migrations in its `goose_db_version` table. A separate `schema_info` table holds the `schema_family` lineage marker (`'v2'` → `'v3'`).
+
+#### Migration `00006_sunset_mode.sql`
+
+```sql
+-- +goose Up
+-- 3.0: Per-disk-group execution modes + sunset queue
+
+-- Add per-disk-group mode (all existing groups start in dry-run)
+ALTER TABLE disk_groups ADD COLUMN mode TEXT NOT NULL DEFAULT 'dry-run';
+ALTER TABLE disk_groups ADD COLUMN sunset_pct REAL DEFAULT NULL;
+
+-- Create sunset_queue table
+CREATE TABLE IF NOT EXISTS sunset_queue (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_name            TEXT NOT NULL,
+    media_type            TEXT NOT NULL,
+    tmdb_id               INTEGER,
+    integration_id        INTEGER REFERENCES integration_configs(id),
+    external_id           TEXT,
+    size_bytes            INTEGER NOT NULL DEFAULT 0,
+    score                 REAL NOT NULL DEFAULT 0,
+    score_details         TEXT,
+    poster_url            TEXT,
+    disk_group_id         INTEGER NOT NULL REFERENCES disk_groups(id),
+    collection_group      TEXT,
+    trigger               TEXT NOT NULL DEFAULT 'engine',
+    deletion_date         DATE NOT NULL,
+    label_applied         INTEGER NOT NULL DEFAULT 0,
+    poster_overlay_active INTEGER NOT NULL DEFAULT 0,
+    created_at            DATETIME,
+    updated_at            DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_sunset_queue_disk_group ON sunset_queue(disk_group_id);
+CREATE INDEX IF NOT EXISTS idx_sunset_queue_tmdb_id ON sunset_queue(tmdb_id);
+CREATE INDEX IF NOT EXISTS idx_sunset_queue_media_name ON sunset_queue(media_name);
+CREATE INDEX IF NOT EXISTS idx_sunset_queue_deletion_date ON sunset_queue(deletion_date);
+
+-- Add sunset preferences to preference_sets
+ALTER TABLE preference_sets ADD COLUMN sunset_days INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE preference_sets ADD COLUMN sunset_label TEXT NOT NULL DEFAULT 'capacitarr-sunset';
+ALTER TABLE preference_sets ADD COLUMN poster_overlay_enabled INTEGER NOT NULL DEFAULT 0;
+
+-- Update schema lineage marker
+UPDATE schema_info SET value = 'v3' WHERE key = 'schema_family';
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_sunset_queue_deletion_date;
+DROP INDEX IF EXISTS idx_sunset_queue_media_name;
+DROP INDEX IF EXISTS idx_sunset_queue_tmdb_id;
+DROP INDEX IF EXISTS idx_sunset_queue_disk_group;
+DROP TABLE IF EXISTS sunset_queue;
+UPDATE schema_info SET value = 'v2' WHERE key = 'schema_family';
+```
+
+#### Go Fixup: `execution_mode` → `default_disk_group_mode` Rename
+
+SQLite column renames require conditional logic (checking column existence). Added as a post-migration fixup in `migrate.go` following the existing `fixupEngineRunStats` pattern:
+
+```go
+func fixupDefaultDiskGroupModeRename(sqlDB *sql.DB) error {
+    // Check if old column exists; if so, rename and reset to dry-run
+    // SQLite 3.25.0+ supports ALTER TABLE RENAME COLUMN
+    // Fallback: create new column, copy, drop old (via table rebuild)
+}
+```
+
+Called from `RunMigrations()` after `goose.Up()`.
+
+#### Migration Steps Summary
+
+1. Goose applies `00006_sunset_mode.sql`: adds `mode`/`sunset_pct` to `disk_groups`, creates `sunset_queue`, adds sunset preferences, updates `schema_family` to `'v3'`
+2. Go fixup renames `execution_mode` → `default_disk_group_mode` on `preference_sets` and resets value to `"dry-run"`
+3. All existing disk groups start in `"dry-run"` (column default) — users must explicitly configure each group's mode after upgrading
+
+**Rationale for dry-run reset:** The per-group mode is a fundamentally different execution model (new engine switch paths, sunset thresholds, per-group escalation). Silently carrying forward `auto` or `approval` from the global setting risks unexpected behavior. A dry-run reset makes the breaking change visible and ensures users configure each group intentionally. This mirrors the `sunset_pct` NULL safety pattern — nothing activates without explicit configuration.
+
+**API deprecation:** The global mode read/write endpoints continue to work for one minor version, proxying to `default_disk_group_mode`.
+
+#### 1.x → 3.x Direct Upgrade Path
+
+The 1.x → 2.0 migration uses a backup-and-recreate strategy (`internal/migration/`): the 1.x database is renamed to a backup file, a fresh database is created with all Goose migrations, and `MigrateFrom()` imports configuration data from the backup using raw SQL. A direct 1.x → 3.x upgrade follows the same flow — Goose applies all migrations (00001–00006) to the fresh database, producing a 3.0 schema. Two code changes are required:
+
+**1. Update `DetectLegacySchema()` (`internal/migration/detect.go`)**
+
+The schema family check at line 70 only looks for `'v2'`. Add `'v3'` so that an existing 3.0 database is not misidentified as 1.x:
+
+```go
+// Tier 1: Explicit schema version marker (definitive)
+if hasSchemaFamily(sqlDB, "v2") || hasSchemaFamily(sqlDB, "v3") {
+    return false
+}
+```
+
+Note: the `disk_groups` table check at line 76 would still catch it as a safety net, but explicit is better than implicit.
+
+**2. Update `ConfirmNotV2()` (`internal/migration/detect.go`)**
+
+Add `"sunset_queue"` to the `v2Tables` list (rename to `knownTables` for clarity) so that a 3.0 database is never accidentally renamed:
+
+```go
+knownTables := []string{
+    "schema_info",            // migration 00005 (v2+)
+    "disk_groups",            // v2 baseline
+    "approval_queue_items",   // v2 baseline
+    "scoring_factor_weights", // v2 baseline
+    "sunset_queue",           // v3 (migration 00006)
+}
+```
+
+**3. Update `importPreferences()` (`internal/migration/migrate.go`)**
+
+Line 316 writes to `"execution_mode"`, which is renamed to `"default_disk_group_mode"` in 3.0. Update the column name in the `Updates` map:
+
+```go
+// Before (2.0):
+"execution_mode": db.ModeDryRun,
+// After (3.0):
+"default_disk_group_mode": db.ModeDryRun,
+```
+
+**No changes needed for `importDiskGroups()`** — the `mode` column defaults to `"dry-run"` from the migration DDL, and the new sunset preference columns (`sunset_days`, `sunset_label`, `poster_overlay_enabled`) get their defaults from the schema. The import code only writes fields that existed in 1.x.
 
 ### Mode Constants
 
@@ -202,7 +321,7 @@ const (
 
 ### Settings UI
 
-- **"Disk Group Defaults" section:** Default mode selector (dry-run / approval / auto / sunset). Applied when new disk groups are auto-discovered.
+- **"Disk Group Defaults" section:** Default disk group mode selector (dry-run / approval / auto / sunset). Applied when new disk groups are auto-discovered.
 - **Each disk group card:** Mode dropdown. When `sunset` is selected, sunset-specific fields appear (`sunsetPct` slider with validation against `targetPct` and `thresholdPct`).
 - The global "Running in X mode" banner is replaced by per-group mode indicators on each disk group card.
 - A summary line: e.g., "2 groups in approval, 1 in sunset, 1 in dry-run"
@@ -229,8 +348,8 @@ flowchart TD
 
     POLLER -->|"mode=approval"| APPROVAL
     POLLER -->|"mode=auto"| DELETION
-    POLLER -->|"mode=sunset<br/>(sunsetPct breached)"| SUNSET_SVC
-    POLLER -->|"mode=sunset<br/>(thresholdPct breached)"| SUNSET_SVC
+    POLLER -->|"mode=sunset<br/>sunsetPct breached"| SUNSET_SVC
+    POLLER -->|"mode=sunset<br/>thresholdPct breached"| SUNSET_SVC
     SUNSET_SVC -->|"Apply/remove labels"| MEDIA_SERVERS["Media Servers<br/>(Plex, Jellyfin, Emby)"]
     SUNSET_SVC -->|"Items in countdown"| POSTER_SVC
     SUNSET_SVC -->|"Countdown expired /<br/>Escalation"| DELETION
@@ -358,6 +477,9 @@ func (s *SunsetService) ListSunsettedKeys(diskGroupID uint) (map[string]bool, er
 
 ```go
 // SunsetDeps holds service dependencies for label management and deletion handoff.
+// Follows the same pattern as ExecuteApprovalDeps in approval.go.
+// SettingsReader is the existing interface defined in deletion.go:104-109 —
+// reuse it, do not create a new one.
 type SunsetDeps struct {
     Integration *IntegrationService
     Deletion    *DeletionService
@@ -451,10 +573,9 @@ If the user changes the label name while items are in the queue, the service sho
 
 ```go
 // LabelManagers returns all registered integrations that implement LabelManager.
-func (r *IntegrationRegistry) LabelManagers() []struct {
-    ID     uint
-    Client LabelManager
-}
+// Follows the existing map[uint]Interface pattern used by WatchProviders(),
+// LabelDataProviders(), Deleters(), etc. Returns a defensive copy.
+func (r *IntegrationRegistry) LabelManagers() map[uint]LabelManager
 ```
 
 ---
@@ -528,7 +649,7 @@ On cancel, expiry, or escalation: restore original from cache → upload → del
 
 | Preference | Type | Default | Description |
 |---|---|---|---|
-| `DefaultMode` | `string` | `"dry-run"` | Default mode for new disk groups (renamed from `ExecutionMode`) |
+| `DefaultDiskGroupMode` | `string` | `"dry-run"` | Default mode for new disk groups (renamed from `ExecutionMode`) |
 | `SunsetDays` | `int` | `30` | Default countdown period in days |
 | `SunsetLabel` | `string` | `"capacitarr-sunset"` | Label/tag applied to items in media servers when they enter the sunset queue |
 | `PosterOverlayEnabled` | `bool` | `false` | Whether to apply countdown overlays to posters |
@@ -604,8 +725,8 @@ POST   /api/v1/sunset-queue/clear     — cancel all sunset items
 
 1. New table: `sunset_queue`
 2. Add to `disk_groups`: `mode` (TEXT, default `"dry-run"`), `sunset_pct` (REAL, default `NULL`)
-3. Rename on `preference_sets`: `execution_mode` → `default_mode`; add `sunset_days`, `sunset_label`, `poster_overlay_enabled`
-4. Data migration: copy current `execution_mode` to all existing `disk_groups.mode`
+3. Rename on `preference_sets`: `execution_mode` → `default_disk_group_mode`; add `sunset_days`, `sunset_label`, `poster_overlay_enabled`
+4. Data migration: set all existing `disk_groups.mode` to `"dry-run"` (safety reset); rename `execution_mode` → `default_disk_group_mode` on `preference_sets`
 
 #### New Files
 
@@ -622,7 +743,7 @@ frontend/app/components/SunsetQueueCard.vue
 #### Modified Files
 
 ```
-backend/internal/db/models.go              — ModeSunset constant, DiskGroup.Mode/SunsetPct, PreferenceSet.DefaultMode rename + sunset prefs
+backend/internal/db/models.go              — ModeSunset constant, DiskGroup.Mode/SunsetPct, PreferenceSet.DefaultDiskGroupMode rename + sunset prefs
 backend/internal/services/registry.go      — Add Sunset to Registry
 backend/internal/integrations/types.go     — Add LabelManager interface
 backend/internal/integrations/plex.go      — LabelManager implementation
@@ -633,7 +754,7 @@ backend/internal/events/types.go           — Sunset + label events
 backend/internal/jobs/cron.go              — Daily sunset tick
 backend/internal/poller/evaluate.go        — Switch on group.Mode; sunset threshold; escalation to targetPct
 backend/routes/api.go                      — Register sunset route group
-backend/routes/settings.go                 — DefaultMode rename; disk group mode endpoints
+backend/routes/settings.go                 — DefaultDiskGroupMode rename; disk group mode endpoints
 frontend/                                  — Disk group mode selector; SunsetQueueCard; mode indicators
 ```
 
@@ -641,8 +762,8 @@ frontend/                                  — Disk group mode selector; SunsetQ
 
 1. Add `ModeSunset` constant alongside existing `ModeDryRun`/`ModeApproval`/`ModeAuto`
 2. Add `Mode`, `SunsetPct` columns to `DiskGroup` model
-3. Rename `ExecutionMode` to `DefaultMode` on `PreferenceSet`; add sunset preference fields (`SunsetDays`, `SunsetLabel`, `PosterOverlayEnabled`)
-4. Write data migration: copy global `execution_mode` to all existing `disk_groups.mode`
+3. Rename `ExecutionMode` to `DefaultDiskGroupMode` on `PreferenceSet`; add sunset preference fields (`SunsetDays`, `SunsetLabel`, `PosterOverlayEnabled`)
+4. Write data migration: set all existing `disk_groups.mode` to `"dry-run"`; reset `preference_sets.default_disk_group_mode` to `"dry-run"`
 5. Create `SunsetQueueItem` model
 6. Add validation: `sunsetPct < targetPct < thresholdPct` when `mode == "sunset"`; reject if `sunsetPct IS NULL`
 7. Create `SunsetService` with full lifecycle methods (including label application/removal)
@@ -654,7 +775,7 @@ frontend/                                  — Disk group mode selector; SunsetQ
 13. Modify `evaluateAndCleanDisk()`: switch on `group.Mode`, add sunset branch with `sunsetPct` evaluation + escalation ladder (free to `targetPct` only)
 14. Add daily cron job for sunset expiry processing
 15. Create REST API endpoints in `routes/sunset.go`
-16. Update settings routes: `DefaultMode` rename, disk group mode PATCH, sunset label preference
+16. Update settings routes: `DefaultDiskGroupMode` rename, disk group mode PATCH, sunset label preference
 17. Add notification support for new events
 18. Build frontend: disk group mode selector in settings, sunset-specific fields conditional on mode, `SunsetQueueCard.vue`, `useSunsetQueue.ts`, mode indicators per disk group card
 19. Unit tests for `SunsetService` (in-memory SQLite pattern)
@@ -738,7 +859,7 @@ Custom rules are currently per-integration; scoring factor weights are global. W
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| **3.0 breaking change** — per-disk-group modes | High | Data migration seeds existing groups with current global mode; API deprecation period; clear upgrade docs |
+| **3.0 breaking change** — per-disk-group modes | High | All existing disk groups reset to `dry-run` on upgrade (safety-first); API deprecation period for global mode endpoints; clear upgrade docs |
 | **Poster corruption** | High | Cache originals before upload; `poster_overlay_active` flag; "Restore All Posters" emergency button |
 | **Disk fills during sunset window** | High | Escalation ladder frees to `targetPct` only; `thresholdPct` is always the safety net |
 | **Media server API breakage** | Medium | Integration tests; graceful degradation |

@@ -66,8 +66,9 @@ func DetectLegacySchema(dbPath string) bool {
 		return false
 	}
 
-	// Tier 1: Explicit schema version marker (definitive, added by migration 00005)
-	if hasSchemaFamily(sqlDB, "v2") {
+	// Tier 1: Explicit schema version marker (definitive, added by migration 00005).
+	// v2 = 2.x schema, v3 = 3.x schema (per-disk-group modes + sunset queue).
+	if hasSchemaFamily(sqlDB, "v2") || hasSchemaFamily(sqlDB, "v3") {
 		return false
 	}
 
@@ -105,17 +106,18 @@ func ConfirmNotV2(dbPath string) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check multiple 2.0 tables to be thorough — any one of these existing
-	// means this is a 2.0 database that must not be renamed.
-	v2Tables := []string{
-		"schema_info",            // migration 00005 (definitive marker)
+	// Check multiple 2.0+ tables to be thorough — any one of these existing
+	// means this is a 2.0 or later database that must not be renamed.
+	knownTables := []string{
+		"schema_info",            // migration 00005 (v2+ definitive marker)
 		"disk_groups",            // v2 baseline (core table)
 		"approval_queue_items",   // v2 baseline (never in 1.x)
 		"scoring_factor_weights", // v2 baseline (never in 1.x)
+		"sunset_queue",           // v3 (migration 00006)
 	}
-	for _, table := range v2Tables {
+	for _, table := range knownTables {
 		if tableExists(sqlDB, table) {
-			slog.Warn("ConfirmNotV2: found 2.0 table in database — aborting legacy rename",
+			slog.Warn("ConfirmNotV2: found 2.0+ table in database — aborting legacy rename",
 				"component", "migration", "table", table, "dbPath", dbPath)
 			return false
 		}

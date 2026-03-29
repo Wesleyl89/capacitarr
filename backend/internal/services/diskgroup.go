@@ -145,7 +145,7 @@ func (s *DiskGroupService) Upsert(disk integrations.DiskSpace) (*db.DiskGroup, e
 
 // UpdateThresholds updates the threshold and target percentages for a disk group,
 // along with an optional total-bytes override, and returns the updated group.
-func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target float64, totalOverride *int64) (*db.DiskGroup, error) {
+func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target float64, totalOverride *int64, mode string, sunsetPct *float64) (*db.DiskGroup, error) {
 	var group db.DiskGroup
 	if err := s.db.First(&group, groupID).Error; err != nil {
 		return nil, fmt.Errorf("disk group not found: %w", err)
@@ -158,6 +158,9 @@ func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target floa
 	if totalOverride != nil && *totalOverride > 0 {
 		updates["total_bytes_override"] = *totalOverride
 	}
+	if mode != "" {
+		updates["mode"] = mode
+	}
 	if err := s.db.Model(&group).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("failed to update thresholds: %w", err)
 	}
@@ -166,6 +169,17 @@ func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target floa
 	if totalOverride == nil || *totalOverride == 0 {
 		if err := s.db.Model(&group).Update("total_bytes_override", gorm.Expr("NULL")).Error; err != nil {
 			return nil, fmt.Errorf("failed to clear override: %w", err)
+		}
+	}
+	// Handle sunset_pct: set if mode is sunset and value provided, clear otherwise
+	if mode == db.ModeSunset && sunsetPct != nil {
+		if err := s.db.Model(&group).Update("sunset_pct", *sunsetPct).Error; err != nil {
+			return nil, fmt.Errorf("failed to set sunset threshold: %w", err)
+		}
+	} else if mode != "" && mode != db.ModeSunset {
+		// Clear sunset_pct when switching away from sunset mode
+		if err := s.db.Model(&group).Update("sunset_pct", gorm.Expr("NULL")).Error; err != nil {
+			return nil, fmt.Errorf("failed to clear sunset threshold: %w", err)
 		}
 	}
 

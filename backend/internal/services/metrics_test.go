@@ -383,7 +383,7 @@ func TestMetricsService_GetWorkerMetrics_ReturnsExpectedKeys(t *testing.T) {
 		"lastRunCandidates",
 		"protectedCount",
 		"pollIntervalSeconds",
-		"executionMode",
+		"defaultDiskGroupMode",
 		"queueDepth",
 		"currentlyDeleting",
 		"processed",
@@ -413,16 +413,16 @@ func TestMetricsService_GetWorkerMetrics_ExecutionModeFromPreferences(t *testing
 	database.Create(&db.EngineRunStats{ExecutionMode: db.ModeDryRun})
 
 	// Change the preference to "auto" (user changed mode without running engine)
-	database.Save(&db.PreferenceSet{ID: 1, ExecutionMode: db.ModeAuto, PollIntervalSeconds: 300, TiebreakerMethod: db.TiebreakerSizeDesc, LogLevel: db.LogLevelInfo})
+	database.Save(&db.PreferenceSet{ID: 1, DefaultDiskGroupMode: db.ModeAuto, PollIntervalSeconds: 300, TiebreakerMethod: db.TiebreakerSizeDesc, LogLevel: db.LogLevelInfo})
 
 	metrics := svc.GetWorkerMetrics()
 
 	// The worker metrics should reflect the PREFERENCE value, not the last run
-	mode, ok := metrics["executionMode"].(string)
+	mode, ok := metrics["defaultDiskGroupMode"].(string)
 	if !ok {
-		t.Fatal("Expected executionMode to be a string")
+		t.Fatal("Expected defaultDiskGroupMode to be a string")
 	}
 	if mode != db.ModeAuto {
-		t.Errorf("Expected executionMode %q from preferences, got %q (likely reading from engine run stats)", "auto", mode)
+		t.Errorf("Expected defaultDiskGroupMode %q from preferences, got %q (likely reading from engine run stats)", "auto", mode)
 	}
 }

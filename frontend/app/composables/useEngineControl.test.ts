@@ -135,7 +135,7 @@ describe('useEngineControl', () => {
   describe('fetchStats', () => {
     it('populates worker stats from API response', async () => {
       const statsData = {
-        executionMode: 'auto',
+        defaultDiskGroupMode: 'auto',
         lastRunEpoch: 1700000000,
         lastRunEvaluated: 150,
         lastRunCandidates: 5,
@@ -177,7 +177,7 @@ describe('useEngineControl', () => {
       // Set prevIsRunning = true by simulating a running state via fetchStats
       mockApiFetch.mockResolvedValueOnce({
         isRunning: true,
-        executionMode: 'auto',
+        defaultDiskGroupMode: 'auto',
         lastRunEvaluated: 0,
         lastRunCandidates: 0,
       });
@@ -210,11 +210,11 @@ describe('useEngineControl', () => {
 
     it('does not show toast when engine was already idle', async () => {
       // Both calls: engine is idle
-      mockApiFetch.mockResolvedValueOnce({ isRunning: false, executionMode: 'dry-run' });
+      mockApiFetch.mockResolvedValueOnce({ isRunning: false, defaultDiskGroupMode: 'dry-run' });
       const ctrl = useEngineControl();
       await ctrl.fetchStats();
 
-      mockApiFetch.mockResolvedValueOnce({ isRunning: false, executionMode: 'dry-run' });
+      mockApiFetch.mockResolvedValueOnce({ isRunning: false, defaultDiskGroupMode: 'dry-run' });
       await ctrl.fetchStats();
 
       expect(addToastSpy).not.toHaveBeenCalled();
@@ -226,14 +226,14 @@ describe('useEngineControl', () => {
   // -------------------------------------------------------------------------
   describe('setMode', () => {
     it('fetches preferences, PUTs new mode, refreshes stats, and toasts', async () => {
-      const existingPrefs = { executionMode: 'dry-run', pollInterval: 300 };
+      const existingPrefs = { defaultDiskGroupMode: 'dry-run', pollInterval: 300 };
       // 1st call: GET preferences
       mockApiFetch.mockResolvedValueOnce(existingPrefs);
       // 2nd call: PUT preferences
       mockApiFetch.mockResolvedValueOnce({});
       // 3rd call: fetchStats (inside setMode)
       mockApiFetch.mockResolvedValueOnce({
-        executionMode: 'auto',
+        defaultDiskGroupMode: 'auto',
         isRunning: false,
       });
 
@@ -243,9 +243,9 @@ describe('useEngineControl', () => {
       expect(mockApiFetch).toHaveBeenCalledWith('/api/v1/preferences');
       expect(mockApiFetch).toHaveBeenCalledWith('/api/v1/preferences', {
         method: 'PUT',
-        body: { ...existingPrefs, executionMode: 'auto' },
+        body: { ...existingPrefs, defaultDiskGroupMode: 'auto' },
       });
-      expect(addToastSpy).toHaveBeenCalledWith('Execution mode set to Auto', 'success');
+      expect(addToastSpy).toHaveBeenCalledWith('Default disk group mode set to Auto', 'success');
       expect(ctrl.changingMode.value).toBe(false);
     });
 
@@ -263,9 +263,9 @@ describe('useEngineControl', () => {
       expect(ctrl.changingMode.value).toBe(true);
 
       // Resolve the chain
-      resolvePrefs!({ executionMode: 'dry-run' });
+      resolvePrefs!({ defaultDiskGroupMode: 'dry-run' });
       mockApiFetch.mockResolvedValueOnce({}); // PUT
-      mockApiFetch.mockResolvedValueOnce({ executionMode: 'approval', isRunning: false }); // fetchStats
+      mockApiFetch.mockResolvedValueOnce({ defaultDiskGroupMode: 'approval', isRunning: false }); // fetchStats
       await setModePromise;
 
       expect(ctrl.changingMode.value).toBe(false);
@@ -277,7 +277,7 @@ describe('useEngineControl', () => {
       const ctrl = useEngineControl();
       await ctrl.setMode('auto');
 
-      expect(addToastSpy).toHaveBeenCalledWith('Failed to change execution mode', 'error');
+      expect(addToastSpy).toHaveBeenCalledWith('Failed to change default disk group mode', 'error');
       expect(ctrl.changingMode.value).toBe(false);
     });
   });
@@ -289,7 +289,7 @@ describe('useEngineControl', () => {
     it('updates executionMode when engine_mode_changed event is received', async () => {
       // Hydrate with initial stats
       mockApiFetch.mockResolvedValueOnce({
-        executionMode: 'dry-run',
+        defaultDiskGroupMode: 'dry-run',
         isRunning: false,
         lastRunEvaluated: 0,
         lastRunCandidates: 0,
@@ -309,7 +309,7 @@ describe('useEngineControl', () => {
 
     it('does not update if newMode is missing from event', async () => {
       mockApiFetch.mockResolvedValueOnce({
-        executionMode: 'auto',
+        defaultDiskGroupMode: 'auto',
         isRunning: false,
       });
       const ctrl = useEngineControl();

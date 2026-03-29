@@ -215,6 +215,34 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 			Title:   fmt.Sprintf("🟢 Integration Recovered: %s", e.Name),
 			Message: fmt.Sprintf("**%s** (%s) is back online", e.Name, e.IntegrationType),
 		}, func(cfg db.NotificationConfig) bool { return cfg.OnIntegrationStatus })
+
+	case events.SunsetCreatedEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertSunsetActivity,
+			Title:   fmt.Sprintf("🌅 Sunset: %s", e.MediaName),
+			Message: fmt.Sprintf("**%s** added to sunset queue — leaving in **%d days** (%s)", e.MediaName, e.DaysRemaining, e.DeletionDate),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnSunsetActivity })
+
+	case events.SunsetExpiredEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertSunsetActivity,
+			Title:   fmt.Sprintf("⏰ Sunset Expired: %s", e.MediaName),
+			Message: fmt.Sprintf("**%s** sunset countdown expired — queued for deletion", e.MediaName),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnSunsetActivity })
+
+	case events.SunsetEscalatedEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertSunsetActivity,
+			Title:   "🚨 Sunset Escalation",
+			Message: fmt.Sprintf("**%d** sunset items force-expired to free space", e.ItemsExpired),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnSunsetActivity })
+
+	case events.SunsetMisconfiguredEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertSunsetActivity,
+			Title:   "⚠️ Sunset Misconfigured",
+			Message: fmt.Sprintf("Sunset mode skipped for **%s** — sunset threshold not configured", e.MountPath),
+		}, func(cfg db.NotificationConfig) bool { return cfg.OnSunsetActivity })
 	}
 }
 

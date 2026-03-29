@@ -641,8 +641,110 @@ func (e *EmbyClient) GetLabelNames() ([]string, error) {
 	return names, nil
 }
 
+// AddLabel adds a tag to an Emby item. Fetches the current item,
+// appends the tag if not already present, and POSTs the updated item back.
+func (e *EmbyClient) AddLabel(itemID string, label string) error {
+	item, err := e.getItemByID(itemID)
+	if err != nil {
+		return fmt.Errorf("fetch item %s: %w", itemID, err)
+	}
+
+	for _, tag := range item.Tags {
+		if tag == label {
+			return nil
+		}
+	}
+
+	item.Tags = append(item.Tags, label)
+	return e.updateItem(itemID, item)
+}
+
+// RemoveLabel removes a tag from an Emby item. Fetches the current item,
+// removes the tag if present, and POSTs the updated item back.
+func (e *EmbyClient) RemoveLabel(itemID string, label string) error {
+	item, err := e.getItemByID(itemID)
+	if err != nil {
+		return fmt.Errorf("fetch item %s: %w", itemID, err)
+	}
+
+	filtered := make([]string, 0, len(item.Tags))
+	found := false
+	for _, tag := range item.Tags {
+		if tag == label {
+			found = true
+			continue
+		}
+		filtered = append(filtered, tag)
+	}
+	if !found {
+		return nil
+	}
+
+	item.Tags = filtered
+	return e.updateItem(itemID, item)
+}
+
+// getItemByID fetches a single Emby item by ID with Tags and ProviderIds fields.
+func (e *EmbyClient) getItemByID(itemID string) (*embyItem, error) {
+	adminID, err := e.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("get admin user: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("/Users/%s/Items/%s?Fields=Tags,ProviderIds", adminID, itemID)
+	data, err := e.doRequest(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var item embyItem
+	if err := json.Unmarshal(data, &item); err != nil {
+		return nil, fmt.Errorf("parse item response: %w", err)
+	}
+	return &item, nil
+}
+
+// updateItem POSTs the modified item back to Emby.
+func (e *EmbyClient) updateItem(itemID string, item *embyItem) error {
+	body, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("marshal item: %w", err)
+	}
+
+	fullURL := e.URL + "/Items/" + itemID
+	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", e.APIKey)
+}
+
+var _ Connectable = (*EmbyClient)(nil)
+
+// GetPosterImage downloads the current primary poster for an Emby item.
+func (e *EmbyClient) GetPosterImage(itemID string) ([]byte, string, error) {
+	endpoint := fmt.Sprintf("/Items/%s/Images/Primary", itemID)
+	data, err := e.doRequest(endpoint)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetch poster: %w", err)
+	}
+	return data, "image/jpeg", nil
+}
+
+// UploadPosterImage uploads a new primary poster to an Emby item.
+// Emby accepts raw image bytes with the appropriate Content-Type header.
+func (e *EmbyClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
+	fullURL := e.URL + "/Items/" + itemID + "/Images/Primary"
+	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+}
+
+// RestorePosterImage removes the custom primary poster from an Emby item,
+// reverting to the default provider-sourced poster.
+func (e *EmbyClient) RestorePosterImage(itemID string) error {
+	fullURL := e.URL + "/Items/" + itemID + "/Images/Primary"
+	return DoAPIRequestWithBody("DELETE", fullURL, nil, "X-Emby-Token", e.APIKey)
+}
+
 var _ Connectable = (*EmbyClient)(nil)
 var _ WatchDataProvider = (*EmbyClient)(nil)
 var _ WatchlistProvider = (*EmbyClient)(nil)
 var _ CollectionDataProvider = (*EmbyClient)(nil)
 var _ LabelDataProvider = (*EmbyClient)(nil)
+var _ LabelManager = (*EmbyClient)(nil)
+var _ PosterManager = (*EmbyClient)(nil)

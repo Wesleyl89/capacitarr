@@ -3,6 +3,7 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -485,6 +486,64 @@ func (p *PlexClient) GetLabelNames() ([]string, error) {
 	return names, nil
 }
 
+// doRequestWithMethod creates an HTTP request with a custom method (PUT, POST)
+// and appends the Plex token as a query parameter. Used for label management.
+func (p *PlexClient) doRequestWithMethod(method, endpoint string) error {
+	sep := "?"
+	if strings.Contains(endpoint, "?") {
+		sep = "&"
+	}
+	fullURL := p.URL + endpoint + sep + "X-Plex-Token=" + p.Token
+	return DoAPIRequestWithBody(method, fullURL, nil, "Accept", "application/json")
+}
+
+// AddLabel applies a label to a Plex item identified by ratingKey.
+// Uses the Plex metadata endpoint: PUT /library/metadata/{ratingKey}?label[0].tag.tag={label}&label.locked=1
+func (p *PlexClient) AddLabel(itemID string, label string) error {
+	endpoint := fmt.Sprintf("/library/metadata/%s?label[0].tag.tag=%s&label.locked=1",
+		url.PathEscape(itemID), url.QueryEscape(label))
+	return p.doRequestWithMethod("PUT", endpoint)
+}
+
+// RemoveLabel removes a label from a Plex item identified by ratingKey.
+// Uses the Plex metadata endpoint: PUT /library/metadata/{ratingKey}?label[].tag.tag-={label}&label.locked=1
+func (p *PlexClient) RemoveLabel(itemID string, label string) error {
+	endpoint := fmt.Sprintf("/library/metadata/%s?label[].tag.tag-=%s&label.locked=1",
+		url.PathEscape(itemID), url.QueryEscape(label))
+	return p.doRequestWithMethod("PUT", endpoint)
+}
+
+// GetPosterImage downloads the current primary poster for a Plex item.
+// Uses /library/metadata/{ratingKey}/thumb to fetch the poster image.
+func (p *PlexClient) GetPosterImage(itemID string) ([]byte, string, error) {
+	endpoint := fmt.Sprintf("/library/metadata/%s/thumb", url.PathEscape(itemID))
+	data, err := p.doRequest(endpoint)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetch poster: %w", err)
+	}
+	return data, "image/jpeg", nil
+}
+
+// UploadPosterImage uploads a new primary poster to a Plex item.
+// Uses POST /library/metadata/{ratingKey}/posters with the image URL-encoded.
+func (p *PlexClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
+	sep := "?"
+	endpoint := fmt.Sprintf("/library/metadata/%s/posters", url.PathEscape(itemID))
+	if strings.Contains(endpoint, "?") {
+		sep = "&"
+	}
+	fullURL := p.URL + endpoint + sep + "X-Plex-Token=" + p.Token
+	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+}
+
+// RestorePosterImage removes any custom poster from a Plex item, reverting to
+// the default agent-sourced poster. Achieved by unlocking the poster field.
+func (p *PlexClient) RestorePosterImage(itemID string) error {
+	endpoint := fmt.Sprintf("/library/metadata/%s?thumb=&poster.locked=0",
+		url.PathEscape(itemID))
+	return p.doRequestWithMethod("PUT", endpoint)
+}
+
 // Verify PlexClient satisfies capability interfaces at compile time.
 // Note: PlexClient intentionally does NOT implement MediaSource — only *arr integrations should.
 var _ Connectable = (*PlexClient)(nil)
@@ -492,3 +551,5 @@ var _ WatchDataProvider = (*PlexClient)(nil)
 var _ WatchlistProvider = (*PlexClient)(nil)
 var _ CollectionDataProvider = (*PlexClient)(nil)
 var _ LabelDataProvider = (*PlexClient)(nil)
+var _ LabelManager = (*PlexClient)(nil)
+var _ PosterManager = (*PlexClient)(nil)

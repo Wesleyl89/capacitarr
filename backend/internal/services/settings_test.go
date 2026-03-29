@@ -20,8 +20,8 @@ func TestSettingsService_GetPreferences(t *testing.T) {
 	if prefs.ID != 1 {
 		t.Errorf("expected preference ID 1, got %d", prefs.ID)
 	}
-	if prefs.ExecutionMode != db.ModeDryRun {
-		t.Errorf("expected execution mode 'dry-run', got %q", prefs.ExecutionMode)
+	if prefs.DefaultDiskGroupMode != db.ModeDryRun {
+		t.Errorf("expected execution mode 'dry-run', got %q", prefs.DefaultDiskGroupMode)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestSettingsService_UpdatePreferences_ModeChange(t *testing.T) {
 
 	// Get current and change mode
 	current, _ := svc.GetPreferences()
-	current.ExecutionMode = "approval"
+	current.DefaultDiskGroupMode = "approval"
 
 	if _, err := svc.UpdatePreferences(current); err != nil {
 		t.Fatalf("UpdatePreferences returned error: %v", err)
@@ -113,7 +113,7 @@ func TestSettingsService_UpdatePreferences_ModeChange_ClearsQueue(t *testing.T) 
 
 	// Get current prefs (default: dry-run)
 	current, _ := svc.GetPreferences()
-	current.ExecutionMode = db.ModeApproval
+	current.DefaultDiskGroupMode = db.ModeApproval
 
 	if _, err := svc.UpdatePreferences(current); err != nil {
 		t.Fatalf("UpdatePreferences returned error: %v", err)
@@ -201,7 +201,7 @@ func TestSettingsService_UpdatePreferences_NilClearer_NoPanic(t *testing.T) {
 	// Do NOT set a deletion clearer — should not panic
 
 	current, _ := svc.GetPreferences()
-	current.ExecutionMode = db.ModeAuto
+	current.DefaultDiskGroupMode = db.ModeAuto
 
 	if _, err := svc.UpdatePreferences(current); err != nil {
 		t.Fatalf("UpdatePreferences returned error: %v", err)

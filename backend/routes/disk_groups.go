@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"capacitarr/internal/db"
 	"capacitarr/internal/services"
 )
 
@@ -32,9 +33,11 @@ func RegisterDiskGroupRoutes(g *echo.Group, reg *services.Registry) {
 		}
 
 		var req struct {
-			ThresholdPct       float64 `json:"thresholdPct"`
-			TargetPct          float64 `json:"targetPct"`
-			TotalBytesOverride *int64  `json:"totalBytesOverride"`
+			ThresholdPct       float64  `json:"thresholdPct"`
+			TargetPct          float64  `json:"targetPct"`
+			TotalBytesOverride *int64   `json:"totalBytesOverride"`
+			Mode               string   `json:"mode"`
+			SunsetPct          *float64 `json:"sunsetPct"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
@@ -53,7 +56,21 @@ func RegisterDiskGroupRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Total bytes override must not be negative")
 		}
 
-		updated, err := reg.DiskGroup.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct, req.TotalBytesOverride)
+		// Validate mode if provided (empty string preserves existing mode)
+		if req.Mode != "" {
+			if !db.ValidExecutionModes[req.Mode] {
+				return apiError(c, http.StatusBadRequest, "Mode must be one of: "+db.FormatValidKeys(db.ValidExecutionModes))
+			}
+		}
+
+		// Validate sunset threshold ordering: sunsetPct < targetPct < thresholdPct
+		if req.Mode == db.ModeSunset && req.SunsetPct != nil {
+			if *req.SunsetPct >= req.TargetPct {
+				return apiError(c, http.StatusBadRequest, "Sunset threshold must be less than target threshold")
+			}
+		}
+
+		updated, err := reg.DiskGroup.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct, req.TotalBytesOverride, req.Mode, req.SunsetPct)
 		if err != nil {
 			return apiError(c, http.StatusInternalServerError, "Failed to update disk group")
 		}

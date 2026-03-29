@@ -126,7 +126,7 @@
       <div class="space-y-3">
         <div class="flex items-center gap-2">
           <UiLabel>{{ $t('settings.executionMode') }}</UiLabel>
-          <SaveIndicator :status="saveStatus.executionMode ?? 'idle'" />
+          <SaveIndicator :status="saveStatus.defaultDiskGroupMode ?? 'idle'" />
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
@@ -217,12 +217,61 @@
       </div>
     </UiCardContent>
   </UiCard>
+
+  <!-- Sunset Settings -->
+  <UiCard
+    v-motion
+    :initial="{ opacity: 0, y: 12 }"
+    :enter="{
+      opacity: 1,
+      y: 0,
+      transition: { type: 'spring', stiffness: 260, damping: 24, delay: 100 },
+    }"
+  >
+    <UiCardHeader>
+      <UiCardTitle>{{ $t('settings.sunsetSettings') }}</UiCardTitle>
+      <UiCardDescription>{{ $t('settings.sunsetSettingsDesc') }}</UiCardDescription>
+    </UiCardHeader>
+    <UiCardContent class="space-y-5">
+      <div class="flex items-center justify-between">
+        <div>
+          <UiLabel>{{ $t('settings.posterOverlay') }}</UiLabel>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            {{ $t('settings.posterOverlayDesc') }}
+          </p>
+        </div>
+        <UiSwitch
+          :checked="posterOverlayEnabled"
+          @update:checked="
+            (v: boolean) => {
+              posterOverlayEnabled = v;
+              autoSavePreference('posterOverlay', 'posterOverlayEnabled', v);
+            }
+          "
+        />
+      </div>
+      <div>
+        <UiButton variant="destructive" size="sm" @click="restoreAllPosters">
+          {{ $t('settings.restoreAllPosters') }}
+        </UiButton>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ $t('settings.restoreAllPostersDesc') }}
+        </p>
+      </div>
+    </UiCardContent>
+  </UiCard>
 </template>
 
 <script setup lang="ts">
 import { MonitorIcon, CogIcon } from 'lucide-vue-next';
 import type { PreferenceSet } from '~/types/api';
-import { MODE_DRY_RUN, MODE_APPROVAL, MODE_AUTO, TIEBREAKER_SIZE_DESC } from '~/constants';
+import {
+  MODE_DRY_RUN,
+  MODE_APPROVAL,
+  MODE_AUTO,
+  MODE_SUNSET,
+  TIEBREAKER_SIZE_DESC,
+} from '~/constants';
 import type { AcceptableValue } from 'reka-ui';
 import SaveIndicator from '~/components/settings/SaveIndicator.vue';
 
@@ -237,22 +286,25 @@ const {
 } = useDisplayPrefs();
 const { saveStatus, initFields, autoSavePreference } = useAutoSave();
 
-initFields(['executionMode', 'tiebreaker', 'snoozeDuration']);
+initFields(['defaultDiskGroupMode', 'tiebreaker', 'snoozeDuration', 'posterOverlay']);
+const { addToast } = useToast();
 
 // Engine behavior state
 const engineExecutionMode = ref<string>(MODE_DRY_RUN);
 const engineTiebreakerMethod = ref<string>(TIEBREAKER_SIZE_DESC);
 const snoozeDurationHours = ref(24);
+const posterOverlayEnabled = ref(false);
 
 const executionModes = [
   { value: MODE_DRY_RUN, label: 'Dry Run', description: 'Log only, no deletions' },
   { value: MODE_APPROVAL, label: 'Approval', description: 'Queue for manual approval' },
   { value: MODE_AUTO, label: 'Automatic', description: 'Delete automatically' },
+  { value: MODE_SUNSET, label: 'Sunset', description: 'Countdown before deletion' },
 ];
 
 function setExecutionMode(mode: string) {
   engineExecutionMode.value = mode;
-  autoSavePreference('executionMode', 'executionMode', mode);
+  autoSavePreference('defaultDiskGroupMode', 'defaultDiskGroupMode', mode);
 }
 
 // Watch tiebreaker — immediate save on select change
@@ -266,8 +318,8 @@ watch(engineTiebreakerMethod, (newVal, oldVal) => {
 async function fetchPreferences() {
   try {
     const prefs = (await api('/api/v1/preferences')) as PreferenceSet;
-    if (prefs?.executionMode) {
-      engineExecutionMode.value = prefs.executionMode;
+    if (prefs?.defaultDiskGroupMode) {
+      engineExecutionMode.value = prefs.defaultDiskGroupMode;
     }
     if (prefs?.tiebreakerMethod) {
       engineTiebreakerMethod.value = prefs.tiebreakerMethod;
@@ -275,8 +327,22 @@ async function fetchPreferences() {
     if (prefs?.snoozeDurationHours !== undefined) {
       snoozeDurationHours.value = prefs.snoozeDurationHours;
     }
+    if (prefs?.posterOverlayEnabled !== undefined) {
+      posterOverlayEnabled.value = prefs.posterOverlayEnabled;
+    }
   } catch (err) {
     console.warn('[SettingsGeneral] fetchPreferences failed:', err);
+  }
+}
+
+async function restoreAllPosters() {
+  try {
+    const result = (await api('/api/v1/sunset-queue/restore-posters', {
+      method: 'POST',
+    })) as { restored: number };
+    addToast(`Restored ${result.restored} poster(s)`, 'success');
+  } catch {
+    addToast('Failed to restore posters', 'error');
   }
 }
 

@@ -134,8 +134,15 @@
 </template>
 
 <script setup lang="ts">
-import { ShieldIcon, HandIcon, ZapIcon, PlayIcon, LoaderCircleIcon } from 'lucide-vue-next';
-import { MODE_DRY_RUN, MODE_APPROVAL, MODE_AUTO } from '~/constants';
+import {
+  ShieldIcon,
+  HandIcon,
+  ZapIcon,
+  ClockIcon,
+  PlayIcon,
+  LoaderCircleIcon,
+} from 'lucide-vue-next';
+import { MODE_DRY_RUN, MODE_APPROVAL, MODE_AUTO, MODE_SUNSET } from '~/constants';
 
 const { scaleIn } = useMotionPresets();
 
@@ -168,6 +175,7 @@ const modes = [
   { value: MODE_DRY_RUN, label: 'Dry-Run' },
   { value: MODE_APPROVAL, label: 'Approval' },
   { value: MODE_AUTO, label: 'Auto' },
+  { value: MODE_SUNSET, label: 'Sunset' },
 ];
 
 // Mode icon — distinct shape per mode, NOT color-coded
@@ -177,6 +185,8 @@ const modeIcon = computed(() => {
       return ZapIcon; // ⚡ auto = lightning bolt
     case MODE_APPROVAL:
       return HandIcon; // ✋ manual review
+    case MODE_SUNSET:
+      return ClockIcon; // ⏰ sunset = countdown
     default:
       return ShieldIcon; // 🛡️ dry-run = protected/safe
   }

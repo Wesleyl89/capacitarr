@@ -23,6 +23,8 @@ type IntegrationRegistry struct {
 	collectionResolvers     map[uint]CollectionResolver
 	collectionDataProviders map[uint]CollectionDataProvider
 	labelDataProviders      map[uint]LabelDataProvider
+	labelManagers           map[uint]LabelManager
+	posterManagers          map[uint]PosterManager
 }
 
 // NewIntegrationRegistry creates an empty registry.
@@ -39,6 +41,8 @@ func NewIntegrationRegistry() *IntegrationRegistry {
 		collectionResolvers:     make(map[uint]CollectionResolver),
 		collectionDataProviders: make(map[uint]CollectionDataProvider),
 		labelDataProviders:      make(map[uint]LabelDataProvider),
+		labelManagers:           make(map[uint]LabelManager),
+		posterManagers:          make(map[uint]PosterManager),
 	}
 }
 
@@ -104,6 +108,14 @@ func (r *IntegrationRegistry) Register(integrationID uint, client interface{}) {
 		r.labelDataProviders[integrationID] = c
 		registered++
 	}
+	if c, ok := client.(LabelManager); ok {
+		r.labelManagers[integrationID] = c
+		registered++
+	}
+	if c, ok := client.(PosterManager); ok {
+		r.posterManagers[integrationID] = c
+		registered++
+	}
 
 	slog.Debug("Registered integration", "component", "registry",
 		"integrationID", integrationID, "capabilities", registered)
@@ -124,6 +136,9 @@ func (r *IntegrationRegistry) Unregister(integrationID uint) {
 	delete(r.ruleValueFetchers, integrationID)
 	delete(r.collectionResolvers, integrationID)
 	delete(r.collectionDataProviders, integrationID)
+	delete(r.labelDataProviders, integrationID)
+	delete(r.labelManagers, integrationID)
+	delete(r.posterManagers, integrationID)
 }
 
 // Clear removes all registrations.
@@ -141,6 +156,9 @@ func (r *IntegrationRegistry) Clear() {
 	r.ruleValueFetchers = make(map[uint]RuleValueFetcher)
 	r.collectionResolvers = make(map[uint]CollectionResolver)
 	r.collectionDataProviders = make(map[uint]CollectionDataProvider)
+	r.labelDataProviders = make(map[uint]LabelDataProvider)
+	r.labelManagers = make(map[uint]LabelManager)
+	r.posterManagers = make(map[uint]PosterManager)
 }
 
 // ─── Accessor methods ───────────────────────────────────────────────────────
@@ -255,6 +273,30 @@ func (r *IntegrationRegistry) LabelDataProviders() map[uint]LabelDataProvider {
 	defer r.mu.RUnlock()
 	out := make(map[uint]LabelDataProvider, len(r.labelDataProviders))
 	for k, v := range r.labelDataProviders {
+		out[k] = v
+	}
+	return out
+}
+
+// LabelManagers returns all registered LabelManager implementations with their IDs.
+// Returns a defensive copy. Used by SunsetService to apply/remove sunset labels.
+func (r *IntegrationRegistry) LabelManagers() map[uint]LabelManager {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[uint]LabelManager, len(r.labelManagers))
+	for k, v := range r.labelManagers {
+		out[k] = v
+	}
+	return out
+}
+
+// PosterManagers returns all registered PosterManager implementations with their IDs.
+// Returns a defensive copy. Used by PosterOverlayService to upload/restore poster images.
+func (r *IntegrationRegistry) PosterManagers() map[uint]PosterManager {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[uint]PosterManager, len(r.posterManagers))
+	for k, v := range r.posterManagers {
 		out[k] = v
 	}
 	return out

@@ -38,9 +38,9 @@ func RegisterPreferenceRoutes(protected *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Tiebreaker method must be one of: "+db.FormatValidKeys(db.ValidTiebreakerMethods))
 		}
 
-		// Validate execution mode
-		if !db.ValidExecutionModes[payload.ExecutionMode] {
-			return apiError(c, http.StatusBadRequest, "Execution mode must be one of: "+db.FormatValidKeys(db.ValidExecutionModes))
+		// Validate default disk group mode
+		if !db.ValidExecutionModes[payload.DefaultDiskGroupMode] {
+			return apiError(c, http.StatusBadRequest, "Default disk group mode must be one of: "+db.FormatValidKeys(db.ValidExecutionModes))
 		}
 
 		// Validate log level

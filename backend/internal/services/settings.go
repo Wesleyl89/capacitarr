@@ -66,25 +66,25 @@ func (s *SettingsService) UpdatePreferences(payload db.PreferenceSet) (db.Prefer
 	// Apply dynamic log level
 	logger.SetLevel(payload.LogLevel)
 
-	// Detect execution mode change — clear the deletion queue to prevent
+	// Detect default disk group mode change — clear the deletion queue to prevent
 	// stale jobs from executing under the wrong mode. ClearQueue() uses the
 	// cancellation skip-list, so items already mid-processing get the
 	// "cancelled" treatment in processJob().
-	if oldPrefs.ExecutionMode != payload.ExecutionMode {
+	if oldPrefs.DefaultDiskGroupMode != payload.DefaultDiskGroupMode {
 		if s.deletionClearer != nil {
 			cleared := s.deletionClearer.ClearQueue()
 			if cleared > 0 {
-				slog.Info("Cleared deletion queue on execution mode change",
+				slog.Info("Cleared deletion queue on default disk group mode change",
 					"component", "services",
-					"oldMode", oldPrefs.ExecutionMode,
-					"newMode", payload.ExecutionMode,
+					"oldMode", oldPrefs.DefaultDiskGroupMode,
+					"newMode", payload.DefaultDiskGroupMode,
 					"cleared", cleared)
 			}
 		}
 
 		s.bus.Publish(events.EngineModeChangedEvent{
-			OldMode: oldPrefs.ExecutionMode,
-			NewMode: payload.ExecutionMode,
+			OldMode: oldPrefs.DefaultDiskGroupMode,
+			NewMode: payload.DefaultDiskGroupMode,
 		})
 	}
 

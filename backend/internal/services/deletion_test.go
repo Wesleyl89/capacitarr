@@ -32,7 +32,7 @@ func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
 	return db.PreferenceSet{
 		DeletionsEnabled:          m.deletionsEnabled,
 		DeletionQueueDelaySeconds: delay,
-		ExecutionMode:             mode,
+		DefaultDiskGroupMode:      mode,
 	}, nil
 }
 

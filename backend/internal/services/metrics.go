@@ -376,7 +376,7 @@ func (s *MetricsService) GetWorkerMetrics() map[string]any {
 	// of the last run, not the current configured mode).
 	if prefs, err := s.settings.GetPreferences(); err == nil {
 		stats["pollIntervalSeconds"] = prefs.PollIntervalSeconds
-		stats["executionMode"] = prefs.ExecutionMode
+		stats["defaultDiskGroupMode"] = prefs.DefaultDiskGroupMode
 	}
 
 	// Add deletion worker state

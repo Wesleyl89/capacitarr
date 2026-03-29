@@ -151,7 +151,7 @@ func handleManualDelete(reg *services.Registry) echo.HandlerFunc {
 			})
 		}
 
-		result, err := reg.Approval.ManualDelete(deleteItems, prefs.ExecutionMode, prefs.DeletionsEnabled, services.ManualDeleteDeps{
+		result, err := reg.Approval.ManualDelete(deleteItems, prefs.DefaultDiskGroupMode, prefs.DeletionsEnabled, services.ManualDeleteDeps{
 			Integration: reg.Integration,
 			Deletion:    reg.Deletion,
 			Engine:      reg.Engine,

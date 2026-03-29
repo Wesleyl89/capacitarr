@@ -94,7 +94,7 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 	var pref PreferenceSet
 	if err := database.FirstOrCreate(&pref, PreferenceSet{
 		ID:                    1,
-		ExecutionMode:         ModeDryRun,
+		DefaultDiskGroupMode:  ModeDryRun,
 		LogLevel:              LogLevelInfo,
 		AuditLogRetentionDays: 30,
 		PollIntervalSeconds:   300,
@@ -104,6 +104,8 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 		CheckForUpdates:       true,
 		DeadContentMinDays:    90,
 		StaleContentDays:      180,
+		SunsetDays:            30,
+		SunsetLabel:           "capacitarr-sunset",
 	}).Error; err != nil {
 		slog.Error("Failed to seed default preferences", "component", "db", "operation", "seed_preferences", "error", err)
 	}

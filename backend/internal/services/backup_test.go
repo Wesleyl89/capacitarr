@@ -57,8 +57,8 @@ func TestBackupService_Export_AllSections(t *testing.T) {
 	if envelope.Preferences == nil {
 		t.Fatal("expected preferences to be non-nil")
 	}
-	if envelope.Preferences.ExecutionMode != db.ModeDryRun {
-		t.Errorf("expected execution mode 'dry-run', got %q", envelope.Preferences.ExecutionMode)
+	if envelope.Preferences.DefaultDiskGroupMode != db.ModeDryRun {
+		t.Errorf("expected default disk group mode 'dry-run', got %q", envelope.Preferences.DefaultDiskGroupMode)
 	}
 
 	// Rules
@@ -208,7 +208,7 @@ func TestBackupService_Import_AllSections(t *testing.T) {
 			LogLevel:              "debug",
 			AuditLogRetentionDays: 60,
 			PollIntervalSeconds:   600,
-			ExecutionMode:         db.ModeApproval,
+			DefaultDiskGroupMode:  db.ModeApproval,
 			TiebreakerMethod:      "name_asc",
 			DeletionsEnabled:      false,
 			SnoozeDurationHours:   48,
@@ -270,8 +270,8 @@ func TestBackupService_Import_AllSections(t *testing.T) {
 	// Verify preferences were updated
 	var pref db.PreferenceSet
 	database.First(&pref)
-	if pref.ExecutionMode != db.ModeApproval {
-		t.Errorf("expected execution mode 'approval', got %q", pref.ExecutionMode)
+	if pref.DefaultDiskGroupMode != db.ModeApproval {
+		t.Errorf("expected default disk group mode 'approval', got %q", pref.DefaultDiskGroupMode)
 	}
 	if pref.LogLevel != "debug" {
 		t.Errorf("expected log level 'debug', got %q", pref.LogLevel)
@@ -341,7 +341,7 @@ func TestBackupService_Import_OnlyPreferences(t *testing.T) {
 			LogLevel:              "warn",
 			AuditLogRetentionDays: 7,
 			PollIntervalSeconds:   120,
-			ExecutionMode:         db.ModeAuto,
+			DefaultDiskGroupMode:  db.ModeAuto,
 			TiebreakerMethod:      "size_asc",
 			DeletionsEnabled:      true,
 			SnoozeDurationHours:   12,
@@ -379,8 +379,8 @@ func TestBackupService_Import_OnlyPreferences(t *testing.T) {
 	// Verify preferences were updated
 	var pref db.PreferenceSet
 	database.First(&pref)
-	if pref.ExecutionMode != db.ModeAuto {
-		t.Errorf("expected execution mode 'auto', got %q", pref.ExecutionMode)
+	if pref.DefaultDiskGroupMode != db.ModeAuto {
+		t.Errorf("expected default disk group mode 'auto', got %q", pref.DefaultDiskGroupMode)
 	}
 
 	// Verify no rules were created

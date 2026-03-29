@@ -7,7 +7,7 @@
  * on mount and after explicit user actions (mode change).
  */
 import type { WorkerStats, PreferenceSet, DeletionProgress } from '~/types/api';
-import { MODE_DRY_RUN, MODE_AUTO, MODE_APPROVAL } from '~/constants';
+import { MODE_DRY_RUN, MODE_AUTO, MODE_APPROVAL, MODE_SUNSET } from '~/constants';
 
 // Module-level flag: SSE handlers are registered once globally.
 let _sseRegistered = false;
@@ -46,7 +46,7 @@ export function useEngineControl() {
   // Dashboard and other pages can watch this to trigger data refreshes.
   const runCompletionCounter = useState<number>('engineRunCompletionCounter', () => 0);
 
-  const executionMode = computed(() => workerStats.value?.executionMode || MODE_DRY_RUN);
+  const executionMode = computed(() => workerStats.value?.defaultDiskGroupMode || MODE_DRY_RUN);
   const lastRunEpoch = computed(() => workerStats.value?.lastRunEpoch || 0);
   const lastRunEvaluated = computed(() => workerStats.value?.lastRunEvaluated || 0);
   const lastRunCandidates = computed(() => workerStats.value?.lastRunCandidates || 0);
@@ -61,6 +61,8 @@ export function useEngineControl() {
         return 'Auto';
       case MODE_APPROVAL:
         return 'Approval';
+      case MODE_SUNSET:
+        return 'Sunset';
       default:
         return 'Dry-Run';
     }
@@ -78,7 +80,9 @@ export function useEngineControl() {
         workerStats.value = {
           ...workerStats.value,
           isRunning: true,
-          executionMode: event.executionMode || workerStats.value.executionMode,
+          // Note: event.executionMode is the per-run mode from EngineStartEvent,
+          // not the global default. We update defaultDiskGroupMode for UI display.
+          defaultDiskGroupMode: event.executionMode || workerStats.value.defaultDiskGroupMode,
         };
       }
       prevIsRunning.value = true;
@@ -111,7 +115,7 @@ export function useEngineControl() {
           lastRunCandidates: event.candidates ?? workerStats.value.lastRunCandidates,
           lastRunFreedBytes: newFreedBytes,
           lastRunEpoch: event.completedAtEpoch || Math.floor(Date.now() / 1000),
-          executionMode: event.executionMode || workerStats.value.executionMode,
+          defaultDiskGroupMode: event.executionMode || workerStats.value.defaultDiskGroupMode,
         };
       }
       prevIsRunning.value = false;
@@ -148,7 +152,7 @@ export function useEngineControl() {
       if (workerStats.value && event.newMode) {
         workerStats.value = {
           ...workerStats.value,
-          executionMode: event.newMode,
+          defaultDiskGroupMode: event.newMode,
         };
       }
     });
@@ -205,13 +209,13 @@ export function useEngineControl() {
       const currentPrefs = (await api('/api/v1/preferences')) as PreferenceSet;
       await api('/api/v1/preferences', {
         method: 'PUT',
-        body: { ...currentPrefs, executionMode: mode },
+        body: { ...currentPrefs, defaultDiskGroupMode: mode },
       });
       // Refresh stats to pick up the new mode immediately
       await fetchStats();
-      addToast(`Execution mode set to ${modeLabel(mode)}`, 'success');
+      addToast(`Default disk group mode set to ${modeLabel(mode)}`, 'success');
     } catch {
-      addToast('Failed to change execution mode', 'error');
+      addToast('Failed to change default disk group mode', 'error');
     } finally {
       changingMode.value = false;
     }

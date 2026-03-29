@@ -488,8 +488,8 @@ func TestManualDelete_ApprovalMode(t *testing.T) {
 
 	// Set approval mode
 	database.Model(&db.PreferenceSet{}).Where("id = 1").Updates(map[string]any{
-		"execution_mode":    db.ModeApproval,
-		"deletions_enabled": true,
+		"default_disk_group_mode": db.ModeApproval,
+		"deletions_enabled":       true,
 	})
 
 	ic := db.IntegrationConfig{
@@ -536,8 +536,8 @@ func TestManualDelete_DryRunMode(t *testing.T) {
 
 	// Set dry-run mode with deletions enabled
 	database.Model(&db.PreferenceSet{}).Where("id = 1").Updates(map[string]any{
-		"execution_mode":    db.ModeDryRun,
-		"deletions_enabled": true,
+		"default_disk_group_mode": db.ModeDryRun,
+		"deletions_enabled":       true,
 	})
 
 	ic := db.IntegrationConfig{
@@ -572,8 +572,8 @@ func TestManualDelete_DeletionsDisabled(t *testing.T) {
 
 	// Disable deletions in auto mode — should still accept (dry-run internally)
 	database.Model(&db.PreferenceSet{}).Where("id = 1").Updates(map[string]any{
-		"execution_mode":    db.ModeAuto,
-		"deletions_enabled": false,
+		"default_disk_group_mode": db.ModeAuto,
+		"deletions_enabled":       false,
 	})
 
 	ic := db.IntegrationConfig{
@@ -605,8 +605,8 @@ func TestApproveQueueItem_DryRunMode(t *testing.T) {
 
 	// Set dry-run mode — approval should still succeed (simulated deletion)
 	database.Model(&db.PreferenceSet{}).Where("id = 1").Updates(map[string]any{
-		"execution_mode":    db.ModeDryRun,
-		"deletions_enabled": true,
+		"default_disk_group_mode": db.ModeDryRun,
+		"deletions_enabled":       true,
 	})
 
 	ic := db.IntegrationConfig{

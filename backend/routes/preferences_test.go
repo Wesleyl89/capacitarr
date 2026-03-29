@@ -30,8 +30,8 @@ func TestGetPreferences(t *testing.T) {
 	}
 
 	// Verify default values from seed
-	if pref.ExecutionMode != db.ModeDryRun {
-		t.Errorf("Expected ExecutionMode 'dry-run', got %q", pref.ExecutionMode)
+	if pref.DefaultDiskGroupMode != db.ModeDryRun {
+		t.Errorf("Expected DefaultDiskGroupMode 'dry-run', got %q", pref.DefaultDiskGroupMode)
 	}
 	if pref.LogLevel != "info" {
 		t.Errorf("Expected LogLevel 'info', got %q", pref.LogLevel)
@@ -43,7 +43,7 @@ func TestSavePreferences(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "approval",
+		"defaultDiskGroupMode": "approval",
 		"tiebreakerMethod": "name_asc",
 		"logLevel": "debug",
 		"pollIntervalSeconds": 60,
@@ -68,8 +68,8 @@ func TestSavePreferences(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	if pref.ExecutionMode != db.ModeApproval {
-		t.Errorf("Expected ExecutionMode 'approval', got %q", pref.ExecutionMode)
+	if pref.DefaultDiskGroupMode != db.ModeApproval {
+		t.Errorf("Expected DefaultDiskGroupMode 'approval', got %q", pref.DefaultDiskGroupMode)
 	}
 	if pref.TiebreakerMethod != "name_asc" {
 		t.Errorf("Expected TiebreakerMethod 'name_asc', got %q", pref.TiebreakerMethod)
@@ -91,12 +91,12 @@ func TestSavePreferences_InvalidPayload(t *testing.T) {
 	}
 }
 
-func TestSavePreferences_InvalidExecutionMode(t *testing.T) {
+func TestSavePreferences_InvalidDiskGroupMode(t *testing.T) {
 	database := testutil.SetupTestDB(t)
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "invalid-mode",
+		"defaultDiskGroupMode": "invalid-mode",
 		"tiebreakerMethod": "size_desc",
 		"logLevel": "info"
 	}`

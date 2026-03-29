@@ -135,6 +135,35 @@ type LabelDataProvider interface {
 	GetLabelMemberships() (map[int][]string, error)
 }
 
+// LabelManager is implemented by media server integrations that can add and
+// remove labels/tags on individual media items. Used by SunsetService to
+// apply/remove the sunset label when items enter/leave the sunset queue.
+//
+// itemID is the media server's native identifier for the item:
+//   - Plex: ratingKey (string)
+//   - Jellyfin/Emby: item ID (string)
+type LabelManager interface {
+	AddLabel(itemID string, label string) error
+	RemoveLabel(itemID string, label string) error
+}
+
+// PosterManager is implemented by media server integrations that can
+// download, upload, and restore poster images on individual media items.
+// Used by PosterOverlayService to apply/restore countdown overlay posters.
+//
+// itemID is the media server's native identifier for the item:
+//   - Plex: ratingKey (string)
+//   - Jellyfin/Emby: item ID (string)
+type PosterManager interface {
+	// GetPosterImage downloads the current primary poster for an item.
+	GetPosterImage(itemID string) (imageData []byte, contentType string, err error)
+	// UploadPosterImage uploads a new primary poster for an item.
+	UploadPosterImage(itemID string, imageData []byte, contentType string) error
+	// RestorePosterImage removes any custom poster, reverting to the default
+	// (e.g., TMDb-sourced) poster. Implementation varies by media server.
+	RestorePosterImage(itemID string) error
+}
+
 // LabelNameFetcher is implemented by media server integrations that can
 // return a list of label/tag names for use in rule value autocomplete.
 // Satisfied by Plex, Jellyfin, and Emby clients.

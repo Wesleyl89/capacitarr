@@ -420,7 +420,7 @@ drainLoop:
 		// item on jobs that processJob() would cancel anyway.
 		if job.EnqueuedMode != "" {
 			if prefs, err := s.settings.GetPreferences(); err == nil {
-				if prefs.ExecutionMode != job.EnqueuedMode {
+				if prefs.DefaultDiskGroupMode != job.EnqueuedMode {
 					// Process this one job (processJob will cancel it via mode-change guard),
 					// then cancel all remaining jobs in bulk without rate limiting.
 					s.processJob(job, &deferredAuditEntries)
@@ -530,7 +530,7 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	// dequeues an item just before ClearQueue() marks it.
 	if job.EnqueuedMode != "" {
 		if prefs, err := s.settings.GetPreferences(); err == nil {
-			if prefs.ExecutionMode != job.EnqueuedMode {
+			if prefs.DefaultDiskGroupMode != job.EnqueuedMode {
 				s.processed.Add(1)
 				s.batchSucceeded.Add(1)
 
@@ -558,7 +558,7 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 					"component", "services",
 					"media", job.Item.Title,
 					"enqueuedMode", job.EnqueuedMode,
-					"currentMode", prefs.ExecutionMode)
+					"currentMode", prefs.DefaultDiskGroupMode)
 				return
 			}
 		}

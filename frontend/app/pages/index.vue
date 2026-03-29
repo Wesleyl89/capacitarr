@@ -335,6 +335,9 @@
     <!-- Snoozed Items (visible in all modes when snoozed items exist) -->
     <SnoozedItemsCard />
 
+    <!-- Sunset Queue (visible when sunset items exist) -->
+    <SunsetQueueCard />
+
     <!-- Approval Queue (only in approval mode) -->
     <ApprovalQueueCard v-if="approvalQueueVisible" />
 

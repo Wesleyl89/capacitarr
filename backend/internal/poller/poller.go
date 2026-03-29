@@ -175,7 +175,9 @@ func (p *Poller) poll() {
 	}
 
 	// Create engine run stats row via service
-	runStats, err := p.reg.Engine.CreateRunStats(prefs.ExecutionMode)
+	// TODO(sunset): Step 1.12 — with per-disk-group modes, a single run may span multiple modes.
+	// For now, record the default mode; the engine refactor will handle per-group mode tracking.
+	runStats, err := p.reg.Engine.CreateRunStats(prefs.DefaultDiskGroupMode)
 	if err != nil {
 		slog.Error("Failed to create engine run stats", "component", "poller", "operation", "create_stats", "error", err)
 	}
@@ -185,12 +187,12 @@ func (p *Poller) poll() {
 	}
 
 	// Publish engine start event
-	bus.Publish(events.EngineStartEvent{ExecutionMode: prefs.ExecutionMode})
+	bus.Publish(events.EngineStartEvent{ExecutionMode: prefs.DefaultDiskGroupMode})
 
 	slog.Debug("Poll cycle starting", "component", "poller",
 		"enabledIntegrations", len(configs),
 		"pollInterval", prefs.PollIntervalSeconds,
-		"executionMode", prefs.ExecutionMode)
+		"executionMode", prefs.DefaultDiskGroupMode)
 
 	if len(configs) == 0 {
 		slog.Debug("No enabled integrations, cleaning all disk groups", "component", "poller")
@@ -250,7 +252,7 @@ func (p *Poller) poll() {
 
 	// Update DiskGroups and record history only for media mounts
 	slog.Info("Processing disk groups", "component", "poller",
-		"mediaMounts", len(mediaMounts), "executionMode", prefs.ExecutionMode)
+		"mediaMounts", len(mediaMounts), "executionMode", prefs.DefaultDiskGroupMode)
 
 	var totalDeletionsQueued int
 	anyThresholdBreached := false
@@ -349,7 +351,7 @@ func (p *Poller) poll() {
 	// asynchronously); for dry-run/approval, Candidates is used in the
 	// notification description instead of Deleted.
 	p.reg.NotificationDispatch.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode:      prefs.ExecutionMode,
+		ExecutionMode:      prefs.DefaultDiskGroupMode,
 		Evaluated:          int(evaluated),
 		Candidates:         int(candidates),
 		Deleted:            totalDeletionsQueued,
@@ -363,7 +365,7 @@ func (p *Poller) poll() {
 	// For dry-run and approval modes, the poller's accumulated freedBytes is the
 	// only source of truth — persist it now.
 	writeFreedBytes := freedBytes
-	if prefs.ExecutionMode == db.ModeAuto {
+	if prefs.DefaultDiskGroupMode == db.ModeAuto {
 		writeFreedBytes = 0
 	}
 
@@ -382,7 +384,7 @@ func (p *Poller) poll() {
 		Evaluated:        int(evaluated),
 		Candidates:       int(candidates),
 		DurationMs:       time.Since(pollStart).Milliseconds(),
-		ExecutionMode:    prefs.ExecutionMode,
+		ExecutionMode:    prefs.DefaultDiskGroupMode,
 		FreedBytes:       freedBytes,
 		CompletedAtEpoch: time.Now().UTC().Unix(),
 	})

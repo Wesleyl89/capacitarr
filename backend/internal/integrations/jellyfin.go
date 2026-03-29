@@ -658,8 +658,111 @@ func (j *JellyfinClient) GetLabelNames() ([]string, error) {
 	return names, nil
 }
 
+// AddLabel adds a tag to a Jellyfin item. Fetches the current item,
+// appends the tag if not already present, and POSTs the updated item back.
+func (j *JellyfinClient) AddLabel(itemID string, label string) error {
+	item, err := j.getItemByID(itemID)
+	if err != nil {
+		return fmt.Errorf("fetch item %s: %w", itemID, err)
+	}
+
+	// Check if already present
+	for _, tag := range item.Tags {
+		if tag == label {
+			return nil // Already has this tag
+		}
+	}
+
+	item.Tags = append(item.Tags, label)
+	return j.updateItem(itemID, item)
+}
+
+// RemoveLabel removes a tag from a Jellyfin item. Fetches the current item,
+// removes the tag if present, and POSTs the updated item back.
+func (j *JellyfinClient) RemoveLabel(itemID string, label string) error {
+	item, err := j.getItemByID(itemID)
+	if err != nil {
+		return fmt.Errorf("fetch item %s: %w", itemID, err)
+	}
+
+	filtered := make([]string, 0, len(item.Tags))
+	found := false
+	for _, tag := range item.Tags {
+		if tag == label {
+			found = true
+			continue
+		}
+		filtered = append(filtered, tag)
+	}
+	if !found {
+		return nil // Tag wasn't present
+	}
+
+	item.Tags = filtered
+	return j.updateItem(itemID, item)
+}
+
+// getItemByID fetches a single Jellyfin item by ID with Tags and ProviderIds fields.
+func (j *JellyfinClient) getItemByID(itemID string) (*jellyfinItem, error) {
+	adminID, err := j.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("get admin user: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("/Users/%s/Items/%s?Fields=Tags,ProviderIds", adminID, itemID)
+	data, err := j.doRequest(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var item jellyfinItem
+	if err := json.Unmarshal(data, &item); err != nil {
+		return nil, fmt.Errorf("parse item response: %w", err)
+	}
+	return &item, nil
+}
+
+// updateItem POSTs the modified item back to Jellyfin.
+func (j *JellyfinClient) updateItem(itemID string, item *jellyfinItem) error {
+	body, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("marshal item: %w", err)
+	}
+
+	fullURL := j.URL + "/Items/" + itemID
+	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", j.APIKey)
+}
+
+var _ Connectable = (*JellyfinClient)(nil)
+
+// GetPosterImage downloads the current primary poster for a Jellyfin item.
+func (j *JellyfinClient) GetPosterImage(itemID string) ([]byte, string, error) {
+	endpoint := fmt.Sprintf("/Items/%s/Images/Primary", itemID)
+	data, err := j.doRequest(endpoint)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetch poster: %w", err)
+	}
+	return data, "image/jpeg", nil
+}
+
+// UploadPosterImage uploads a new primary poster to a Jellyfin item.
+// Jellyfin accepts raw image bytes with the appropriate Content-Type header.
+func (j *JellyfinClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
+	fullURL := j.URL + "/Items/" + itemID + "/Images/Primary"
+	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+}
+
+// RestorePosterImage removes the custom primary poster from a Jellyfin item,
+// reverting to the default provider-sourced poster.
+func (j *JellyfinClient) RestorePosterImage(itemID string) error {
+	fullURL := j.URL + "/Items/" + itemID + "/Images/Primary"
+	return DoAPIRequestWithBody("DELETE", fullURL, nil, "X-Emby-Token", j.APIKey)
+}
+
 var _ Connectable = (*JellyfinClient)(nil)
 var _ WatchDataProvider = (*JellyfinClient)(nil)
 var _ WatchlistProvider = (*JellyfinClient)(nil)
 var _ CollectionDataProvider = (*JellyfinClient)(nil)
 var _ LabelDataProvider = (*JellyfinClient)(nil)
+var _ LabelManager = (*JellyfinClient)(nil)
+var _ PosterManager = (*JellyfinClient)(nil)

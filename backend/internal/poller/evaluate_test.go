@@ -42,10 +42,10 @@ func setupEvaluateTestDB(t *testing.T) (*gorm.DB, *services.Registry) {
 	}
 
 	pref := db.PreferenceSet{
-		ID:                  1,
-		ExecutionMode:       db.ModeApproval,
-		LogLevel:            "info",
-		PollIntervalSeconds: 300,
+		ID:                   1,
+		DefaultDiskGroupMode: db.ModeApproval,
+		LogLevel:             "info",
+		PollIntervalSeconds:  300,
 	}
 	if err := database.FirstOrCreate(&pref, db.PreferenceSet{ID: 1}).Error; err != nil {
 		t.Fatalf("Failed to seed preferences: %v", err)
@@ -442,6 +442,7 @@ func TestEvaluateAndCleanDisk_ReconcilesDismissesStaleItems(t *testing.T) {
 		UsedBytes:    95000,
 		ThresholdPct: 80.0,
 		TargetPct:    70.0,
+		Mode:         db.ModeApproval,
 	}
 	if err := database.Create(&group).Error; err != nil {
 		t.Fatalf("Failed to create disk group: %v", err)
@@ -482,7 +483,7 @@ func TestEvaluateAndCleanDisk_ReconcilesDismissesStaleItems(t *testing.T) {
 		t.Fatalf("Failed to create snoozed item: %v", err)
 	}
 
-	prefs := db.PreferenceSet{ExecutionMode: db.ModeApproval}
+	prefs := db.PreferenceSet{DefaultDiskGroupMode: db.ModeApproval}
 
 	// Run with no media items — no candidates will be generated, so
 	// neededKeys will be empty, and all pending items should be reconciled away
@@ -525,6 +526,7 @@ func TestEvaluateAndCleanDisk_ReconcileNoopInDryRun(t *testing.T) {
 		UsedBytes:    95000,
 		ThresholdPct: 80.0,
 		TargetPct:    70.0,
+		Mode:         db.ModeDryRun,
 	}
 	if err := database.Create(&group).Error; err != nil {
 		t.Fatalf("Failed to create disk group: %v", err)
@@ -547,7 +549,7 @@ func TestEvaluateAndCleanDisk_ReconcileNoopInDryRun(t *testing.T) {
 	}
 
 	// Run in dry-run mode — reconciliation should NOT happen
-	prefs := db.PreferenceSet{ExecutionMode: db.ModeDryRun}
+	prefs := db.PreferenceSet{DefaultDiskGroupMode: db.ModeDryRun}
 	p.evaluateAndCleanDisk(&RunAccumulator{}, group, nil, nil, 0, prefs, map[string]int{}, nil, &engine.EvaluationContext{ActiveIntegrationTypes: map[integrations.IntegrationType]bool{}})
 
 	// Verify: pending item is preserved (reconciliation didn't run)
@@ -576,6 +578,7 @@ func TestEvaluateAndCleanDisk_IsSnoozed_AutoMode(t *testing.T) {
 		UsedBytes:    95000000,  // 95 MB = 95%
 		ThresholdPct: 80.0,
 		TargetPct:    70.0,
+		Mode:         db.ModeAuto,
 	}
 	if err := database.Create(&group).Error; err != nil {
 		t.Fatalf("Failed to create disk group: %v", err)
@@ -613,7 +616,7 @@ func TestEvaluateAndCleanDisk_IsSnoozed_AutoMode(t *testing.T) {
 	}
 
 	prefs := db.PreferenceSet{
-		ExecutionMode: db.ModeAuto,
+		DefaultDiskGroupMode: db.ModeAuto,
 	}
 	weights := map[string]int{
 		"watch_history":   5,
@@ -647,6 +650,7 @@ func TestEvaluateAndCleanDisk_IsSnoozed_DryRunMode(t *testing.T) {
 		UsedBytes:    95000000,
 		ThresholdPct: 80.0,
 		TargetPct:    70.0,
+		Mode:         db.ModeDryRun,
 	}
 	if err := database.Create(&group).Error; err != nil {
 		t.Fatalf("Failed to create disk group: %v", err)
@@ -683,7 +687,7 @@ func TestEvaluateAndCleanDisk_IsSnoozed_DryRunMode(t *testing.T) {
 	}
 
 	prefs := db.PreferenceSet{
-		ExecutionMode: db.ModeDryRun,
+		DefaultDiskGroupMode: db.ModeDryRun,
 	}
 	weights := map[string]int{
 		"watch_history":   5,

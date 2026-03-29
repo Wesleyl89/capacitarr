@@ -37,7 +37,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 
 	// Seed default preferences
-	pref := db.PreferenceSet{ID: 1, ExecutionMode: db.ModeDryRun, LogLevel: db.LogLevelInfo, AuditLogRetentionDays: 30}
+	pref := db.PreferenceSet{ID: 1, DefaultDiskGroupMode: db.ModeDryRun, LogLevel: db.LogLevelInfo, AuditLogRetentionDays: 30}
 	if err := database.FirstOrCreate(&pref, db.PreferenceSet{ID: 1}).Error; err != nil {
 		t.Fatalf("Failed to seed preferences: %v", err)
 	}

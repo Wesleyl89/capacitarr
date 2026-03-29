@@ -282,6 +282,41 @@
             </div>
           </div>
 
+          <!-- Execution Mode Selector -->
+          <div class="flex items-center gap-3 pt-1">
+            <UiLabel class="text-xs text-muted-foreground shrink-0">{{
+              $t('rules.diskMode')
+            }}</UiLabel>
+            <div class="flex gap-1.5">
+              <UiButton
+                v-for="m in diskGroupModes"
+                :key="m.value"
+                size="sm"
+                :variant="editMode(dg) === m.value ? 'default' : 'outline'"
+                class="h-6 px-2 text-[11px]"
+                @click="setDiskGroupMode(dg, m.value)"
+              >
+                {{ m.label }}
+              </UiButton>
+            </div>
+          </div>
+
+          <!-- Sunset Threshold (visible only in sunset mode) -->
+          <div v-if="editMode(dg) === MODE_SUNSET" class="flex items-center gap-3">
+            <UiLabel class="text-xs text-muted-foreground shrink-0">{{
+              $t('rules.sunsetThreshold')
+            }}</UiLabel>
+            <UiInput
+              type="number"
+              :model-value="editSunsetPct(dg)"
+              class="h-7 w-20 text-xs"
+              min="1"
+              max="99"
+              @update:model-value="(v: string | number) => setSunsetPct(dg, Number(v))"
+            />
+            <span class="text-xs text-muted-foreground">%</span>
+          </div>
+
           <!-- Validation error + Save button row -->
           <div class="flex items-center justify-between">
             <p v-if="thresholdValidation(dg.id, dg)" class="text-xs text-red-500">
@@ -323,6 +358,7 @@ import {
   diskStatusTextClass,
   diskStatusFillColor,
 } from '~/utils/format';
+import { MODE_DRY_RUN, MODE_APPROVAL, MODE_AUTO, MODE_SUNSET } from '~/constants';
 import type { DiskGroup, ApiError } from '~/types/api';
 
 const GB = 1_073_741_824;
@@ -387,11 +423,13 @@ function editThreshold(dg: DiskGroup): number {
 /** Whether the user has unsaved changes for this disk group. */
 function hasChanges(dg: DiskGroup): boolean {
   const edit = thresholdEdits[dg.id];
-  if (!edit) return false;
-  const savedOverrideBytes = dg.totalBytesOverride ?? null;
-  const editOverrideBytes = edit.overrideBytes;
-  const overrideChanged = editOverrideBytes !== savedOverrideBytes;
-  return edit.target !== dg.targetPct || edit.threshold !== dg.thresholdPct || overrideChanged;
+  const modeEdit = modeEdits[dg.id];
+  const thresholdChanged =
+    edit && (edit.target !== dg.targetPct || edit.threshold !== dg.thresholdPct);
+  const overrideChanged = edit && edit.overrideBytes !== (dg.totalBytesOverride ?? null);
+  const modeChanged =
+    modeEdit && (modeEdit.mode !== dg.mode || modeEdit.sunsetPct !== (dg.sunsetPct ?? null));
+  return !!thresholdChanged || !!overrideChanged || !!modeChanged;
 }
 
 /** Whether this disk group is currently saving. */
@@ -427,6 +465,40 @@ function ensureThresholdEdit(dgId: number, dg: DiskGroup) {
       saving: false,
     };
   }
+}
+
+// ─── Disk Group Mode ─────────────────────────────────────────────────────────
+
+const diskGroupModes = [
+  { value: MODE_DRY_RUN, label: 'Dry-Run' },
+  { value: MODE_APPROVAL, label: 'Approval' },
+  { value: MODE_AUTO, label: 'Auto' },
+  { value: MODE_SUNSET, label: 'Sunset' },
+];
+
+// Per-disk-group mode overrides (not yet saved)
+const modeEdits = reactive<Record<number, { mode: string; sunsetPct: number | null }>>({});
+
+function editMode(dg: DiskGroup): string {
+  return modeEdits[dg.id]?.mode ?? dg.mode;
+}
+
+function editSunsetPct(dg: DiskGroup): number | undefined {
+  return modeEdits[dg.id]?.sunsetPct ?? dg.sunsetPct ?? undefined;
+}
+
+function setDiskGroupMode(dg: DiskGroup, mode: string) {
+  const edit = modeEdits[dg.id] ?? { mode: dg.mode, sunsetPct: dg.sunsetPct ?? null };
+  edit.mode = mode;
+  modeEdits[dg.id] = edit;
+  ensureThresholdEdit(dg.id, dg); // Mark as changed so save button enables
+}
+
+function setSunsetPct(dg: DiskGroup, pct: number) {
+  const edit = modeEdits[dg.id] ?? { mode: dg.mode, sunsetPct: dg.sunsetPct ?? null };
+  edit.sunsetPct = pct;
+  modeEdits[dg.id] = edit;
+  ensureThresholdEdit(dg.id, dg);
 }
 
 /** Get the current display value for the override input. */
@@ -567,12 +639,15 @@ async function saveThresholds(dg: DiskGroup) {
   edit.saving = true;
 
   try {
+    const modeEdit = modeEdits[dg.id];
     const updated = (await api(`/api/v1/disk-groups/${dg.id}`, {
       method: 'PUT',
       body: {
         thresholdPct: edit.threshold,
         targetPct: edit.target,
         totalBytesOverride: edit.overrideBytes,
+        mode: modeEdit?.mode || dg.mode,
+        sunsetPct: modeEdit?.mode === MODE_SUNSET ? modeEdit.sunsetPct : null,
       },
     })) as DiskGroup;
 

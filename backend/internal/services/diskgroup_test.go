@@ -99,7 +99,7 @@ func TestDiskGroupService_UpdateThresholds(t *testing.T) {
 		t.Fatalf("Failed to create disk group: %v", err)
 	}
 
-	updated, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil)
+	updated, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil, "", nil)
 	if err != nil {
 		t.Fatalf("UpdateThresholds returned error: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestDiskGroupService_UpdateThresholds_WithOverride(t *testing.T) {
 
 	// Set override
 	override := int64(500000000000)
-	updated, err := svc.UpdateThresholds(group.ID, 85.0, 75.0, &override)
+	updated, err := svc.UpdateThresholds(group.ID, 85.0, 75.0, &override, "", nil)
 	if err != nil {
 		t.Fatalf("UpdateThresholds with override returned error: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestDiskGroupService_UpdateThresholds_WithOverride(t *testing.T) {
 	}
 
 	// Clear override by passing nil
-	cleared, err := svc.UpdateThresholds(group.ID, 85.0, 75.0, nil)
+	cleared, err := svc.UpdateThresholds(group.ID, 85.0, 75.0, nil, "", nil)
 	if err != nil {
 		t.Fatalf("UpdateThresholds clear override returned error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestDiskGroupService_UpdateThresholds_NotFound(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewDiskGroupService(database, bus)
 
-	_, err := svc.UpdateThresholds(99999, 90.0, 80.0, nil)
+	_, err := svc.UpdateThresholds(99999, 90.0, 80.0, nil, "", nil)
 	if err == nil {
 		t.Fatal("expected error for non-existent disk group")
 	}
@@ -346,7 +346,7 @@ func TestDiskGroupService_UpdateThresholds_TriggersEngineRun(t *testing.T) {
 	}
 
 	// Update thresholds — should trigger an engine run
-	_, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil)
+	_, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil, "", nil)
 	if err != nil {
 		t.Fatalf("UpdateThresholds returned error: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestDiskGroupService_UpdateThresholds_NoEngineService(t *testing.T) {
 	}
 
 	// Should not panic when engine is nil
-	_, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil)
+	_, err := svc.UpdateThresholds(group.ID, 90.0, 80.0, nil, "", nil)
 	if err != nil {
 		t.Fatalf("UpdateThresholds returned error: %v", err)
 	}

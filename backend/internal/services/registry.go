@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -42,6 +43,8 @@ type Registry struct {
 	Version              *VersionService
 	WatchAnalytics       *WatchAnalyticsService
 	Migration            *MigrationService
+	Sunset               *SunsetService
+	PosterOverlay        *PosterOverlayService
 }
 
 // NewRegistry creates a fully wired Registry with all services.
@@ -86,6 +89,18 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 		Metrics:              metricsSvc,
 		WatchAnalytics:       NewWatchAnalyticsService(previewSvc),
 		Migration:            NewMigrationService(database, bus, filepath.Dir(cfg.Database)),
+		Sunset:               NewSunsetService(database, bus),
+	}
+
+	// Initialize PosterOverlayService — cache dir is alongside the database file
+	posterCacheDir := filepath.Join(filepath.Dir(cfg.Database), "posters", "originals")
+	if posterSvc, err := NewPosterOverlayService(database, bus, posterCacheDir); err != nil {
+		slog.Warn("Failed to initialize poster overlay service — poster overlays disabled",
+			"component", "registry", "error", err)
+	} else {
+		reg.PosterOverlay = posterSvc
+		// Startup validation: warn about items with active poster overlays
+		posterSvc.ValidateCache()
 	}
 
 	// Wire SettingsService's cross-service dependency on DeletionService

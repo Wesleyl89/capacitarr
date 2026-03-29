@@ -24,9 +24,11 @@ type DiskGroup struct {
 	MountPath          string    `gorm:"uniqueIndex;not null" json:"mountPath"`
 	TotalBytes         int64     `gorm:"not null" json:"totalBytes"`
 	UsedBytes          int64     `gorm:"not null" json:"usedBytes"`
-	TotalBytesOverride *int64    `json:"totalBytesOverride,omitempty"`   // User-defined total; nil = use detected
-	ThresholdPct       float64   `gorm:"default:85" json:"thresholdPct"` // Clean up at this %
-	TargetPct          float64   `gorm:"default:75" json:"targetPct"`    // Free down to this %
+	TotalBytesOverride *int64    `json:"totalBytesOverride,omitempty"`           // User-defined total; nil = use detected
+	ThresholdPct       float64   `gorm:"default:85" json:"thresholdPct"`         // Clean up at this % (escalation trigger in sunset mode)
+	TargetPct          float64   `gorm:"default:75" json:"targetPct"`            // Free down to this %
+	Mode               string    `gorm:"not null;default:'dry-run'" json:"mode"` // "dry-run", "approval", "auto", "sunset" — per-group execution mode
+	SunsetPct          *float64  `json:"sunsetPct,omitempty"`                    // Sunset countdown starts at this %; NULL until explicitly configured
 	CreatedAt          time.Time `json:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
@@ -87,19 +89,27 @@ type LibraryHistory struct {
 // PreferenceSet stores global application settings (engine modes, thresholds,
 // analytics config). Scoring factor weights are stored separately in the
 // scoring_factor_weights table — see ScoringFactorWeight.
+//
+// Note: execution mode was a global setting in 2.x (ExecutionMode). In 3.0 it
+// moved to per-disk-group (DiskGroup.Mode). The global field is now
+// DefaultDiskGroupMode — used only as the default for newly auto-discovered
+// disk groups.
 type PreferenceSet struct {
 	ID                        uint      `gorm:"primarykey" json:"id"`
-	LogLevel                  string    `gorm:"default:'info';not null" json:"logLevel"`              // "debug", "info", "warn", "error"
-	AuditLogRetentionDays     int       `gorm:"default:30;not null" json:"auditLogRetentionDays"`     // 0 = forever, else days
-	PollIntervalSeconds       int       `gorm:"default:300;not null" json:"pollIntervalSeconds"`      // minimum 60, default 300 (5 min)
-	ExecutionMode             string    `gorm:"default:'dry-run';not null" json:"executionMode"`      // "dry-run", "approval", "auto"
-	TiebreakerMethod          string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"` // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
-	DeletionsEnabled          bool      `gorm:"default:true;not null" json:"deletionsEnabled"`        // Safety guard: actual deletions only when true
-	SnoozeDurationHours       int       `gorm:"default:24;not null" json:"snoozeDurationHours"`       // Hours to snooze rejected items before re-evaluation
-	CheckForUpdates           bool      `gorm:"default:true;not null" json:"checkForUpdates"`         // Enable outbound update checks
-	DeletionQueueDelaySeconds int       `gorm:"default:30;not null" json:"deletionQueueDelaySeconds"` // Grace period before processing queued deletions (10-300)
-	DeadContentMinDays        int       `gorm:"default:90;not null" json:"deadContentMinDays"`        // Minimum days in library for "dead content" report
-	StaleContentDays          int       `gorm:"default:180;not null" json:"staleContentDays"`         // Days since last watch for "stale content" report
+	LogLevel                  string    `gorm:"default:'info';not null" json:"logLevel"`                                               // "debug", "info", "warn", "error"
+	AuditLogRetentionDays     int       `gorm:"default:30;not null" json:"auditLogRetentionDays"`                                      // 0 = forever, else days
+	PollIntervalSeconds       int       `gorm:"default:300;not null" json:"pollIntervalSeconds"`                                       // minimum 60, default 300 (5 min)
+	DefaultDiskGroupMode      string    `gorm:"column:default_disk_group_mode;default:'dry-run';not null" json:"defaultDiskGroupMode"` // Default mode for new disk groups: "dry-run", "approval", "auto", "sunset"
+	TiebreakerMethod          string    `gorm:"default:'size_desc';not null" json:"tiebreakerMethod"`                                  // "size_desc", "size_asc", "name_asc", "oldest_first", "newest_first"
+	DeletionsEnabled          bool      `gorm:"default:true;not null" json:"deletionsEnabled"`                                         // Safety guard: actual deletions only when true
+	SnoozeDurationHours       int       `gorm:"default:24;not null" json:"snoozeDurationHours"`                                        // Hours to snooze rejected items before re-evaluation
+	CheckForUpdates           bool      `gorm:"default:true;not null" json:"checkForUpdates"`                                          // Enable outbound update checks
+	DeletionQueueDelaySeconds int       `gorm:"default:30;not null" json:"deletionQueueDelaySeconds"`                                  // Grace period before processing queued deletions (10-300)
+	DeadContentMinDays        int       `gorm:"default:90;not null" json:"deadContentMinDays"`                                         // Minimum days in library for "dead content" report
+	StaleContentDays          int       `gorm:"default:180;not null" json:"staleContentDays"`                                          // Days since last watch for "stale content" report
+	SunsetDays                int       `gorm:"default:30;not null" json:"sunsetDays"`                                                 // Default countdown period in days for sunset mode
+	SunsetLabel               string    `gorm:"default:'capacitarr-sunset';not null" json:"sunsetLabel"`                               // Label/tag applied to media server items in sunset queue
+	PosterOverlayEnabled      bool      `gorm:"default:false;not null" json:"posterOverlayEnabled"`                                    // Whether to apply countdown overlays to posters
 	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
@@ -140,11 +150,12 @@ const (
 	StatusRejected = "rejected"
 )
 
-// Execution mode constants — used in PreferenceSet.ExecutionMode field.
+// Execution mode constants — used in DiskGroup.Mode and PreferenceSet.DefaultDiskGroupMode.
 const (
 	ModeAuto     = "auto"
 	ModeDryRun   = "dry-run"
 	ModeApproval = "approval"
+	ModeSunset   = "sunset"
 )
 
 // Tiebreaker method constants — used in PreferenceSet.TiebreakerMethod field.
@@ -191,6 +202,38 @@ type ApprovalQueueItem struct {
 // TableName returns the database table name for ApprovalQueueItem.
 func (ApprovalQueueItem) TableName() string {
 	return "approval_queue"
+}
+
+// SunsetQueueItem represents an item in the sunset countdown queue.
+// Items enter when disk usage exceeds sunsetPct on a sunset-mode disk group.
+// After the countdown expires (deletion_date <= now), the item is handed to
+// DeletionService for actual removal. Unlike approval queue items, sunset items
+// are time-driven (daily cron), not reconciled per engine cycle, and persist
+// across cycles regardless of threshold changes.
+type SunsetQueueItem struct {
+	ID                  uint      `gorm:"primarykey" json:"id"`
+	MediaName           string    `gorm:"index;not null" json:"mediaName"`
+	MediaType           string    `gorm:"not null" json:"mediaType"`                            // movie, show, season, episode, artist, book
+	TmdbID              *int      `gorm:"index" json:"tmdbId,omitempty"`                        // TMDb ID for media server label/poster targeting; nil if not matched
+	IntegrationID       uint      `gorm:"not null" json:"integrationId"`                        // FK to IntegrationConfig
+	ExternalID          string    `gorm:"not null;default:''" json:"externalId"`                // *arr external ID
+	SizeBytes           int64     `gorm:"not null;default:0" json:"sizeBytes"`                  // File size in bytes
+	Score               float64   `gorm:"not null;default:0" json:"score"`                      // Score at time of scheduling
+	ScoreDetails        string    `gorm:"type:text" json:"scoreDetails"`                        // JSON-encoded score factors
+	PosterURL           string    `json:"posterUrl,omitempty"`                                  // Original poster URL from *arr
+	DiskGroupID         uint      `gorm:"index;not null" json:"diskGroupId"`                    // FK to DiskGroup
+	CollectionGroup     string    `gorm:"not null;default:''" json:"collectionGroup,omitempty"` // Collection deletion group
+	Trigger             string    `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user"
+	DeletionDate        time.Time `gorm:"index;not null" json:"deletionDate"`                   // When to hand to DeletionService
+	LabelApplied        bool      `gorm:"not null;default:false" json:"labelApplied"`           // Whether sunset label has been applied to media server
+	PosterOverlayActive bool      `gorm:"not null;default:false" json:"posterOverlayActive"`    // Whether an overlay poster is currently uploaded
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
+
+// TableName returns the database table name for SunsetQueueItem.
+func (SunsetQueueItem) TableName() string {
+	return "sunset_queue"
 }
 
 // Audit log action constants — used in AuditLogEntry.Action field.
@@ -282,6 +325,7 @@ type NotificationConfig struct {
 	OnUpdateAvailable   bool      `gorm:"default:true" json:"onUpdateAvailable"`
 	OnApprovalActivity  bool      `gorm:"default:true" json:"onApprovalActivity"`
 	OnIntegrationStatus bool      `gorm:"default:true" json:"onIntegrationStatus"`
+	OnSunsetActivity    bool      `gorm:"default:true" json:"onSunsetActivity"`
 	CreatedAt           time.Time `json:"createdAt"`
 	UpdatedAt           time.Time `json:"updatedAt"`
 }
