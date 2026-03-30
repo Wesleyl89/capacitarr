@@ -108,9 +108,9 @@ Calculated as `daysSinceAdded / 365`, capped at 1.0. Older content scores higher
 |------------|-----------|
 | Continuing | 0.2 |
 | Ended | 1.0 |
-| Unknown / Movie | 0.5 |
+| Unknown | 0.5 |
 
-Ended shows score higher because no new episodes are expected — keeping them offers less ongoing value. This factor only applies to shows and seasons; movies and other types default to 0.5.
+Ended shows score higher because no new episodes are expected — keeping them offers less ongoing value. This factor **only applies to shows and seasons** — movies and other media types are excluded from this factor entirely (it does not contribute to their score). Unknown series status defaults to 0.5.
 
 ### Request Popularity
 

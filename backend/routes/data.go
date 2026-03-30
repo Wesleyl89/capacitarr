@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -17,7 +18,8 @@ func handleDataReset(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		summary, err := reg.Data.Reset()
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, err.Error())
+			slog.Error("Failed to reset data", "component", "routes", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to reset data")
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

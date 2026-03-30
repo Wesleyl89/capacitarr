@@ -62,6 +62,7 @@ type DeletionService struct {
 	engine           EngineStatsWriter
 	metrics          DeletionStatsWriter
 	approvalReturner ApprovalReturner
+	approvalSnoozer  ApprovalSnoozer
 	rateLimiter      *rate.Limiter
 	done             chan struct{}
 
@@ -125,6 +126,12 @@ type ApprovalReturner interface {
 	RemoveEntry(entryID uint) error
 }
 
+// ApprovalSnoozer allows the DeletionService to create snoozed entries in the
+// approval queue without importing ApprovalService directly.
+type ApprovalSnoozer interface {
+	CreateSnoozedEntry(mediaName, mediaType string, integrationID uint, snoozeDurationHours int) (*time.Time, error)
+}
+
 // NewDeletionService creates a new DeletionService.
 // The settings, engine, and metrics dependencies are injected via SetDependencies()
 // after registry construction to avoid circular initialization.
@@ -145,16 +152,17 @@ func NewDeletionService(bus *events.EventBus, auditLog *AuditLogService) *Deleti
 // Wired returns true when all lazily-injected dependencies are non-nil.
 // Used by Registry.Validate() to catch missing wiring at startup.
 func (s *DeletionService) Wired() bool {
-	return s.settings != nil && s.engine != nil && s.metrics != nil && s.approvalReturner != nil
+	return s.settings != nil && s.engine != nil && s.metrics != nil && s.approvalReturner != nil && s.approvalSnoozer != nil
 }
 
 // SetDependencies wires cross-service dependencies that cannot be injected
 // at construction time due to circular initialization in the registry.
-func (s *DeletionService) SetDependencies(settings SettingsReader, engine EngineStatsWriter, metrics DeletionStatsWriter, approvalReturner ApprovalReturner) {
+func (s *DeletionService) SetDependencies(settings SettingsReader, engine EngineStatsWriter, metrics DeletionStatsWriter, approvalReturner ApprovalReturner, approvalSnoozer ApprovalSnoozer) {
 	s.settings = settings
 	s.engine = engine
 	s.metrics = metrics
 	s.approvalReturner = approvalReturner
+	s.approvalSnoozer = approvalSnoozer
 }
 
 // Start begins the background deletion worker. Panics if SetDependencies()
@@ -182,7 +190,7 @@ func (s *DeletionService) QueueDeletion(job DeleteJob) error {
 	s.queuedMu.Lock()
 	if len(s.queuedItems) >= 500 {
 		s.queuedMu.Unlock()
-		return fmt.Errorf("deletion queue is full")
+		return ErrDeletionQueueFull
 	}
 	s.queuedItems = append(s.queuedItems, job)
 	queueSize := len(s.queuedItems)
@@ -866,6 +874,36 @@ func (s *DeletionService) FindQueuedItem(mediaName, mediaType string) *DeleteJob
 		}
 	}
 	return nil
+}
+
+// SnoozeDeletionItem encapsulates the multi-step snooze workflow: look up the
+// queued item for its integration ID, cancel the deletion, read the snooze
+// duration from preferences, and create a snoozed entry in the approval queue.
+// Returns the snoozedUntil time on success.
+func (s *DeletionService) SnoozeDeletionItem(mediaName, mediaType string) (*time.Time, error) {
+	// Look up the item in the queue to get integration ID
+	queuedItem := s.FindQueuedItem(mediaName, mediaType)
+	var integrationID uint
+	if queuedItem != nil {
+		integrationID = queuedItem.IntegrationID
+	}
+
+	// Remove from deletion queue
+	s.CancelDeletion(mediaName, mediaType)
+
+	// Get snooze duration from preferences
+	prefs, err := s.settings.GetPreferences()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load preferences for snooze: %w", err)
+	}
+
+	// Create snoozed entry in approval queue
+	snoozedUntil, err := s.approvalSnoozer.CreateSnoozedEntry(mediaName, mediaType, integrationID, prefs.SnoozeDurationHours)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create snoozed entry: %w", err)
+	}
+
+	return snoozedUntil, nil
 }
 
 // ListQueuedItems returns a snapshot copy of the items currently waiting in

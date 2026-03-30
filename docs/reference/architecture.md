@@ -116,6 +116,8 @@ All services accept `*gorm.DB` and `*events.EventBus` in their constructor and a
 | | RulesService | Custom rule CRUD, validation, and impact preview |
 | | PreviewService | Scored media preview cache, SSE-driven invalidation |
 | **Analytics** | WatchAnalyticsService | Dead content, stale content analytics |
+| **Sunset** | SunsetService | Sunset queue CRUD, expiry processing, escalation, label management |
+| | PosterOverlayService | Poster overlay lifecycle (apply, restore, update all) |
 | **External** | IntegrationService | CRUD, test connections, sync data |
 | | AuthService | Login, change password, generate API keys |
 | | NotificationChannelService | CRUD for notification channels |
@@ -151,6 +153,8 @@ type Registry struct {
     Version              *VersionService
     WatchAnalytics       *WatchAnalyticsService
     Migration            *MigrationService
+    Sunset               *SunsetService
+    PosterOverlay        *PosterOverlayService
 }
 ```
 
@@ -172,6 +176,11 @@ Integration clients implement only the capability interfaces they support, repla
 | `CollectionDataProvider` | Collection memberships | Plex, Jellyfin, Emby |
 | `CollectionResolver` | Resolve collection members for deletion | Radarr |
 | `RuleValueFetcher` | Dynamic rule field values | Sonarr, Radarr, Lidarr, Readarr |
+| `CollectionNameFetcher` | Fetch collection names for autocomplete | Plex, Jellyfin, Emby |
+| `LabelDataProvider` | Label memberships for enrichment | Plex, Jellyfin, Emby |
+| `LabelManager` | Apply and remove labels on media items | Plex, Jellyfin, Emby |
+| `LabelNameFetcher` | Fetch label names for autocomplete | Plex, Jellyfin, Emby |
+| `PosterManager` | Upload and restore poster images | Plex, Jellyfin, Emby |
 
 ### Integration Registry
 
@@ -183,7 +192,9 @@ registry.MediaSources()            // → [Sonarr, Radarr, Lidarr, Readarr]
 registry.DiskReporters()           // → [Sonarr, Radarr, Lidarr, Readarr]
 registry.RequestProviders()        // → [Seerr]
 registry.CollectionDataProviders() // → [Plex, Jellyfin, Emby]
-registry.CollectionResolvers()     // → [Radarr]
+registry.LabelDataProviders()      // → [Plex, Jellyfin, Emby]
+registry.LabelManagers()           // → [Plex, Jellyfin, Emby]
+registry.PosterManagers()          // → [Plex, Jellyfin, Emby]
 ```
 
 Integration clients are created via a factory pattern (`integrations.CreateClient(config)`) and auto-registered. The poller and preview service use the registry to discover capabilities instead of hardcoded wiring.
@@ -202,12 +213,13 @@ flowchart LR
     REQUEST["RequestEnricher<br/>Seerr request status"]
     WATCHLIST["WatchlistEnricher<br/>Watchlist/favorites"]
     COLLECTION["CollectionEnricher<br/>Collection memberships"]
+    LABEL["LabelEnricher<br/>Media server labels"]
     XREF["CrossReferenceEnricher<br/>Requestor watched?"]
 
-    FETCH --> BULK --> TAUTULLI_E --> JELLYSTAT_E --> TRACEARR_E --> REQUEST --> WATCHLIST --> COLLECTION --> XREF
+    FETCH --> BULK --> TAUTULLI_E --> JELLYSTAT_E --> TRACEARR_E --> REQUEST --> WATCHLIST --> COLLECTION --> LABEL --> XREF
 ```
 
-Each enricher implements the `Enricher` interface (`Name()`, `Priority()`, `Enrich(items)`) and is auto-discovered from the registry's capabilities. The pipeline currently includes 8 enrichers.
+Each enricher implements the `Enricher` interface (`Name()`, `Priority()`, `Enrich(items)`) and is auto-discovered from the registry's capabilities. The pipeline currently includes 9 enrichers.
 
 ### Pluggable Scoring Factors
 
@@ -276,7 +288,7 @@ flowchart LR
 
 See [notifications.md](../guides/notifications.md) for the full user-facing guide.
 
-### Event Types (53 total)
+### Event Types (65 total)
 
 | Category | Events |
 |----------|--------|
@@ -288,6 +300,8 @@ See [notifications.md](../guides/notifications.md) for the full user-facing guid
 | **Deletion** | `deletion_success`, `deletion_failed`, `deletion_dry_run`, `deletion_batch_complete`, `deletion_progress`, `deletion_queued`, `deletion_cancelled`, `deletion_grace_period` |
 | **Rules** | `rule_created`, `rule_updated`, `rule_deleted` |
 | **Notifications** | `notification_channel_added`, `notification_channel_updated`, `notification_channel_removed`, `notification_sent`, `notification_delivery_failed` |
+| **Sunset** | `sunset_created`, `sunset_cancelled`, `sunset_expired`, `sunset_rescheduled`, `sunset_escalated`, `sunset_misconfigured`, `sunset_label_applied`, `sunset_label_removed`, `sunset_label_failed` |
+| **Poster Overlay** | `poster_overlay_applied`, `poster_overlay_restored`, `poster_overlay_failed` |
 | **Preview** | `preview_updated`, `preview_invalidated`, `analytics_updated` |
 | **Data** | `data_reset` |
 | **System** | `server_started`, `update_available`, `version_check` |
@@ -329,7 +343,7 @@ Active approval queue items with a state machine (`pending` → `approved`/`reje
 |--------|------|-------------|
 | `id` | INTEGER | Primary key |
 | `media_name` | TEXT | Item title |
-| `media_type` | TEXT | `movie`, `show`, `season`, `episode`, `artist`, `album`, `book` |
+| `media_type` | TEXT | `movie`, `show`, `season`, `episode`, `artist`, `book` |
 | `reason` | TEXT | Score explanation |
 | `score_details` | TEXT | JSON-encoded score breakdown |
 | `size_bytes` | INTEGER | File size |
@@ -363,7 +377,7 @@ Transient dashboard feed with 7-day retention:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Primary key |
-| `event_type` | TEXT | One of 53 event types |
+| `event_type` | TEXT | One of 65 event types |
 | `message` | TEXT | Human-readable message |
 | `metadata` | TEXT | Optional JSON payload |
 | `created_at` | DATETIME | Row creation |

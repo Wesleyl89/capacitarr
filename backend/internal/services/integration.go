@@ -22,6 +22,7 @@ var (
 	ErrUnsupportedIntegrationType = errors.New("unsupported integration type for rule values")
 	ErrIntegrationNoRuleValues    = errors.New("integration does not support rule value lookups")
 	ErrUnknownAction              = errors.New("unknown action")
+	ErrDeletionQueueFull          = errors.New("deletion queue is full")
 )
 
 // Rule value action identifiers used in FetchRuleValues switch.
@@ -515,6 +516,64 @@ func (s *IntegrationService) Update(id uint, config db.IntegrationConfig) (*db.I
 	})
 
 	return &config, nil
+}
+
+// IntegrationUpdate holds the fields that can be partially updated on an integration.
+// Pointer fields distinguish "not provided" (nil) from "explicitly set to false".
+type IntegrationUpdate struct {
+	Name               string `json:"name"`
+	URL                string `json:"url"`
+	APIKey             string `json:"apiKey"`
+	Enabled            *bool  `json:"enabled"`
+	CollectionDeletion *bool  `json:"collectionDeletion"`
+	ShowLevelOnly      *bool  `json:"showLevelOnly"`
+}
+
+// PartialUpdate merges the provided fields into the existing integration config
+// and saves the result. Clears LastError and LastSync because the configuration
+// has changed and previous sync state is no longer valid.
+func (s *IntegrationService) PartialUpdate(id uint, update IntegrationUpdate) (*db.IntegrationConfig, error) {
+	existing, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if update.Name != "" {
+		existing.Name = update.Name
+	}
+	if update.URL != "" {
+		existing.URL = update.URL
+	}
+	if update.APIKey != "" && !db.IsMaskedKey(update.APIKey) {
+		existing.APIKey = update.APIKey
+	}
+	if update.Enabled != nil {
+		existing.Enabled = *update.Enabled
+	}
+	if update.CollectionDeletion != nil {
+		existing.CollectionDeletion = *update.CollectionDeletion
+	}
+	if update.ShowLevelOnly != nil {
+		existing.ShowLevelOnly = *update.ShowLevelOnly
+	}
+
+	// Config changed → clear stale sync status
+	existing.LastError = ""
+	existing.LastSync = nil
+
+	if err := s.db.Save(existing).Error; err != nil {
+		return nil, fmt.Errorf("failed to update integration: %w", err)
+	}
+
+	s.bus.Publish(events.IntegrationUpdatedEvent{
+		IntegrationID:   existing.ID,
+		IntegrationType: existing.Type,
+		Name:            existing.Name,
+	})
+
+	// Return with masked API key
+	existing.APIKey = db.MaskAPIKey(existing.APIKey)
+	return existing, nil
 }
 
 // Delete removes an integration config. If no enabled integrations remain

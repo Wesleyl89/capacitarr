@@ -22,13 +22,14 @@ func TestGetMetricsHistory(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp map[string]any
+	var resp []any
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
+		t.Fatalf("Failed to parse response as array: %v", err)
 	}
 
-	if resp["status"] != "success" {
-		t.Errorf("Expected status 'success', got %q", resp["status"])
+	// Empty DB should return an empty array
+	if resp == nil {
+		t.Error("Expected non-nil array response")
 	}
 }
 

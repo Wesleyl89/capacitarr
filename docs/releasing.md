@@ -11,8 +11,8 @@ Releases are created when you push a `v*` tag to the repository. The CI pipeline
 1. **Extracts release notes** — `git cliff --latest --strip header` generates notes for the tagged version
 2. **Builds cross-compiled binaries** — GoReleaser compiles `linux/amd64` and `linux/arm64` binaries with the frontend SPA embedded
 3. **Creates a GitHub release** — with binary archives and checksums attached as downloadable assets
-4. **Pushes Docker images** — multi-arch images (`linux/amd64` + `linux/arm64`) to GHCR
-5. **Rebuilds the project site** — the `pages` job picks up the committed changelog
+4. **Pushes Docker images** — multi-arch images (`linux/amd64` + `linux/arm64`) to GHCR and Docker Hub
+5. **Sends release notification** — posts to Discord via webhook
 
 ### On Every Push and PR
 
@@ -127,15 +127,15 @@ These jobs are defined in `.github/workflows/ci.yml`. Lint and test jobs run in 
 
 | Job | Group | Tool / Action | Purpose |
 |-----|-------|---------------|---------|
-| `lint-go` | lint | `golangci/golangci-lint-action` (v2.11.4) | Go linting |
+| `lint-go` | lint | `golangci/golangci-lint-action@v7` (golangci-lint v2.11.4) | Go linting |
 | `lint-frontend` | lint | pnpm + Node.js 24 | ESLint + Prettier + TypeScript typecheck |
 | `test-go` | test | Go 1.26 | Go unit tests |
 | `test-frontend` | test | pnpm + Vitest | Frontend unit tests |
 | `build-docker` | build | `docker/setup-buildx-action` | Multi-arch Docker smoke test (no push) |
 | `security-govulncheck` | security | `govulncheck` | Go vulnerability check |
 | `security-pnpm-audit` | security | `pnpm audit` | npm dependency audit |
-| `security-trivy` | security | `aquasecurity/trivy-action` (v0.69.3) | Filesystem CVE scan (backend + frontend) |
-| `security-trivy-image` | security | `aquasecurity/trivy-action` (v0.69.3) | Docker image CVE scan |
+| `security-trivy` | security | `aquasecurity/trivy-action@v0.35.0` (Trivy v0.69.3) | Filesystem CVE scan (backend + frontend) |
+| `security-trivy-image` | security | `aquasecurity/trivy-action@v0.35.0` (Trivy v0.69.3) | Docker image CVE scan |
 | `security-gitleaks` | security | `gitleaks/gitleaks-action` | Git secrets detection |
 | `security-semgrep` | security | `semgrep/semgrep:1.155.0` | Static analysis (SAST) |
 
@@ -146,7 +146,7 @@ These jobs are defined in `.github/workflows/release.yml`.
 | Job | Tool / Action | Purpose |
 |-----|---------------|---------|
 | `changelog` | `orhunp/git-cliff:2.12.0` | Extract release notes for the tagged version |
-| `goreleaser` | `goreleaser/goreleaser-action` (v2.14.1) | Cross-compile binaries, create GitHub Release with assets |
+| `goreleaser` | `goreleaser/goreleaser-action@v6` (GoReleaser v2.14.1) | Cross-compile binaries, create GitHub Release with assets |
 | `docker-build` | `docker/setup-buildx-action` + GHCR login | Build and push multi-arch Docker images to GHCR |
 | `docker-mirror-dockerhub` | `crane copy` | Mirror from GHCR to Docker Hub (`continue-on-error`) |
 | `discord-notify` | `scripts/discord-release-notify.sh` | Send release notification to Discord (`continue-on-error`) |

@@ -18,6 +18,7 @@ type mockSettingsReader struct {
 	deletionsEnabled          bool
 	deletionQueueDelaySeconds int
 	executionMode             string
+	snoozeDurationHours       int
 }
 
 func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
@@ -29,10 +30,15 @@ func (m *mockSettingsReader) GetPreferences() (db.PreferenceSet, error) {
 	if mode == "" {
 		mode = db.ModeDryRun // default
 	}
+	snooze := m.snoozeDurationHours
+	if snooze == 0 {
+		snooze = 24 // default
+	}
 	return db.PreferenceSet{
 		DeletionsEnabled:          m.deletionsEnabled,
 		DeletionQueueDelaySeconds: delay,
 		DefaultDiskGroupMode:      mode,
+		SnoozeDurationHours:       snooze,
 	}, nil
 }
 
@@ -147,6 +153,7 @@ func TestDeletionService_BatchTracking_AllSuccess(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -192,6 +199,7 @@ func TestDeletionService_BatchTracking_MixedSuccessFailure(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -250,6 +258,7 @@ func TestDeletionService_BatchTracking_CorrectCounts(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -301,6 +310,7 @@ func TestDeletionService_GracefulShutdown_DrainsQueue(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	svc.Start()
@@ -369,6 +379,7 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -426,6 +437,7 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -483,6 +495,7 @@ func TestDeletionService_ForceDryRun_OverridesDeletionsEnabled(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -536,6 +549,7 @@ func TestDeletionService_NoDryRun_WhenDeletionsDisabled(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -593,6 +607,7 @@ func TestDeletionService_CancelDeletion_ReturnsTrue_WhenItemInQueue(t *testing.T
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	// Queue an item (service NOT started — item stays in channel and tracking slice)
@@ -638,6 +653,7 @@ func TestDeletionService_ProcessJob_SkipsCancelledItem(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -803,6 +819,7 @@ func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -877,6 +894,7 @@ func TestDeletionService_UpsertAudit_UsesUpsertSemantics(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	svc.Start()
@@ -929,6 +947,7 @@ func TestDeletionService_UpsertAudit_False_AppendsMultiple(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	svc.Start()
@@ -970,6 +989,7 @@ func TestDeletionService_NilClient_DryRunSucceeds(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1032,6 +1052,7 @@ func TestDeletionService_NilClient_ActualDeletion_Fails(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1079,6 +1100,7 @@ func TestDeletionService_QueueDeletion_PublishesDeletionQueuedEvent(t *testing.T
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1137,6 +1159,7 @@ func TestDeletionService_GracePeriod_StartsOnQueue(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 	svc.Start()
 	defer svc.Stop()
@@ -1168,6 +1191,7 @@ func TestDeletionService_GracePeriod_ExpiresAndProcesses(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1199,6 +1223,7 @@ func TestDeletionService_ClearQueue_CancelsAll(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
+		&mockApprovalSnoozer{},
 	)
 
 	// Queue 3 items without starting the worker
@@ -1383,6 +1408,24 @@ func (m *mockApprovalReturner) RemoveEntry(entryID uint) error {
 	return nil
 }
 
+// mockApprovalSnoozer is a no-op implementation of ApprovalSnoozer for tests
+// that don't exercise the snooze path.
+type mockApprovalSnoozer struct {
+	calledName          string
+	calledType          string
+	calledIntegrationID uint
+	calledDuration      int
+}
+
+func (m *mockApprovalSnoozer) CreateSnoozedEntry(name, mediaType string, integrationID uint, duration int) (*time.Time, error) {
+	m.calledName = name
+	m.calledType = mediaType
+	m.calledIntegrationID = integrationID
+	m.calledDuration = duration
+	t := time.Now().Add(time.Duration(duration) * time.Hour)
+	return &t, nil
+}
+
 func TestDeletionService_DryRun_ReturnsToPending_WhenApprovalEntrySet(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
@@ -1394,6 +1437,7 @@ func TestDeletionService_DryRun_ReturnsToPending_WhenApprovalEntrySet(t *testing
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		returner,
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1438,6 +1482,7 @@ func TestDeletionService_DryRun_DoesNotReturn_WhenNoApprovalEntry(t *testing.T) 
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		returner,
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1478,6 +1523,7 @@ func TestDeletionService_ActualDelete_RemovesApprovalEntry(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		returner,
+		&mockApprovalSnoozer{},
 	)
 
 	ch := bus.Subscribe()
@@ -1527,6 +1573,7 @@ func TestDeletionService_DryRunLoop_ApproveAndReturn(t *testing.T) {
 		&mockEngineStatsWriter{},
 		&mockDeletionStatsWriter{},
 		approvalSvc, // Wire real ApprovalService as the returner
+		approvalSvc, // Wire real ApprovalService as the snoozer
 	)
 
 	ch := bus.Subscribe()
@@ -1601,7 +1648,7 @@ func TestProcessJob_ModeChangeCancelsJob(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode has already changed
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1662,7 +1709,7 @@ func TestProcessJob_SameModeNotCancelled(t *testing.T) {
 		executionMode:             db.ModeAuto,
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1718,7 +1765,7 @@ func TestProcessJob_EmptyEnqueuedModeSkipsCheck(t *testing.T) {
 		executionMode:             db.ModeApproval,
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1775,7 +1822,7 @@ func TestProcessJob_AutoToDryRunCancelsJob(t *testing.T) {
 		executionMode:             db.ModeDryRun, // mode changed to dry-run
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1840,7 +1887,7 @@ func TestProcessJob_DryRunToAutoCancelsJob(t *testing.T) {
 		executionMode:             db.ModeAuto, // mode changed to auto
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1898,7 +1945,7 @@ func TestDrainAll_MultiplItemsModeChangeCancelsRemaining(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode changed from auto to approval
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1961,7 +2008,7 @@ func TestProcessJob_ModeChangeCancelsJob_PublishesCancelledEvent(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode changed
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -2005,5 +2052,92 @@ func TestProcessJob_ModeChangeCancelsJob_PublishesCancelledEvent(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for DeletionCancelledEvent")
 		}
+	}
+}
+
+func TestDeletionService_SnoozeDeletionItem(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	settings := &mockSettingsReader{
+		deletionsEnabled:    true,
+		snoozeDurationHours: 48,
+	}
+	snoozer := &mockApprovalSnoozer{}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer)
+
+	// Queue an item first so SnoozeDeletionItem can find it
+	err := svc.QueueDeletion(DeleteJob{
+		Item: integrations.MediaItem{
+			Title:         "Firefly",
+			Type:          integrations.MediaTypeShow,
+			IntegrationID: 42,
+		},
+	})
+	if err != nil {
+		t.Fatalf("QueueDeletion returned error: %v", err)
+	}
+
+	// Snooze it
+	snoozedUntil, err := svc.SnoozeDeletionItem("Firefly", "show")
+	if err != nil {
+		t.Fatalf("SnoozeDeletionItem returned error: %v", err)
+	}
+
+	if snoozedUntil == nil {
+		t.Fatal("expected non-nil snoozedUntil")
+	}
+
+	// Verify the snoozer was called with correct args
+	if snoozer.calledName != "Firefly" {
+		t.Errorf("expected snoozer called with name 'Firefly', got %q", snoozer.calledName)
+	}
+	if snoozer.calledType != "show" {
+		t.Errorf("expected snoozer called with type 'show', got %q", snoozer.calledType)
+	}
+	if snoozer.calledIntegrationID != 42 {
+		t.Errorf("expected snoozer called with integrationID 42, got %d", snoozer.calledIntegrationID)
+	}
+	if snoozer.calledDuration != 48 {
+		t.Errorf("expected snoozer called with duration 48, got %d", snoozer.calledDuration)
+	}
+
+	// Verify the item was marked as cancelled (CancelDeletion marks items
+	// in the cancellation skip-list; they are physically removed during processing)
+	if !svc.IsCancelled("Firefly", "show") {
+		t.Error("expected item to be marked as cancelled after snooze")
+	}
+}
+
+func TestDeletionService_SnoozeDeletionItem_NotInQueue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	auditLog := NewAuditLogService(database)
+	svc := NewDeletionService(bus, auditLog)
+	settings := &mockSettingsReader{
+		deletionsEnabled:    true,
+		snoozeDurationHours: 24,
+	}
+	snoozer := &mockApprovalSnoozer{}
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer)
+
+	// Snooze an item that isn't in the queue — should still succeed
+	// (creates snoozed entry with integrationID=0)
+	snoozedUntil, err := svc.SnoozeDeletionItem("Serenity", "movie")
+	if err != nil {
+		t.Fatalf("SnoozeDeletionItem returned error: %v", err)
+	}
+
+	if snoozedUntil == nil {
+		t.Fatal("expected non-nil snoozedUntil")
+	}
+
+	// IntegrationID should be 0 since item wasn't in queue
+	if snoozer.calledIntegrationID != 0 {
+		t.Errorf("expected integrationID 0 for item not in queue, got %d", snoozer.calledIntegrationID)
+	}
+	if snoozer.calledDuration != 24 {
+		t.Errorf("expected snooze duration 24, got %d", snoozer.calledDuration)
 	}
 }

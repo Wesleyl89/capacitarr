@@ -93,64 +93,27 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
-		existing, err := reg.Integration.GetByID(uint(id))
-		if err != nil {
-			return apiError(c, http.StatusNotFound, "Integration not found")
-		}
-
-		// Use a dedicated struct with pointer fields so we can distinguish
-		// "field not sent" (nil) from "explicitly set to false/empty".
-		// This prevents partial updates (e.g. toggling enabled) from
-		// accidentally zeroing out other fields.
-		var update struct {
-			Name               string `json:"name"`
-			URL                string `json:"url"`
-			APIKey             string `json:"apiKey"`
-			Enabled            *bool  `json:"enabled"`
-			CollectionDeletion *bool  `json:"collectionDeletion"`
-			ShowLevelOnly      *bool  `json:"showLevelOnly"`
-		}
+		var update services.IntegrationUpdate
 		if err := c.Bind(&update); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
 		}
 
-		// Update fields only when explicitly provided
-		if update.Name != "" {
-			existing.Name = update.Name
-		}
+		// Validate URL scheme on update if URL is provided
 		if update.URL != "" {
-			// Validate URL scheme on update as well
 			parsedURL, urlErr := url.Parse(update.URL)
 			if urlErr != nil || (parsedURL.Scheme != schemeHTTP && parsedURL.Scheme != schemeHTTPS) || parsedURL.Host == "" {
 				return apiError(c, http.StatusBadRequest, "url must be a valid HTTP or HTTPS URL")
 			}
-			existing.URL = update.URL
-		}
-		if update.APIKey != "" && !db.IsMaskedKey(update.APIKey) {
-			existing.APIKey = update.APIKey
-		}
-		if update.Enabled != nil {
-			existing.Enabled = *update.Enabled
-		}
-		if update.CollectionDeletion != nil {
-			existing.CollectionDeletion = *update.CollectionDeletion
-		}
-		if update.ShowLevelOnly != nil {
-			existing.ShowLevelOnly = *update.ShowLevelOnly
 		}
 
-		// Clear stale sync status — configuration has changed, so the
-		// previous error and sync time are no longer valid.
-		existing.LastError = ""
-		existing.LastSync = nil
-
-		updated, updateErr := reg.Integration.Update(existing.ID, *existing)
+		updated, updateErr := reg.Integration.PartialUpdate(uint(id), update)
 		if updateErr != nil {
+			if errors.Is(updateErr, services.ErrNotFound) {
+				return apiError(c, http.StatusNotFound, "Integration not found")
+			}
 			return apiError(c, http.StatusInternalServerError, "Failed to update integration")
 		}
 
-		// Mask API key in response
-		updated.APIKey = db.MaskAPIKey(updated.APIKey)
 		return c.JSON(http.StatusOK, updated)
 	})
 
@@ -180,6 +143,10 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		}
 		if err := c.Bind(&req); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
+		}
+
+		if req.Type == "" || req.URL == "" || req.APIKey == "" {
+			return apiError(c, http.StatusBadRequest, "type, url, and apiKey are required")
 		}
 
 		result := reg.Integration.TestConnection(req.Type, req.URL, req.APIKey, req.IntegrationID)

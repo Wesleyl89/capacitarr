@@ -202,12 +202,15 @@ func TestDeletionQueue_Clear(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var result map[string]int
+	var result map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	if result["cancelled"] != 0 {
-		t.Errorf("Expected 0 cancelled for empty queue, got %d", result["cancelled"])
+	if result["status"] != "cleared" {
+		t.Errorf("Expected status 'cleared', got %v", result["status"])
+	}
+	if result["cancelled"] != float64(0) {
+		t.Errorf("Expected 0 cancelled for empty queue, got %v", result["cancelled"])
 	}
 }
 

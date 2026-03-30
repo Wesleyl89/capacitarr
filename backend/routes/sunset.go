@@ -19,7 +19,8 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 	sunset.GET("", func(c echo.Context) error {
 		items, err := reg.Sunset.ListAll()
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to list sunset queue: "+err.Error())
+			slog.Error("Failed to list sunset queue", "component", "routes", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to list sunset queue")
 		}
 
 		type sunsetResponse struct {
@@ -88,7 +89,8 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 			Settings:      reg.Settings,
 			PosterOverlay: reg.PosterOverlay,
 		}); err != nil {
-			return apiError(c, http.StatusNotFound, "Sunset item not found: "+err.Error())
+			slog.Error("Failed to cancel sunset item", "component", "routes", "id", id, "error", err)
+			return apiError(c, http.StatusNotFound, "Sunset item not found")
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{"status": "cancelled"})
@@ -119,10 +121,11 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 
 		item, err := reg.Sunset.Reschedule(uint(id), newDate)
 		if err != nil {
-			return apiError(c, http.StatusNotFound, "Sunset item not found: "+err.Error())
+			slog.Error("Failed to reschedule sunset item", "component", "routes", "id", id, "error", err)
+			return apiError(c, http.StatusNotFound, "Sunset item not found")
 		}
 
-		return c.JSON(http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]any{
 			"id":            item.ID,
 			"mediaName":     item.MediaName,
 			"deletionDate":  item.DeletionDate.Format("2006-01-02"),
@@ -146,10 +149,11 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 			PosterOverlay: reg.PosterOverlay,
 		})
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to clear sunset queue: "+err.Error())
+			slog.Error("Failed to clear sunset queue", "component", "routes", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to clear sunset queue")
 		}
 
-		return c.JSON(http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]any{
 			"status":    "cleared",
 			"cancelled": count,
 		})
@@ -171,10 +175,11 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 			Registry: registry,
 		})
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to restore posters: "+err.Error())
+			slog.Error("Failed to restore posters", "component", "routes", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to restore posters")
 		}
 
-		return c.JSON(http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]any{
 			"status":   "restored",
 			"restored": restored,
 		})

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -77,11 +76,6 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
-		existing, err := reg.NotificationChannel.GetByID(uint(idNum))
-		if err != nil {
-			return apiError(c, http.StatusNotFound, "Notification channel not found")
-		}
-
 		var req db.NotificationConfig
 		if err := c.Bind(&req); err != nil {
 			return apiError(c, http.StatusBadRequest, "Invalid request body")
@@ -100,29 +94,11 @@ func RegisterNotificationRoutes(g *echo.Group, reg *services.Registry) {
 			}
 		}
 
-		// Merge partial updates into the existing record
-		if req.Name != "" {
-			existing.Name = req.Name
-		}
-		if req.Type != "" {
-			existing.Type = req.Type
-		}
-		existing.WebhookURL = req.WebhookURL
-		existing.AppriseTags = req.AppriseTags
-		existing.Enabled = req.Enabled
-		existing.OnCycleDigest = req.OnCycleDigest
-		existing.OnError = req.OnError
-		existing.OnModeChanged = req.OnModeChanged
-		existing.OnServerStarted = req.OnServerStarted
-		existing.OnThresholdBreach = req.OnThresholdBreach
-		existing.OnUpdateAvailable = req.OnUpdateAvailable
-		existing.OnApprovalActivity = req.OnApprovalActivity
-		existing.OnDryRunDigest = req.OnDryRunDigest
-		existing.OnIntegrationStatus = req.OnIntegrationStatus
-		existing.UpdatedAt = time.Now()
-
-		updated, updateErr := reg.NotificationChannel.Update(existing.ID, *existing)
+		updated, updateErr := reg.NotificationChannel.PartialUpdate(uint(idNum), req)
 		if updateErr != nil {
+			if errors.Is(updateErr, services.ErrNotFound) {
+				return apiError(c, http.StatusNotFound, "Notification channel not found")
+			}
 			return apiError(c, http.StatusInternalServerError, "Failed to update notification channel")
 		}
 

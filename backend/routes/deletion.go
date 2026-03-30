@@ -40,7 +40,7 @@ func handleCancelDeletion(reg *services.Registry) echo.HandlerFunc {
 			return apiError(c, http.StatusNotFound, "item not found in deletion queue")
 		}
 
-		return c.JSON(http.StatusOK, map[string]bool{"cancelled": true})
+		return c.JSON(http.StatusOK, map[string]string{"status": "cancelled"})
 	}
 }
 
@@ -57,27 +57,8 @@ func handleSnoozeDeletion(reg *services.Registry) echo.HandlerFunc {
 			return apiError(c, http.StatusBadRequest, "mediaName and mediaType are required")
 		}
 
-		// Look up the item in the queue to get integration ID
-		queuedItem := reg.Deletion.FindQueuedItem(body.MediaName, body.MediaType)
-		var integrationID uint
-		if queuedItem != nil {
-			integrationID = queuedItem.IntegrationID
-		}
-
-		// Remove from deletion queue
-		reg.Deletion.CancelDeletion(body.MediaName, body.MediaType)
-
-		// Get snooze duration from preferences
-		prefs, err := reg.Settings.GetPreferences()
+		snoozedUntil, err := reg.Deletion.SnoozeDeletionItem(body.MediaName, body.MediaType)
 		if err != nil {
-			slog.Error("Failed to load preferences for snooze", "error", err)
-			return apiError(c, http.StatusInternalServerError, "Failed to load preferences")
-		}
-
-		// Create snoozed entry in approval queue
-		snoozedUntil, err := reg.Approval.CreateSnoozedEntry(body.MediaName, body.MediaType, integrationID, prefs.SnoozeDurationHours)
-		if err != nil {
-			slog.Error("Failed to create snoozed entry", "error", err)
 			return apiError(c, http.StatusInternalServerError, "Failed to snooze item")
 		}
 
@@ -91,7 +72,7 @@ func handleSnoozeDeletion(reg *services.Registry) echo.HandlerFunc {
 func handleClearDeletionQueue(reg *services.Registry) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		count := reg.Deletion.ClearQueue()
-		return c.JSON(http.StatusOK, map[string]int{"cancelled": count})
+		return c.JSON(http.StatusOK, map[string]any{"status": "cleared", "cancelled": count})
 	}
 }
 

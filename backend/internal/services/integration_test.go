@@ -624,3 +624,145 @@ func TestMediaTypeOptions_MatchesConstants(t *testing.T) {
 			len(mediaTypeOptions), len(allTypes))
 	}
 }
+
+func TestIntegrationService_PartialUpdate(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	original := db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1", Enabled: true,
+	}
+	database.Create(&original)
+
+	// Seed a LastError so we can verify it gets cleared
+	database.Model(&original).Updates(map[string]any{"last_error": "connection refused", "last_sync": time.Now()})
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	// Partial update: change name only, leave URL and APIKey empty
+	result, err := svc.PartialUpdate(original.ID, IntegrationUpdate{
+		Name: "Serenity Sonarr",
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+
+	if result.Name != "Serenity Sonarr" {
+		t.Errorf("expected name 'Serenity Sonarr', got %q", result.Name)
+	}
+	// URL should be preserved
+	if result.URL != "http://localhost:8989" {
+		t.Errorf("expected URL preserved, got %q", result.URL)
+	}
+
+	// Verify LastError was cleared
+	var reloaded db.IntegrationConfig
+	database.First(&reloaded, original.ID)
+	if reloaded.LastError != "" {
+		t.Errorf("expected LastError to be cleared, got %q", reloaded.LastError)
+	}
+	if reloaded.LastSync != nil {
+		t.Error("expected LastSync to be cleared")
+	}
+
+	// Verify event
+	select {
+	case evt := <-ch:
+		if evt.EventType() != "integration_updated" {
+			t.Errorf("expected event type 'integration_updated', got %q", evt.EventType())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for integration_updated event")
+	}
+}
+
+func TestIntegrationService_PartialUpdate_BooleanPointers(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	original := db.IntegrationConfig{
+		Type: "radarr", Name: "Firefly Radarr", URL: "http://localhost:7878", APIKey: "key1",
+		Enabled: true, CollectionDeletion: false, ShowLevelOnly: false,
+	}
+	database.Create(&original)
+
+	// Enable CollectionDeletion and ShowLevelOnly via pointer booleans
+	trueVal := true
+	result, err := svc.PartialUpdate(original.ID, IntegrationUpdate{
+		CollectionDeletion: &trueVal,
+		ShowLevelOnly:      &trueVal,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+
+	if !result.CollectionDeletion {
+		t.Error("expected CollectionDeletion to be true")
+	}
+	if !result.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly to be true")
+	}
+
+	// Now explicitly set to false
+	falseVal := false
+	result, err = svc.PartialUpdate(original.ID, IntegrationUpdate{
+		CollectionDeletion: &falseVal,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	if result.CollectionDeletion {
+		t.Error("expected CollectionDeletion to be false after explicit disable")
+	}
+	// ShowLevelOnly should remain true (nil pointer = no change)
+	var reloaded db.IntegrationConfig
+	database.First(&reloaded, original.ID)
+	if !reloaded.ShowLevelOnly {
+		t.Error("expected ShowLevelOnly to remain true when not in update")
+	}
+}
+
+func TestIntegrationService_PartialUpdate_MaskedAPIKeyIgnored(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	originalKey := "key1"
+	original := db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: originalKey, Enabled: true,
+	}
+	database.Create(&original)
+
+	// Send a masked key (what the UI sends back) — should be ignored
+	maskedKey := db.MaskAPIKey(originalKey)
+	_, err := svc.PartialUpdate(original.ID, IntegrationUpdate{
+		APIKey: maskedKey,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+
+	// Verify the real key was NOT overwritten with the masked version
+	var reloaded db.IntegrationConfig
+	database.First(&reloaded, original.ID)
+	if reloaded.APIKey != originalKey {
+		t.Errorf("expected original API key to be preserved, got %q", reloaded.APIKey)
+	}
+}
+
+func TestIntegrationService_PartialUpdate_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	_, err := svc.PartialUpdate(99999, IntegrationUpdate{Name: "ghost"})
+	if err == nil {
+		t.Fatal("expected error for non-existent integration")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}

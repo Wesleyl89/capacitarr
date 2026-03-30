@@ -23,8 +23,11 @@ All examples use the `X-Api-Key` header for authentication unless the endpoint i
 curl "$CAPACITARR_URL/health"
 ```
 
-```
-OK
+```json
+{
+  "status": "ok",
+  "eventsDropped": 0
+}
 ```
 
 ### Get version information
@@ -57,6 +60,7 @@ curl -s -X POST "$CAPACITARR_URL/auth/login" \
 
 ```json
 {
+  "message": "success",
   "token": "eyJhbGciOiJIUzI1NiIs..."
 }
 ```
@@ -779,13 +783,11 @@ curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
 
 ### Cancel a deletion
 
-Remove a specific item from the deletion queue by name. The item is snoozed in the approval queue.
+Remove a specific item from the deletion queue by name and type (passed as query parameters).
 
 ```bash
 curl -s -X DELETE -H "X-Api-Key: $CAPACITARR_API_KEY" \
-  -H "Content-Type: application/json" \
-  "$CAPACITARR_URL/deletion-queue" \
-  -d '{"mediaName":"Firefly S01","mediaType":"season"}' | jq
+  "$CAPACITARR_URL/deletion-queue?mediaName=Firefly%20S01&mediaType=season" | jq
 ```
 
 ### Snooze a deletion queue item
@@ -839,6 +841,116 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "score": 85.0,
     "scoreDetails": "[]"
   }]' | jq
+```
+
+---
+
+## Sunset Queue
+
+The sunset queue holds media items that have been scored for deletion but are
+in a grace period before the actual delete fires. During this window labels and
+poster overlays may be applied to signal the upcoming removal.
+
+### List sunset queue items
+
+```bash
+curl -s -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/sunset-queue" | jq
+```
+
+```json
+[
+  {
+    "id": 1,
+    "mediaName": "Serenity",
+    "mediaType": "movie",
+    "tmdbId": 16320,
+    "integrationId": 2,
+    "sizeBytes": 8589934592,
+    "score": 0.72,
+    "scoreDetails": "[{\"rule\":\"age\",\"score\":0.72}]",
+    "posterUrl": "https://image.tmdb.org/t/p/w500/xxx.jpg",
+    "diskGroupId": 1,
+    "collectionGroup": "",
+    "trigger": "engine",
+    "deletionDate": "2026-04-15",
+    "daysRemaining": 17,
+    "labelApplied": true,
+    "posterOverlayActive": false,
+    "createdAt": "2026-03-29T12:00:00Z"
+  }
+]
+```
+
+### Cancel a sunset item
+
+Remove a specific item from the sunset queue. This also removes any labels or
+poster overlays that were applied.
+
+```bash
+curl -s -X DELETE -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/sunset-queue/1" | jq
+```
+
+```json
+{
+  "status": "cancelled"
+}
+```
+
+### Reschedule a sunset item
+
+Change the deletion date for a sunset item. The date must be in `YYYY-MM-DD`
+format and cannot be in the past.
+
+```bash
+curl -s -X PATCH -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  -H "Content-Type: application/json" \
+  "$CAPACITARR_URL/sunset-queue/1" \
+  -d '{"deletionDate":"2026-05-01"}' | jq
+```
+
+```json
+{
+  "id": 1,
+  "mediaName": "Serenity",
+  "deletionDate": "2026-05-01",
+  "daysRemaining": 33
+}
+```
+
+### Clear sunset queue
+
+Cancel all sunset items at once. Labels and poster overlays are removed for
+every cancelled item.
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/sunset-queue/clear" | jq
+```
+
+```json
+{
+  "status": "cleared",
+  "cancelled": 5
+}
+```
+
+### Restore all posters
+
+Emergency action: restore all original poster images that have been overlaid
+with sunset countdown artwork.
+
+```bash
+curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
+  "$CAPACITARR_URL/sunset-queue/restore-posters" | jq
+```
+
+```json
+{
+  "status": "restored",
+  "restored": 3
+}
 ```
 
 ---
@@ -953,7 +1065,7 @@ curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
   "$CAPACITARR_URL/events"
 ```
 
-See the [Architecture](../architecture.md) documentation for the complete list of 53 event types.
+See the [Architecture](../architecture.md) documentation for the complete list of 65 event types.
 
 ---
 

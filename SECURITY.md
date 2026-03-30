@@ -126,7 +126,7 @@ Semgrep scans **614 files** (every file tracked by git except the marketing site
 
 | File | Line | Semgrep Rule | Rationale |
 |------|------|-------------|-----------|
-| `backend/internal/testutil/testutil.go` | 246 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | `TestJWTSecret` is a test-only constant used to sign JWT tokens in unit tests. It is never used in production code. |
+| `backend/internal/testutil/testutil.go` | 247 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | `TestJWTSecret` is a test-only constant used to sign JWT tokens in unit tests. It is never used in production code. |
 | `backend/routes/auth.go` | 92 | `go.lang.security.audit.net.cookie-missing-secure` | The `Secure` flag is set to `cfg.SecureCookies` which evaluates to `true` when `SECURE_COOKIES=true`. Semgrep cannot evaluate runtime configuration. |
 | `backend/routes/auth.go` | 106 | `cookie-missing-httponly`, `cookie-missing-secure` | The `authenticated` cookie is intentionally non-HttpOnly so the Vue SPA can detect auth state via JavaScript. It contains no secrets (just the string `"true"`). The JWT cookie (which holds the actual token) IS HttpOnly. `Secure` is conditional as above. |
 | `backend/routes/middleware_test.go` | 130 | `go.jwt-go.security.jwt.hardcoded-jwt-key` | Test intentionally signs a JWT with the wrong secret (`"wrong-secret"`) to verify the middleware rejects tokens signed with incorrect keys. |
@@ -143,18 +143,19 @@ Semgrep scans **614 files** (every file tracked by git except the marketing site
 | `backend/internal/config/config.go` | 92 | gosec G706 | Security warning logs trusted env var header name, not user input |
 | `backend/internal/engine/score_test.go` | 29 | unparam | `value` is always 10 in tests but the parameter documents intent for the helper function |
 | `backend/internal/events/sse_broadcaster.go` | 262 | errcheck | `json.Marshal` of a `string` value cannot fail |
-| `backend/internal/integrations/arr_helpers.go` | 246 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
-| `backend/internal/integrations/httpclient.go` | 42 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
-| `backend/internal/integrations/httpclient.go` | 50 | gosec G706 | Sanitized URL, HTTP status code, and duration are safe to log |
+| `backend/internal/integrations/arr_helpers.go` | 246 | gosec G704 | URL is from admin-configured integration settings, not user-tainted |
+| `backend/internal/integrations/httpclient.go` | 43 | gosec G704 | URL is from admin-configured integration settings, not user-tainted |
+| `backend/internal/integrations/httpclient.go` | 51 | gosec G706 | Sanitized URL, HTTP status code, and duration are safe to log |
+| `backend/internal/integrations/httpclient.go` | 99 | gosec G704 | URL is from admin-configured integration settings, not user-tainted |
 | `backend/internal/integrations/jellystat_test.go` | 11 | gosec G101 | `testJellystatAPIKey` is a test fixture constant, not a real credential |
-| `backend/internal/integrations/plex.go` | 217 | exhaustive | Plex API only returns `movie`, `show`, `season`, and `episode` media types |
+| `backend/internal/integrations/plex.go` | 218 | exhaustive | Plex API only returns `movie`, `show`, `season`, and `episode` media types |
 | `backend/internal/integrations/sonarr.go` | 164 | exhaustive | Sonarr integration only handles `show` and `season` types |
-| `backend/internal/integrations/sonarr.go` | 212 | gosec G107 | URL is from admin-configured integration settings, not user-tainted |
-| `backend/internal/notifications/httpclient.go` | 52 | gosec G107 | URL is from admin-configured webhook notification settings |
+| `backend/internal/integrations/sonarr.go` | 212 | gosec G704 | URL is from admin-configured integration settings, not user-tainted |
+| `backend/internal/notifications/httpclient.go` | 52 | gosec | URL is from admin-configured webhook notification settings |
 | `backend/internal/services/auth.go` | 213 | gosec G706 | Username is from a trusted reverse proxy header, not user-supplied |
 | `backend/internal/services/notification_dispatch_test.go` | 325 | dupl | Test structure intentionally similar to related dispatch tests |
 | `backend/internal/services/notification_dispatch_test.go` | 354 | dupl | Test structure intentionally similar to related dispatch tests |
-| `backend/internal/services/version.go` | 153 | gosec G107 | URL is set at construction time (`DefaultGitHubReleasesURL`), not user-tainted |
+| `backend/internal/services/version.go` | 153 | gosec | URL is set at construction time (`DefaultGitHubReleasesURL`), not user-tainted |
 | `backend/internal/services/version.go` | 165 | gosec G706 | Status code is a server-side integer, not user-tainted input |
 | `backend/routes/auth.go` | 92 | gosec | `Secure` flag conditionally set via `cfg.SecureCookies` — not all self-hosted environments use HTTPS. Also suppresses Semgrep (see nosemgrep table above) |
 | `backend/routes/auth.go` | 106 | gosec | `HttpOnly` intentionally `false`: cookie contains no secrets (just `"true"`), allows SPA auth state detection. `Secure` conditional as above. Also suppresses Semgrep (see nosemgrep table above) |

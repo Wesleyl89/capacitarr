@@ -302,34 +302,12 @@ func (r *IntegrationRegistry) PosterManagers() map[uint]PosterManager {
 	return out
 }
 
-// CollectionResolvers returns all registered CollectionResolver implementations with their IDs.
-func (r *IntegrationRegistry) CollectionResolvers() map[uint]CollectionResolver {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make(map[uint]CollectionResolver, len(r.collectionResolvers))
-	for k, v := range r.collectionResolvers {
-		out[k] = v
-	}
-	return out
-}
-
 // Connectors returns all registered Connectable implementations with their IDs.
 func (r *IntegrationRegistry) Connectors() map[uint]Connectable {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make(map[uint]Connectable, len(r.connectors))
 	for k, v := range r.connectors {
-		out[k] = v
-	}
-	return out
-}
-
-// Deleters returns all registered MediaDeleter implementations with their IDs.
-func (r *IntegrationRegistry) Deleters() map[uint]MediaDeleter {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make(map[uint]MediaDeleter, len(r.deleters))
-	for k, v := range r.deleters {
 		out[k] = v
 	}
 	return out

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,7 +22,7 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 				if headerUser != "" {
 					// Auto-create user record if the header user doesn't exist
 					if err := reg.Auth.EnsureProxyUser(headerUser); err != nil {
-						return echo.ErrUnauthorized
+						return apiError(c, http.StatusUnauthorized, "Unauthorized")
 					}
 					c.Set("user", headerUser)
 					return next(c)
@@ -35,7 +36,7 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 			if authHeader != "" {
 				parts := strings.SplitN(authHeader, " ", 2)
 				if len(parts) != 2 {
-					return echo.ErrUnauthorized
+					return apiError(c, http.StatusUnauthorized, "Unauthorized")
 				}
 
 				switch parts[0] {
@@ -44,12 +45,12 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 				case "ApiKey":
 					auth, err := reg.Auth.ValidateAPIKey(parts[1])
 					if err != nil {
-						return echo.ErrUnauthorized
+						return apiError(c, http.StatusUnauthorized, "Unauthorized")
 					}
 					c.Set("user", auth.Username)
 					return next(c)
 				default:
-					return echo.ErrUnauthorized
+					return apiError(c, http.StatusUnauthorized, "Unauthorized")
 				}
 			}
 
@@ -62,7 +63,7 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 				if apiKey != "" {
 					auth, err := reg.Auth.ValidateAPIKey(apiKey)
 					if err != nil {
-						return echo.ErrUnauthorized
+						return apiError(c, http.StatusUnauthorized, "Unauthorized")
 					}
 					c.Set("user", auth.Username)
 					return next(c)
@@ -73,7 +74,7 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 			if tokenStr == "" {
 				cookie, err := c.Cookie("jwt")
 				if err != nil || cookie.Value == "" {
-					return echo.ErrUnauthorized
+					return apiError(c, http.StatusUnauthorized, "Unauthorized")
 				}
 				tokenStr = cookie.Value
 			}
@@ -82,24 +83,24 @@ func RequireAuth(reg *services.Registry) echo.MiddlewareFunc {
 			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 				// Ensure the signing method is what we expect
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, echo.ErrUnauthorized
+					return nil, echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
 				}
 				return []byte(cfg.JWTSecret), nil
 			})
 
 			if err != nil || !token.Valid {
-				return echo.ErrUnauthorized
+				return apiError(c, http.StatusUnauthorized, "Unauthorized")
 			}
 
 			// Safe type assertions with comma-ok pattern
 			claims, ok := token.Claims.(jwt.MapClaims)
 			if !ok {
-				return echo.ErrUnauthorized
+				return apiError(c, http.StatusUnauthorized, "Unauthorized")
 			}
 
 			sub, ok := claims["sub"].(string)
 			if !ok || sub == "" {
-				return echo.ErrUnauthorized
+				return apiError(c, http.StatusUnauthorized, "Unauthorized")
 			}
 
 			c.Set("user", sub)

@@ -560,7 +560,7 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 		ApprovalEntryID: approved.ID,
 		EnqueuedMode:    enqueuedMode,
 	}); queueErr != nil {
-		return approved, fmt.Errorf("deletion queue is full: %w", queueErr)
+		return approved, fmt.Errorf("failed to queue deletion: %w", queueErr)
 	}
 
 	return approved, nil

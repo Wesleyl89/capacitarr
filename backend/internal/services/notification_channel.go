@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -55,6 +56,51 @@ func (s *NotificationChannelService) Update(id uint, config db.NotificationConfi
 	})
 
 	return &config, nil
+}
+
+// PartialUpdate merges the provided fields into the existing notification channel
+// and saves the result. Empty Name and Type are treated as "not provided" (keep existing).
+// All other fields are always applied from req (they have meaningful zero values).
+func (s *NotificationChannelService) PartialUpdate(id uint, req db.NotificationConfig) (*db.NotificationConfig, error) {
+	existing, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge: only overwrite Name/Type if explicitly provided
+	if req.Name != "" {
+		existing.Name = req.Name
+	}
+	if req.Type != "" {
+		existing.Type = req.Type
+	}
+
+	// These fields always apply (zero values are meaningful)
+	existing.WebhookURL = req.WebhookURL
+	existing.AppriseTags = req.AppriseTags
+	existing.Enabled = req.Enabled
+	existing.OnCycleDigest = req.OnCycleDigest
+	existing.OnError = req.OnError
+	existing.OnModeChanged = req.OnModeChanged
+	existing.OnServerStarted = req.OnServerStarted
+	existing.OnThresholdBreach = req.OnThresholdBreach
+	existing.OnUpdateAvailable = req.OnUpdateAvailable
+	existing.OnApprovalActivity = req.OnApprovalActivity
+	existing.OnDryRunDigest = req.OnDryRunDigest
+	existing.OnIntegrationStatus = req.OnIntegrationStatus
+	existing.UpdatedAt = time.Now()
+
+	if err := s.db.Save(existing).Error; err != nil {
+		return nil, fmt.Errorf("failed to update notification channel: %w", err)
+	}
+
+	s.bus.Publish(events.NotificationChannelUpdatedEvent{
+		ChannelID:   existing.ID,
+		ChannelType: existing.Type,
+		Name:        existing.Name,
+	})
+
+	return existing, nil
 }
 
 // Delete removes a notification channel config.

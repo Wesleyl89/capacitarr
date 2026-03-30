@@ -204,6 +204,98 @@ func TestNotificationChannelService_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+func TestNotificationChannelService_PartialUpdate(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewNotificationChannelService(database, bus)
+
+	original := db.NotificationConfig{
+		Type:       "discord",
+		Name:       "Firefly Alerts",
+		WebhookURL: "https://discord.com/api/webhooks/original",
+		Enabled:    true,
+		OnError:    true,
+	}
+	database.Create(&original)
+
+	ch := bus.Subscribe()
+	defer bus.Unsubscribe(ch)
+
+	// Partial update: change webhook URL and disable OnError, but leave Name empty (keep existing)
+	result, err := svc.PartialUpdate(original.ID, db.NotificationConfig{
+		WebhookURL: "https://discord.com/api/webhooks/updated",
+		OnError:    false,
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+
+	// Name should be preserved (empty string in req = keep existing)
+	if result.Name != "Firefly Alerts" {
+		t.Errorf("expected name 'Firefly Alerts' (preserved), got %q", result.Name)
+	}
+	// Type should be preserved
+	if result.Type != "discord" {
+		t.Errorf("expected type 'discord' (preserved), got %q", result.Type)
+	}
+	// WebhookURL should be updated
+	if result.WebhookURL != "https://discord.com/api/webhooks/updated" {
+		t.Errorf("expected updated webhook URL, got %q", result.WebhookURL)
+	}
+	// OnError should be false (explicitly set in req)
+	if result.OnError {
+		t.Error("expected OnError to be false")
+	}
+
+	// Verify event
+	select {
+	case evt := <-ch:
+		if evt.EventType() != "notification_channel_updated" {
+			t.Errorf("expected event type 'notification_channel_updated', got %q", evt.EventType())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notification_channel_updated event")
+	}
+}
+
+func TestNotificationChannelService_PartialUpdate_NameOverride(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewNotificationChannelService(database, bus)
+
+	original := db.NotificationConfig{
+		Type: "discord", Name: "Firefly Alerts", WebhookURL: "https://discord.com/api/webhooks/1",
+	}
+	database.Create(&original)
+
+	// Partial update with a new Name
+	result, err := svc.PartialUpdate(original.ID, db.NotificationConfig{
+		Name:       "Serenity Alerts",
+		WebhookURL: "https://discord.com/api/webhooks/1",
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	if result.Name != "Serenity Alerts" {
+		t.Errorf("expected name 'Serenity Alerts', got %q", result.Name)
+	}
+}
+
+func TestNotificationChannelService_PartialUpdate_NotFound(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewNotificationChannelService(database, bus)
+
+	_, err := svc.PartialUpdate(99999, db.NotificationConfig{Name: "ghost"})
+	if err == nil {
+		t.Fatal("expected error for non-existent channel")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestNotificationChannelService_ListEnabled(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)

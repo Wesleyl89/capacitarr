@@ -21,7 +21,7 @@ func RegisterMetricsRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusInternalServerError, "Error fetching metrics")
 		}
 
-		return c.JSON(http.StatusOK, map[string]any{"status": "success", "data": history})
+		return c.JSON(http.StatusOK, history)
 	})
 
 	// Worker Stats
