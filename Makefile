@@ -173,9 +173,13 @@ build\:backend: build\:frontend
 
 # ─── Docker ───────────────────────────────────────────────────────────────────
 
-## Build and start via Docker Compose
+## Build and start via Docker Compose (no-cache, real build args)
 build:
-	docker compose up -d --build
+	APP_VERSION=$$(git describe --tags --always 2>/dev/null || echo "dev-local") \
+	COMMIT_SHA=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
+	BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+	docker compose build --no-cache
+	docker compose up -d
 
 ## Stop and remove containers
 down:
@@ -222,7 +226,7 @@ help:
 	@echo "  make build:backend  - Build backend binary with embedded frontend"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make build          - Build and start via Docker Compose"
+	@echo "  make build          - Build and start via Docker Compose (no-cache, real build args)"
 	@echo "  make down           - Stop containers"
 	@echo "  make clean          - Remove containers and build cache (safe)"
 	@echo "  make clean:all      - Remove containers, volumes, and build cache (DESTROYS DATA)"

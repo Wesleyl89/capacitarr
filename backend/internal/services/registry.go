@@ -97,7 +97,7 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	// Initialize PosterOverlayService — cache dir is alongside the database file
 	posterCacheDir := filepath.Join(filepath.Dir(cfg.Database), "posters", "originals")
 	if posterSvc, err := NewPosterOverlayService(database, bus, posterCacheDir); err != nil {
-		slog.Warn("Failed to initialize poster overlay service — poster overlays disabled",
+		slog.Error("Failed to initialize poster overlay service — poster overlays disabled",
 			"component", "registry", "error", err)
 	} else {
 		reg.PosterOverlay = posterSvc

@@ -250,7 +250,7 @@ func main() {
 		configDir := filepath.Dir(cfg.Database)
 		bakPath := migration.BackupPath(configDir)
 		if err := migration.ImportAuthOnly(bakPath, database); err != nil {
-			slog.Warn("Failed to auto-import auth from 1.x backup — user will need to create new credentials",
+			slog.Error("Failed to auto-import auth from 1.x backup — user will need to create new credentials",
 				"component", "main", "error", err)
 		} else {
 			slog.Info("Auth config auto-imported from 1.x backup",
@@ -332,7 +332,7 @@ func main() {
 	go func() {
 		configs, err := reg.Integration.ListEnabled()
 		if err != nil {
-			slog.Warn("Startup self-test: failed to list integrations", "component", "main", "error", err)
+			slog.Error("Startup self-test: failed to list integrations", "component", "main", "error", err)
 			return
 		}
 		if len(configs) == 0 {
@@ -348,7 +348,7 @@ func main() {
 					"type", cfg.Type,
 				)
 			} else {
-				slog.Warn("Startup self-test: connection failed",
+				slog.Error("Startup self-test: connection failed",
 					"component", "main",
 					"integration", cfg.Name,
 					"type", cfg.Type,

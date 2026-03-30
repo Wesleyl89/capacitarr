@@ -374,7 +374,7 @@ func (s *RulesService) GetRuleContext(id uint) (*RuleContext, error) {
 	// Look up the integration to determine the service type
 	config, err := s.integrations.GetByID(integrationID)
 	if err != nil {
-		slog.Warn("Failed to get integration for rule context", "ruleId", id, "integrationId", integrationID, "error", err)
+		slog.Error("Failed to get integration for rule context", "ruleId", id, "integrationId", integrationID, "error", err)
 		// Still return the rule — fields/values are nice-to-have
 		return &RuleContext{Rule: rule}, nil
 	}
@@ -387,7 +387,7 @@ func (s *RulesService) GetRuleContext(id uint) (*RuleContext, error) {
 	if rule.Field != "" {
 		ruleValues, valErr := s.integrations.FetchRuleValues(integrationID, rule.Field)
 		if valErr != nil {
-			slog.Warn("Failed to fetch rule values for context", "ruleId", id, "field", rule.Field, "error", valErr)
+			slog.Error("Failed to fetch rule values for context", "ruleId", id, "field", rule.Field, "error", valErr)
 			// Non-fatal — values are nice-to-have for prepopulation
 		} else {
 			values = ruleValues

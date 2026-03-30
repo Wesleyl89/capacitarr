@@ -110,6 +110,9 @@ type PreferenceSet struct {
 	SunsetDays                int       `gorm:"default:30;not null" json:"sunsetDays"`                                                 // Default countdown period in days for sunset mode
 	SunsetLabel               string    `gorm:"default:'capacitarr-sunset';not null" json:"sunsetLabel"`                               // Label/tag applied to media server items in sunset queue
 	PosterOverlayEnabled      bool      `gorm:"default:true;not null" json:"posterOverlayEnabled"`                                     // Whether to apply countdown overlays to posters
+	SunsetRescoreEnabled      bool      `gorm:"default:true;not null" json:"sunsetRescoreEnabled"`                                     // Enable daily re-scoring of sunset queue items; if score drops, item is saved instead of deleted
+	SavedDurationDays         int       `gorm:"default:7;not null" json:"savedDurationDays"`                                           // How long the "Saved" marker/overlay persists before auto-cleanup (days)
+	SavedLabel                string    `gorm:"default:'capacitarr-saved';not null" json:"savedLabel"`                                 // Label/tag applied to media server items that were saved by activity
 	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
@@ -227,6 +230,10 @@ type SunsetQueueItem struct {
 	DeletionDate        time.Time  `gorm:"index;not null" json:"deletionDate"`                   // When to hand to DeletionService
 	LabelApplied        bool       `gorm:"not null;default:false" json:"labelApplied"`           // Whether sunset label has been applied to media server
 	PosterOverlayActive bool       `gorm:"not null;default:false" json:"posterOverlayActive"`    // Whether an overlay poster is currently uploaded
+	Status              string     `gorm:"not null;default:'pending'" json:"status"`             // "pending" (in countdown), "saved" (score dropped, saved by activity), "expired" (handed to DeletionService)
+	SavedAt             *time.Time `json:"savedAt,omitempty"`                                    // Non-nil when item was saved due to score drop; cleared on cleanup
+	SavedScore          float64    `gorm:"not null;default:0" json:"savedScore"`                 // Score at the time the item was saved (for display)
+	SavedReason         string     `gorm:"type:text" json:"savedReason,omitempty"`               // Human-readable explanation of why the item was saved
 	ExpiredAt           *time.Time `json:"expiredAt,omitempty"`                                  // Non-nil when countdown expired and item was handed to DeletionService; item remains in queue for visibility
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
@@ -236,6 +243,13 @@ type SunsetQueueItem struct {
 func (SunsetQueueItem) TableName() string {
 	return "sunset_queue"
 }
+
+// Sunset queue status constants — used in SunsetQueueItem.Status field.
+const (
+	SunsetStatusPending = "pending" // In countdown
+	SunsetStatusSaved   = "saved"   // Score dropped, saved by activity
+	SunsetStatusExpired = "expired" // Handed to DeletionService
+)
 
 // Audit log action constants — used in AuditLogEntry.Action field.
 const (

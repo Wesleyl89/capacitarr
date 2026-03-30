@@ -272,7 +272,7 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 				if resolver, ok := registry.CollectionResolver(ev.Item.IntegrationID); ok {
 					resolved, resolveErr := resolver.ResolveCollectionMembers(ev.Item)
 					if resolveErr != nil {
-						slog.Warn("Collection resolution failed, falling back to allItems scan", "component", "poller",
+						slog.Error("Collection resolution failed, falling back to allItems scan", "component", "poller",
 							"media", ev.Item.Title, "collection", colName, "error", resolveErr)
 					} else if len(resolved) > 1 {
 						members = resolved

@@ -400,7 +400,7 @@ func (s *PreviewService) EnrichWithQueueStatus(items []engine.EvaluatedItem) {
 		// Fetch pending items
 		pending, err := s.approvalQueue.ListQueue(db.StatusPending, 10000, nil)
 		if err != nil {
-			slog.Warn("Failed to fetch pending approval queue for enrichment", "component", "preview", "error", err)
+			slog.Error("Failed to fetch pending approval queue for enrichment", "component", "preview", "error", err)
 		} else {
 			for _, entry := range pending {
 				key := db.MediaKey(entry.MediaName, entry.MediaType)
@@ -411,7 +411,7 @@ func (s *PreviewService) EnrichWithQueueStatus(items []engine.EvaluatedItem) {
 		// Fetch approved items
 		approved, err := s.approvalQueue.ListQueue(db.StatusApproved, 10000, nil)
 		if err != nil {
-			slog.Warn("Failed to fetch approved approval queue for enrichment", "component", "preview", "error", err)
+			slog.Error("Failed to fetch approved approval queue for enrichment", "component", "preview", "error", err)
 		} else {
 			for _, entry := range approved {
 				key := db.MediaKey(entry.MediaName, entry.MediaType)

@@ -119,7 +119,7 @@ func (p *EnrichmentPipeline) Run(items []MediaItem) EnrichmentStats {
 		slog.Info("Running enricher", "component", "enrichment", "enricher", e.Name(),
 			"priority", e.Priority(), "itemCount", len(items))
 		if err := e.Enrich(items); err != nil {
-			slog.Warn("Enrichment failed", "component", "enrichment",
+			slog.Error("Enrichment failed", "component", "enrichment",
 				"enricher", e.Name(), "error", err)
 			stats.FailedEnrichers = append(stats.FailedEnrichers, e.Name())
 			if enrichCap != "" {
@@ -220,7 +220,7 @@ func BuildFullPipeline(registry *IntegrationRegistry) *EnrichmentPipeline {
 		if plex, ok := registry.PlexClient(id); ok {
 			plexMap, mapErr := plex.GetTMDbToRatingKeyMap()
 			if mapErr != nil {
-				slog.Warn("Failed to build TMDb→RatingKey map from Plex",
+				slog.Error("Failed to build TMDb→RatingKey map from Plex",
 					"component", "enrichment", "integrationID", id, "error", mapErr)
 				continue
 			}
@@ -239,7 +239,7 @@ func BuildFullPipeline(registry *IntegrationRegistry) *EnrichmentPipeline {
 		if jf, ok := registry.JellyfinClient(id); ok {
 			jfMap, mapErr := jf.GetItemIDToTMDbIDMap()
 			if mapErr != nil {
-				slog.Warn("Failed to build Jellyfin ID→TMDb ID map",
+				slog.Error("Failed to build Jellyfin ID→TMDb ID map",
 					"component", "enrichment", "integrationID", id, "error", mapErr)
 				continue
 			}

@@ -171,7 +171,7 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 			)
 			body, err := e.doRequest(endpoint)
 			if err != nil {
-				slog.Warn("Failed to fetch Emby episode watch data",
+				slog.Error("Failed to fetch Emby episode watch data",
 					"component", "emby", "user", userName, "error", err)
 				break
 			}
@@ -181,7 +181,7 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 				TotalRecordCount int        `json:"TotalRecordCount"`
 			}
 			if err := json.Unmarshal(body, &resp); err != nil {
-				slog.Warn("Failed to parse Emby episode response",
+				slog.Error("Failed to parse Emby episode response",
 					"component", "emby", "error", err)
 				break
 			}
@@ -321,7 +321,7 @@ func (e *EmbyClient) GetBulkWatchData() (map[int]*WatchData, error) {
 	for _, user := range users {
 		userData, err := e.GetBulkWatchDataForUser(user.ID, user.Name)
 		if err != nil {
-			slog.Warn("Failed to fetch Emby watch data for user",
+			slog.Error("Failed to fetch Emby watch data for user",
 				"component", "emby", "user", user.Name, "error", err)
 			continue
 		}
@@ -363,7 +363,7 @@ func (e *EmbyClient) GetWatchlistItems() (map[int]bool, error) {
 	for _, user := range users {
 		favs, err := e.GetFavoritedItems(user.ID)
 		if err != nil {
-			slog.Warn("Failed to fetch Emby favorites for user",
+			slog.Error("Failed to fetch Emby favorites for user",
 				"component", "emby", "user", user.Name, "error", err)
 			continue
 		}
@@ -513,7 +513,7 @@ func (e *EmbyClient) GetCollectionMemberships() (map[int][]string, error) {
 		childEndpoint := fmt.Sprintf("/Users/%s/Items?ParentId=%s&Fields=ProviderIds", adminUserID, boxSet.ID)
 		childBody, childErr := e.doRequest(childEndpoint)
 		if childErr != nil {
-			slog.Debug("Failed to fetch Emby box set children", "component", "integrations",
+			slog.Error("Failed to fetch Emby box set children", "component", "integrations",
 				"boxSet", boxSet.Name, "error", childErr)
 			continue
 		}
@@ -728,10 +728,14 @@ func (e *EmbyClient) GetPosterImage(itemID string) ([]byte, string, error) {
 }
 
 // UploadPosterImage uploads a new primary poster to an Emby item.
-// Emby accepts raw image bytes with the appropriate Content-Type header.
+// Emby accepts raw image bytes with the appropriate Content-Type header
+// and requires the X-Emby-Token auth header alongside it.
 func (e *EmbyClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
 	fullURL := e.URL + "/Items/" + itemID + "/Images/Primary"
-	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+	return DoAPIRequestWithHeaders("POST", fullURL, imageData, map[string]string{
+		"Content-Type": contentType,
+		"X-Emby-Token": e.APIKey,
+	})
 }
 
 // RestorePosterImage removes the custom primary poster from an Emby item,

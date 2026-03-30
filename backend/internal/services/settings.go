@@ -51,6 +51,41 @@ func (s *SettingsService) GetPreferences() (db.PreferenceSet, error) {
 	return pref, nil
 }
 
+// ─── Patch Request Types ────────────────────────────────────────────────────
+
+// EnginePreferencePatch contains fields for the engine behavior settings group.
+type EnginePreferencePatch struct {
+	DefaultDiskGroupMode *string `json:"defaultDiskGroupMode"`
+	TiebreakerMethod     *string `json:"tiebreakerMethod"`
+	DeletionsEnabled     *bool   `json:"deletionsEnabled"`
+	SnoozeDurationHours  *int    `json:"snoozeDurationHours"`
+}
+
+// SunsetPreferencePatch contains fields for the sunset behavior settings group.
+type SunsetPreferencePatch struct {
+	SunsetDays           *int    `json:"sunsetDays"`
+	SunsetLabel          *string `json:"sunsetLabel"`
+	PosterOverlayEnabled *bool   `json:"posterOverlayEnabled"`
+	SunsetRescoreEnabled *bool   `json:"sunsetRescoreEnabled"`
+	SavedDurationDays    *int    `json:"savedDurationDays"`
+	SavedLabel           *string `json:"savedLabel"`
+}
+
+// ContentPreferencePatch contains fields for the content analytics settings group.
+type ContentPreferencePatch struct {
+	DeadContentMinDays *int `json:"deadContentMinDays"`
+	StaleContentDays   *int `json:"staleContentDays"`
+}
+
+// AdvancedPreferencePatch contains fields for the advanced settings group.
+type AdvancedPreferencePatch struct {
+	LogLevel                  *string `json:"logLevel"`
+	PollIntervalSeconds       *int    `json:"pollIntervalSeconds"`
+	DeletionQueueDelaySeconds *int    `json:"deletionQueueDelaySeconds"`
+	AuditLogRetentionDays     *int    `json:"auditLogRetentionDays"`
+	CheckForUpdates           *bool   `json:"checkForUpdates"`
+}
+
 // UpdatePreferences saves preference changes and publishes relevant events.
 func (s *SettingsService) UpdatePreferences(payload db.PreferenceSet) (db.PreferenceSet, error) {
 	payload.ID = 1
@@ -104,6 +139,177 @@ func (s *SettingsService) UpdatePreferences(payload db.PreferenceSet) (db.Prefer
 	s.bus.Publish(events.SettingsChangedEvent{})
 
 	return payload, nil
+}
+
+// PatchEnginePreferences updates only the provided engine behavior fields.
+func (s *SettingsService) PatchEnginePreferences(patch EnginePreferencePatch) (db.PreferenceSet, error) {
+	var oldPrefs db.PreferenceSet
+	s.db.FirstOrCreate(&oldPrefs, db.PreferenceSet{ID: 1})
+
+	updates := make(map[string]interface{})
+	if patch.DefaultDiskGroupMode != nil {
+		updates["default_disk_group_mode"] = *patch.DefaultDiskGroupMode
+	}
+	if patch.TiebreakerMethod != nil {
+		updates["tiebreaker_method"] = *patch.TiebreakerMethod
+	}
+	if patch.DeletionsEnabled != nil {
+		updates["deletions_enabled"] = *patch.DeletionsEnabled
+	}
+	if patch.SnoozeDurationHours != nil {
+		updates["snooze_duration_hours"] = *patch.SnoozeDurationHours
+	}
+
+	if len(updates) == 0 {
+		return oldPrefs, nil
+	}
+
+	if err := s.db.Model(&db.PreferenceSet{}).Where("id = ?", 1).Updates(updates).Error; err != nil {
+		return db.PreferenceSet{}, fmt.Errorf("failed to patch engine preferences: %w", err)
+	}
+
+	// Re-read for side-effect detection and response
+	var newPrefs db.PreferenceSet
+	s.db.First(&newPrefs, 1)
+
+	// Detect mode change → clear deletion queue
+	if patch.DefaultDiskGroupMode != nil && oldPrefs.DefaultDiskGroupMode != *patch.DefaultDiskGroupMode {
+		if s.deletionClearer != nil {
+			cleared := s.deletionClearer.ClearQueue()
+			if cleared > 0 {
+				slog.Info("Cleared deletion queue on default disk group mode change",
+					"component", "services",
+					"oldMode", oldPrefs.DefaultDiskGroupMode,
+					"newMode", *patch.DefaultDiskGroupMode,
+					"cleared", cleared)
+			}
+		}
+		s.bus.Publish(events.EngineModeChangedEvent{
+			OldMode: oldPrefs.DefaultDiskGroupMode,
+			NewMode: *patch.DefaultDiskGroupMode,
+		})
+	}
+
+	// Detect deletions disabled → clear queue
+	if patch.DeletionsEnabled != nil && oldPrefs.DeletionsEnabled && !*patch.DeletionsEnabled {
+		if s.deletionClearer != nil {
+			cleared := s.deletionClearer.ClearQueue()
+			if cleared > 0 {
+				slog.Info("Cleared deletion queue on deletions disabled",
+					"component", "services", "cleared", cleared)
+			}
+		}
+	}
+
+	s.bus.Publish(events.SettingsChangedEvent{})
+	return newPrefs, nil
+}
+
+// PatchSunsetPreferences updates only the provided sunset behavior fields.
+func (s *SettingsService) PatchSunsetPreferences(patch SunsetPreferencePatch) (db.PreferenceSet, error) {
+	updates := make(map[string]interface{})
+	if patch.SunsetDays != nil {
+		updates["sunset_days"] = *patch.SunsetDays
+	}
+	if patch.SunsetLabel != nil {
+		updates["sunset_label"] = *patch.SunsetLabel
+	}
+	if patch.PosterOverlayEnabled != nil {
+		updates["poster_overlay_enabled"] = *patch.PosterOverlayEnabled
+	}
+	if patch.SunsetRescoreEnabled != nil {
+		updates["sunset_rescore_enabled"] = *patch.SunsetRescoreEnabled
+	}
+	if patch.SavedDurationDays != nil {
+		updates["saved_duration_days"] = *patch.SavedDurationDays
+	}
+	if patch.SavedLabel != nil {
+		updates["saved_label"] = *patch.SavedLabel
+	}
+
+	if len(updates) == 0 {
+		var pref db.PreferenceSet
+		s.db.FirstOrCreate(&pref, db.PreferenceSet{ID: 1})
+		return pref, nil
+	}
+
+	if err := s.db.Model(&db.PreferenceSet{}).Where("id = ?", 1).Updates(updates).Error; err != nil {
+		return db.PreferenceSet{}, fmt.Errorf("failed to patch sunset preferences: %w", err)
+	}
+
+	var pref db.PreferenceSet
+	s.db.First(&pref, 1)
+
+	s.bus.Publish(events.SettingsChangedEvent{})
+	return pref, nil
+}
+
+// PatchContentPreferences updates only the provided content analytics fields.
+func (s *SettingsService) PatchContentPreferences(patch ContentPreferencePatch) (db.PreferenceSet, error) {
+	updates := make(map[string]interface{})
+	if patch.DeadContentMinDays != nil {
+		updates["dead_content_min_days"] = *patch.DeadContentMinDays
+	}
+	if patch.StaleContentDays != nil {
+		updates["stale_content_days"] = *patch.StaleContentDays
+	}
+
+	if len(updates) == 0 {
+		var pref db.PreferenceSet
+		s.db.FirstOrCreate(&pref, db.PreferenceSet{ID: 1})
+		return pref, nil
+	}
+
+	if err := s.db.Model(&db.PreferenceSet{}).Where("id = ?", 1).Updates(updates).Error; err != nil {
+		return db.PreferenceSet{}, fmt.Errorf("failed to patch content preferences: %w", err)
+	}
+
+	var pref db.PreferenceSet
+	s.db.First(&pref, 1)
+
+	s.bus.Publish(events.SettingsChangedEvent{})
+	return pref, nil
+}
+
+// PatchAdvancedPreferences updates only the provided advanced settings fields.
+func (s *SettingsService) PatchAdvancedPreferences(patch AdvancedPreferencePatch) (db.PreferenceSet, error) {
+	updates := make(map[string]interface{})
+	if patch.LogLevel != nil {
+		updates["log_level"] = *patch.LogLevel
+	}
+	if patch.PollIntervalSeconds != nil {
+		updates["poll_interval_seconds"] = *patch.PollIntervalSeconds
+	}
+	if patch.DeletionQueueDelaySeconds != nil {
+		updates["deletion_queue_delay_seconds"] = *patch.DeletionQueueDelaySeconds
+	}
+	if patch.AuditLogRetentionDays != nil {
+		updates["audit_log_retention_days"] = *patch.AuditLogRetentionDays
+	}
+	if patch.CheckForUpdates != nil {
+		updates["check_for_updates"] = *patch.CheckForUpdates
+	}
+
+	if len(updates) == 0 {
+		var pref db.PreferenceSet
+		s.db.FirstOrCreate(&pref, db.PreferenceSet{ID: 1})
+		return pref, nil
+	}
+
+	if err := s.db.Model(&db.PreferenceSet{}).Where("id = ?", 1).Updates(updates).Error; err != nil {
+		return db.PreferenceSet{}, fmt.Errorf("failed to patch advanced preferences: %w", err)
+	}
+
+	var pref db.PreferenceSet
+	s.db.First(&pref, 1)
+
+	// Apply dynamic log level if it was changed
+	if patch.LogLevel != nil {
+		logger.SetLevel(*patch.LogLevel)
+	}
+
+	s.bus.Publish(events.SettingsChangedEvent{})
+	return pref, nil
 }
 
 // PruneOldActivities deletes activity events older than the given number of days.

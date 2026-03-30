@@ -57,7 +57,7 @@ func RegisterRuleFieldRoutes(protected *echo.Group, reg *services.Registry) {
 			case errors.Is(fetchErr, services.ErrUnknownAction):
 				return apiError(c, http.StatusBadRequest, fetchErr.Error())
 			default:
-				slog.Warn("Failed to fetch rule values", "component", "api", "integrationId", integrationID, "action", action, "error", fetchErr)
+				slog.Error("Failed to fetch rule values", "component", "api", "integrationId", integrationID, "action", action, "error", fetchErr)
 				return apiError(c, http.StatusInternalServerError, "Failed to fetch rule values")
 			}
 		}

@@ -188,7 +188,7 @@ func (j *JellyfinClient) GetBulkWatchDataForUser(userID, userName string) (map[i
 			)
 			body, err := j.doRequest(endpoint)
 			if err != nil {
-				slog.Warn("Failed to fetch Jellyfin episode watch data",
+				slog.Error("Failed to fetch Jellyfin episode watch data",
 					"component", "jellyfin", "user", userName, "error", err)
 				break
 			}
@@ -198,7 +198,7 @@ func (j *JellyfinClient) GetBulkWatchDataForUser(userID, userName string) (map[i
 				TotalRecordCount int            `json:"TotalRecordCount"`
 			}
 			if err := json.Unmarshal(body, &resp); err != nil {
-				slog.Warn("Failed to parse Jellyfin episode response",
+				slog.Error("Failed to parse Jellyfin episode response",
 					"component", "jellyfin", "error", err)
 				break
 			}
@@ -338,7 +338,7 @@ func (j *JellyfinClient) GetBulkWatchData() (map[int]*WatchData, error) {
 	for _, user := range users {
 		userData, err := j.GetBulkWatchDataForUser(user.ID, user.Name)
 		if err != nil {
-			slog.Warn("Failed to fetch Jellyfin watch data for user",
+			slog.Error("Failed to fetch Jellyfin watch data for user",
 				"component", "jellyfin", "user", user.Name, "error", err)
 			continue
 		}
@@ -380,7 +380,7 @@ func (j *JellyfinClient) GetWatchlistItems() (map[int]bool, error) {
 	for _, user := range users {
 		favs, err := j.GetFavoritedItems(user.ID)
 		if err != nil {
-			slog.Warn("Failed to fetch Jellyfin favorites for user",
+			slog.Error("Failed to fetch Jellyfin favorites for user",
 				"component", "jellyfin", "user", user.Name, "error", err)
 			continue
 		}
@@ -530,7 +530,7 @@ func (j *JellyfinClient) GetCollectionMemberships() (map[int][]string, error) {
 		childEndpoint := fmt.Sprintf("/Users/%s/Items?ParentId=%s&Fields=ProviderIds", adminUserID, boxSet.ID)
 		childBody, childErr := j.doRequest(childEndpoint)
 		if childErr != nil {
-			slog.Debug("Failed to fetch Jellyfin box set children", "component", "integrations",
+			slog.Error("Failed to fetch Jellyfin box set children", "component", "integrations",
 				"boxSet", boxSet.Name, "error", childErr)
 			continue
 		}
@@ -746,10 +746,14 @@ func (j *JellyfinClient) GetPosterImage(itemID string) ([]byte, string, error) {
 }
 
 // UploadPosterImage uploads a new primary poster to a Jellyfin item.
-// Jellyfin accepts raw image bytes with the appropriate Content-Type header.
+// Jellyfin accepts raw image bytes with the appropriate Content-Type header
+// and requires the X-Emby-Token auth header alongside it.
 func (j *JellyfinClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
 	fullURL := j.URL + "/Items/" + itemID + "/Images/Primary"
-	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+	return DoAPIRequestWithHeaders("POST", fullURL, imageData, map[string]string{
+		"Content-Type": contentType,
+		"X-Emby-Token": j.APIKey,
+	})
 }
 
 // RestorePosterImage removes the custom primary poster from a Jellyfin item,

@@ -314,7 +314,7 @@ func (r *IntegrationRegistry) BuildTMDbToNativeIDMaps() map[uint]map[int]string 
 		if plex, ok := r.PlexClient(id); ok {
 			plexMap, err := plex.GetTMDbToRatingKeyMap()
 			if err != nil {
-				slog.Warn("Failed to build TMDb→RatingKey map for sunset",
+				slog.Error("Failed to build TMDb→RatingKey map for sunset",
 					"component", "integrations", "integrationID", id, "error", err)
 				continue
 			}
@@ -324,7 +324,7 @@ func (r *IntegrationRegistry) BuildTMDbToNativeIDMaps() map[uint]map[int]string 
 		if jf, ok := r.JellyfinClient(id); ok {
 			jfMap, err := jf.GetTMDbToItemIDMap()
 			if err != nil {
-				slog.Warn("Failed to build TMDb→ItemID map for sunset",
+				slog.Error("Failed to build TMDb→ItemID map for sunset",
 					"component", "integrations", "integrationID", id, "error", err)
 				continue
 			}
@@ -334,7 +334,7 @@ func (r *IntegrationRegistry) BuildTMDbToNativeIDMaps() map[uint]map[int]string 
 		if emby, ok := r.EmbyClient(id); ok {
 			embyMap, err := emby.GetTMDbToItemIDMap()
 			if err != nil {
-				slog.Warn("Failed to build TMDb→ItemID map for sunset",
+				slog.Error("Failed to build TMDb→ItemID map for sunset",
 					"component", "integrations", "integrationID", id, "error", err)
 				continue
 			}

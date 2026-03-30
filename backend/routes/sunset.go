@@ -40,6 +40,10 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 			DaysRemaining       int     `json:"daysRemaining"`
 			LabelApplied        bool    `json:"labelApplied"`
 			PosterOverlayActive bool    `json:"posterOverlayActive"`
+			Status              string  `json:"status"`
+			SavedAt             string  `json:"savedAt,omitempty"`
+			SavedScore          float64 `json:"savedScore,omitempty"`
+			SavedReason         string  `json:"savedReason,omitempty"`
 			ExpiredAt           string  `json:"expiredAt,omitempty"`
 			CreatedAt           string  `json:"createdAt"`
 		}
@@ -63,7 +67,13 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 				DaysRemaining:       reg.Sunset.DaysRemaining(item),
 				LabelApplied:        item.LabelApplied,
 				PosterOverlayActive: item.PosterOverlayActive,
+				Status:              item.Status,
+				SavedScore:          item.SavedScore,
+				SavedReason:         item.SavedReason,
 				CreatedAt:           item.CreatedAt.Format(time.RFC3339),
+			}
+			if item.SavedAt != nil {
+				resp.SavedAt = item.SavedAt.Format(time.RFC3339)
 			}
 			if item.ExpiredAt != nil {
 				resp.ExpiredAt = item.ExpiredAt.Format(time.RFC3339)
@@ -83,7 +93,7 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 		// Build the integration registry so label removal works from the UI.
 		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
 		if registryErr != nil {
-			slog.Warn("Failed to build integration registry for sunset cancel — label removal may be skipped",
+			slog.Error("Failed to build integration registry for sunset cancel — label removal may be skipped",
 				"component", "routes", "error", registryErr)
 		}
 
@@ -148,7 +158,7 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 	sunset.POST("/clear", func(c echo.Context) error {
 		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
 		if registryErr != nil {
-			slog.Warn("Failed to build integration registry for sunset clear — label removal may be skipped",
+			slog.Error("Failed to build integration registry for sunset clear — label removal may be skipped",
 				"component", "routes", "error", registryErr)
 		}
 
@@ -176,6 +186,29 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 		})
 	})
 
+	// POST /api/v1/sunset-queue/refresh-labels — re-apply labels to unlabeled queue items
+	sunset.POST("/refresh-labels", func(c echo.Context) error {
+		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
+		if registryErr != nil {
+			slog.Error("Failed to build integration registry for label refresh",
+				"component", "routes", "error", registryErr)
+		}
+
+		applied, err := reg.Sunset.RefreshLabels(services.SunsetDeps{
+			Registry: registry,
+			Settings: reg.Settings,
+		})
+		if err != nil {
+			slog.Error("Failed to refresh labels", "component", "routes", "error", err)
+			return apiError(c, http.StatusInternalServerError, "Failed to refresh labels")
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"status":  "refreshed",
+			"applied": applied,
+		})
+	})
+
 	// POST /api/v1/sunset-queue/refresh-posters — force re-generate and re-upload all overlays
 	sunset.POST("/refresh-posters", func(c echo.Context) error {
 		if reg.PosterOverlay == nil {
@@ -184,7 +217,7 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 
 		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
 		if registryErr != nil {
-			slog.Warn("Failed to build integration registry for poster refresh — refresh may be incomplete",
+			slog.Error("Failed to build integration registry for poster refresh — refresh may be incomplete",
 				"component", "routes", "error", registryErr)
 		}
 
@@ -216,7 +249,7 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 
 		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
 		if registryErr != nil {
-			slog.Warn("Failed to build integration registry for poster restore — restore may be incomplete",
+			slog.Error("Failed to build integration registry for poster restore — restore may be incomplete",
 				"component", "routes", "error", registryErr)
 		}
 

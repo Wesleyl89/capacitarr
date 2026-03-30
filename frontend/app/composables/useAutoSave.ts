@@ -63,5 +63,24 @@ export function useAutoSave() {
     }
   }
 
-  return { saveStatus, initFields, showSaveStatus, autoSavePreference };
+  async function patchPreference(
+    field: string,
+    group: 'engine' | 'sunset' | 'content' | 'advanced',
+    key: string,
+    value: string | number | boolean,
+  ) {
+    showSaveStatus(field, 'saving');
+    try {
+      await api(`/api/v1/preferences/${group}`, {
+        method: 'PATCH',
+        body: { [key]: value },
+      });
+      showSaveStatus(field, 'saved');
+    } catch {
+      showSaveStatus(field, 'error');
+      addToast(`Failed to save ${field} setting`, 'error');
+    }
+  }
+
+  return { saveStatus, initFields, showSaveStatus, autoSavePreference, patchPreference };
 }

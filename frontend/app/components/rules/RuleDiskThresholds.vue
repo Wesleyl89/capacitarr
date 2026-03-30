@@ -146,6 +146,25 @@
             </span>
           </div>
 
+          <!-- ECharts horizontal stacked bar (experimental) -->
+          <div
+            v-motion
+            :initial="{ opacity: 0, y: -10 }"
+            :enter="{
+              opacity: 1,
+              y: 0,
+              transition: { type: 'spring', stiffness: 200, damping: 20 },
+            }"
+          >
+            <p class="text-xs text-muted-foreground mb-1">▼ ECharts bar (experimental)</p>
+            <VChart
+              :option="buildBarChartOption(dg)"
+              autoresize
+              style="height: 60px; width: 100%"
+            />
+          </div>
+          <p class="text-xs text-muted-foreground mb-2 mt-3">▼ Original CSS bar (for comparison)</p>
+
           <!-- Progress bar with segmented zone background + triangle markers -->
           <div class="relative w-full mt-8 mb-6">
             <!-- Bar container -->
@@ -438,6 +457,173 @@ const emit = defineEmits<{
 
 const api = useApi();
 const { addToast } = useToast();
+const { tooltipConfig, colorAlpha } = useEChartsDefaults();
+
+// ─── ECharts bar-chart builder ───────────────────────────────────────────────
+
+/** Status-aware colors (hex) matching the CSS bar logic. */
+const ZONE_GREEN = '#22c55e';
+const ZONE_AMBER = '#f59e0b';
+const ZONE_RED = '#ef4444';
+const ZONE_ORANGE = '#f97316';
+
+function usageFillColor(pct: number, target: number, threshold: number): string {
+  if (pct >= threshold) return ZONE_RED;
+  if (pct >= target) return ZONE_AMBER;
+  return ZONE_GREEN;
+}
+
+function buildBarChartOption(dg: DiskGroup) {
+  const pct = diskUsagePct(dg);
+  const tgt = editTarget(dg);
+  const thr = editThreshold(dg);
+  const sunset = editMode(dg) === MODE_SUNSET ? (editSunsetPct(dg) ?? null) : null;
+  const total = effectiveTotal(dg);
+  const usedLabel = formatBytes(dg.usedBytes);
+  const totalLabel = formatBytes(total);
+  const freeLabel = formatBytes(Math.max(total - dg.usedBytes, 0));
+  const fillColor = usageFillColor(pct, tgt, thr);
+
+  // Zone segments (stacked background)
+  const zoneNames: string[] = [];
+  const zoneValues: number[] = [];
+  const zoneColors: string[] = [];
+
+  if (sunset != null) {
+    zoneNames.push('Safe (sunset)');
+    zoneValues.push(sunset);
+    zoneColors.push(colorAlpha(ZONE_GREEN, 0.15));
+
+    zoneNames.push('Sunset');
+    zoneValues.push(Math.max(tgt - sunset, 0));
+    zoneColors.push(colorAlpha(ZONE_ORANGE, 0.15));
+  } else {
+    zoneNames.push('Safe');
+    zoneValues.push(tgt);
+    zoneColors.push(colorAlpha(ZONE_GREEN, 0.15));
+  }
+
+  zoneNames.push('Warning');
+  zoneValues.push(Math.max(thr - tgt, 0));
+  zoneColors.push(colorAlpha(ZONE_AMBER, 0.15));
+
+  zoneNames.push('Critical');
+  zoneValues.push(Math.max(100 - thr, 0));
+  zoneColors.push(colorAlpha(ZONE_RED, 0.15));
+
+  // Build zone series (stacked background segments)
+  const zoneSeries = zoneNames.map((name, i) => ({
+    name,
+    type: 'bar',
+    stack: 'zones',
+    data: [zoneValues[i]],
+    barWidth: 18,
+    itemStyle: {
+      color: zoneColors[i],
+      borderRadius: i === 0 ? [4, 0, 0, 4] : i === zoneNames.length - 1 ? [0, 4, 4, 0] : 0,
+    },
+    silent: true,
+    animation: false,
+  }));
+
+  // Usage fill bar (overlaid via a second yAxis category)
+  const usageSeries = {
+    name: 'Usage',
+    type: 'bar',
+    yAxisIndex: 1,
+    data: [Math.min(pct, 100)],
+    barWidth: 12,
+    z: 10,
+    itemStyle: {
+      color: {
+        type: 'linear',
+        x: 0,
+        y: 0,
+        x2: 1,
+        y2: 0,
+        colorStops: [
+          { offset: 0, color: colorAlpha(fillColor, 0.4) },
+          { offset: 0.7, color: colorAlpha(fillColor, 0.85) },
+          { offset: 1, color: fillColor },
+        ],
+      },
+      borderRadius: [4, 4, 4, 4],
+      shadowBlur: 10,
+      shadowColor: colorAlpha(fillColor, 0.5),
+    },
+    // markLine for threshold markers
+    markLine: {
+      silent: true,
+      symbol: 'none',
+      animation: false,
+      data: [
+        ...(sunset != null
+          ? [
+              {
+                xAxis: sunset,
+                lineStyle: { type: 'dashed' as const, color: ZONE_ORANGE, width: 1.5 },
+                label: { show: false },
+              },
+            ]
+          : []),
+        {
+          xAxis: tgt,
+          lineStyle: { type: 'dashed' as const, color: ZONE_GREEN, width: 1.5 },
+          label: { show: false },
+        },
+        {
+          xAxis: thr,
+          lineStyle: { type: 'dashed' as const, color: ZONE_RED, width: 1.5 },
+          label: { show: false },
+        },
+      ],
+    },
+  };
+
+  // Tooltip
+  const sunsetLine = sunset != null ? `<br/>Sunset: <b>${sunset}%</b>` : '';
+  const tooltipBase = tooltipConfig();
+
+  return {
+    tooltip: {
+      ...tooltipBase,
+      trigger: 'axis',
+      axisPointer: { type: 'none' },
+      formatter: () =>
+        `Usage: <b>${pct.toFixed(1)}%</b> (${usedLabel} / ${totalLabel})` +
+        `<br/>Free: <b>${freeLabel}</b>` +
+        `<br/>Target: <b>${tgt}%</b>` +
+        `<br/>Critical: <b>${thr}%</b>` +
+        sunsetLine,
+    },
+    grid: {
+      left: 4,
+      right: 4,
+      top: 4,
+      bottom: 4,
+      containLabel: false,
+    },
+    xAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      show: false,
+    },
+    yAxis: [
+      {
+        type: 'category',
+        data: [''],
+        show: false,
+      },
+      {
+        type: 'category',
+        data: [''],
+        show: false,
+      },
+    ],
+    series: [...zoneSeries, usageSeries],
+  };
+}
 
 // Per-disk-group threshold editing state
 const thresholdEdits = reactive<

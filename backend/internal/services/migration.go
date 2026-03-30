@@ -90,7 +90,7 @@ func (s *MigrationService) Execute() MigrationResult {
 
 	// Remove the backup file so the migration page doesn't re-appear
 	if removeErr := migration.RemoveBackup(s.configDir); removeErr != nil {
-		slog.Warn("Migration succeeded but failed to remove backup",
+		slog.Error("Migration succeeded but failed to remove backup",
 			"component", "migration", "error", removeErr)
 	}
 

@@ -44,19 +44,19 @@ func DetectLegacySchema(dbPath string) bool {
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		slog.Warn("Failed to open database for legacy schema detection",
+		slog.Error("Failed to open database for legacy schema detection",
 			"component", "migration", "path", dbPath, "error", err)
 		return false
 	}
 	sqlDB, err := database.DB()
 	if err != nil {
-		slog.Warn("Failed to get sql.DB for legacy schema detection",
+		slog.Error("Failed to get sql.DB for legacy schema detection",
 			"component", "migration", "error", err)
 		return false
 	}
 	defer func() {
 		if closeErr := sqlDB.Close(); closeErr != nil {
-			slog.Warn("Failed to close detection database", "error", closeErr)
+			slog.Error("Failed to close detection database", "error", closeErr)
 		}
 	}()
 

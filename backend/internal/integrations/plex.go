@@ -142,8 +142,8 @@ func (p *PlexClient) getMediaItems() ([]MediaItem, error) {
 			continue
 		}
 
-		// 2. Get all items in this library
-		itemBody, err := p.doRequest(fmt.Sprintf("/library/sections/%s/all", lib.Key))
+		// 2. Get all items in this library (includeGuids=1 is required for TMDb ID extraction)
+		itemBody, err := p.doRequest(fmt.Sprintf("/library/sections/%s/all?includeGuids=1", lib.Key))
 		if err != nil {
 			continue // Skip failed libraries
 		}
@@ -525,15 +525,17 @@ func (p *PlexClient) GetPosterImage(itemID string) ([]byte, string, error) {
 }
 
 // UploadPosterImage uploads a new primary poster to a Plex item.
-// Uses POST /library/metadata/{ratingKey}/posters with the image URL-encoded.
-func (p *PlexClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
+// Plex requires multipart/form-data with a "file" field to both upload AND select
+// the poster as active. A raw body POST only adds the poster to the selection list
+// without making it the active poster.
+func (p *PlexClient) UploadPosterImage(itemID string, imageData []byte, _ string) error {
 	sep := "?"
 	endpoint := fmt.Sprintf("/library/metadata/%s/posters", url.PathEscape(itemID))
 	if strings.Contains(endpoint, "?") {
 		sep = "&"
 	}
 	fullURL := p.URL + endpoint + sep + "X-Plex-Token=" + p.Token
-	return DoAPIRequestWithBody("POST", fullURL, imageData, "Content-Type", contentType)
+	return DoMultipartUpload(fullURL, imageData, "file", "poster.jpg", nil)
 }
 
 // RestorePosterImage removes any custom poster from a Plex item, reverting to

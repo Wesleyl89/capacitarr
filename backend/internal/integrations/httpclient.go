@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"time"
 
@@ -42,7 +43,7 @@ func DoAPIRequest(url, headerKey, headerValue string) ([]byte, error) {
 
 	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 	if err != nil {
-		slog.Debug("Integration API request failed", "component", "integrations",
+		slog.Error("Integration API request failed", "component", "integrations",
 			"url", sanitizedURL, "error", err, "duration", time.Since(start).String())
 		return nil, fmt.Errorf("connection failed: %w", err)
 	}
@@ -89,16 +90,112 @@ func DoAPIRequestWithBody(method, url string, body []byte, headerKey, headerValu
 	if err != nil {
 		return err
 	}
+	if body != nil && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if headerKey != "" {
 		req.Header.Set(headerKey, headerValue)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
 	}
 
 	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
 	if err != nil {
-		slog.Debug("Integration API request failed", "component", "integrations",
+		slog.Error("Integration API request failed", "component", "integrations",
+			"method", method, "url", sanitizedURL, "error", err, "duration", time.Since(start).String())
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	slog.Debug("Integration API response", "component", "integrations",
+		"method", method, "url", sanitizedURL, "status", resp.StatusCode, "duration", time.Since(start).String())
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key or token")
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// DoMultipartUpload sends a multipart/form-data POST request with a single file
+// field. Used by Plex, which requires multipart uploads to set a poster as the
+// active selection (raw body POST only adds the poster to the list without selecting it).
+func DoMultipartUpload(url string, imageData []byte, fieldName, fileName string, extraHeaders map[string]string) error {
+	start := time.Now()
+	sanitizedURL := logger.SanitizeURL(url)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		return fmt.Errorf("create form file: %w", err)
+	}
+	if _, err := part.Write(imageData); err != nil {
+		return fmt.Errorf("write form file: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
+	if err != nil {
+		slog.Error("Integration multipart upload failed", "component", "integrations",
+			"url", sanitizedURL, "error", err, "duration", time.Since(start).String())
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	slog.Debug("Integration multipart upload response", "component", "integrations",
+		"url", sanitizedURL, "status", resp.StatusCode, "duration", time.Since(start).String())
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("unauthorized: invalid API key or token")
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// DoAPIRequestWithHeaders creates an HTTP request with multiple headers.
+// Used when both Content-Type and an auth header are needed (e.g., Jellyfin/Emby
+// poster uploads that require Content-Type: image/jpeg AND X-Emby-Token).
+func DoAPIRequestWithHeaders(method, url string, body []byte, headers map[string]string) error {
+	start := time.Now()
+	sanitizedURL := logger.SanitizeURL(url)
+
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), method, url, bodyReader)
+	if err != nil {
+		return err
+	}
+	if body != nil && headers["Content-Type"] == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := sharedHTTPClient.Do(req) //nolint:gosec // G704: URL is from admin-configured integration settings
+	if err != nil {
+		slog.Error("Integration API request failed", "component", "integrations",
 			"method", method, "url", sanitizedURL, "error", err, "duration", time.Since(start).String())
 		return fmt.Errorf("connection failed: %w", err)
 	}

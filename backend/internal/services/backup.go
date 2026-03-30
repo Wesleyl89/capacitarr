@@ -359,7 +359,7 @@ func (s *BackupService) Import(envelope SettingsExportEnvelope, sections ImportS
 	if syncMode {
 		snap, err := s.Export(sectionsToExportSections(sections), "pre-import-snapshot")
 		if err != nil {
-			slog.Warn("Failed to create pre-import snapshot", "component", "services", "error", err)
+			slog.Error("Failed to create pre-import snapshot", "component", "services", "error", err)
 		} else {
 			snapshot = snap
 		}
@@ -607,7 +607,7 @@ func (s *BackupService) importRules(tx *gorm.DB, rules []RuleExport, syncMode bo
 		// No match found — skip this rule (every rule must belong to an integration)
 		autoMatchCache[lookupKey] = nil
 		unmatched++
-		slog.Warn("Rule integration match failed, skipping rule",
+		slog.Error("Rule integration match failed, skipping rule",
 			"component", "services",
 			"integrationName", intName,
 			"integrationType", intType,
@@ -1294,7 +1294,7 @@ func (s *BackupService) CommitImport(envelope SettingsExportEnvelope, sections I
 	if syncMode {
 		snap, err := s.Export(sectionsToExportSections(sections), "pre-import-snapshot")
 		if err != nil {
-			slog.Warn("Failed to create pre-import snapshot", "component", "services", "error", err)
+			slog.Error("Failed to create pre-import snapshot", "component", "services", "error", err)
 		} else {
 			snapshot = snap
 		}
@@ -1472,7 +1472,7 @@ func (s *BackupService) importRulesWithOverrides(tx *gorm.DB, rules []RuleExport
 			}
 			if integrationID == nil {
 				unmatched++
-				slog.Warn("Rule integration match failed in override path, skipping rule",
+				slog.Error("Rule integration match failed in override path, skipping rule",
 					"component", "services",
 					"field", r.Field,
 					"operator", r.Operator,

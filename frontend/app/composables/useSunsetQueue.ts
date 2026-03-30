@@ -87,6 +87,8 @@ export function useSunsetQueue() {
     on('sunset_expired', () => fetchSunsetItems());
     on('sunset_rescheduled', () => fetchSunsetItems());
     on('sunset_escalated', () => fetchSunsetItems());
+    on('sunset_saved', () => fetchSunsetItems());
+    on('sunset_saved_cleaned', () => fetchSunsetItems());
   }
 
   return {

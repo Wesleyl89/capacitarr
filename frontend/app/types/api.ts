@@ -67,6 +67,10 @@ export interface PreferenceSet {
   sunsetDays: number;
   sunsetLabel: string;
   posterOverlayEnabled: boolean;
+  sunsetRescoreEnabled: boolean;
+  savedDurationDays: number;
+  savedLabel: string;
+  logLevelOverridden: boolean; // true when DEBUG=true env var pins log level to debug
   updatedAt: string;
 }
 
@@ -389,6 +393,10 @@ export interface SunsetQueueItem {
   daysRemaining: number;
   labelApplied: boolean;
   posterOverlayActive: boolean;
+  status: string; // "pending", "saved", "expired"
+  savedAt?: string;
+  savedScore?: number;
+  savedReason?: string;
   expiredAt?: string;
   createdAt: string;
 }

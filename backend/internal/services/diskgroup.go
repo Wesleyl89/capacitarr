@@ -217,7 +217,7 @@ func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target floa
 func (s *DiskGroupService) RemoveAll() (int64, error) {
 	// Also clear junction table entries
 	if err := s.db.Where("1 = 1").Delete(&db.DiskGroupIntegration{}).Error; err != nil {
-		slog.Warn("Failed to clear disk group integration links", "component", "diskgroup_service", "error", err)
+		slog.Error("Failed to clear disk group integration links", "component", "diskgroup_service", "error", err)
 	}
 
 	result := s.db.Where("1 = 1").Delete(&db.DiskGroup{})

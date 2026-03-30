@@ -10,8 +10,15 @@ import (
 // LogLevel is a global variable that lets us change the log level dynamically.
 var LogLevel = new(slog.LevelVar)
 
+// debugEnv tracks whether DEBUG=true was set at startup. When true, the log
+// level is pinned to debug regardless of the database preference — the env
+// var acts as a floor that SetLevel cannot raise above.
+var debugEnv bool
+
 // Init initializes the global slog logger with a JSON handler and the dynamic LogLevel.
 func Init(debug bool) {
+	debugEnv = debug
+
 	if debug {
 		LogLevel.Set(slog.LevelDebug)
 	} else {
@@ -27,8 +34,21 @@ func Init(debug bool) {
 	slog.SetDefault(logger)
 }
 
+// DebugOverride returns true when DEBUG=true was set at startup, meaning
+// the log level is pinned to debug regardless of the database preference.
+func DebugOverride() bool {
+	return debugEnv
+}
+
 // SetLevel parses a string level and updates the global LogLevel var.
+// If DEBUG=true was set at startup, the level is pinned to debug — database
+// preferences cannot raise it above debug.
 func SetLevel(level string) {
+	if debugEnv {
+		LogLevel.Set(slog.LevelDebug)
+		return
+	}
+
 	switch strings.ToLower(level) {
 	case "debug":
 		LogLevel.Set(slog.LevelDebug)
@@ -39,7 +59,6 @@ func SetLevel(level string) {
 	case "error":
 		LogLevel.Set(slog.LevelError)
 	default:
-		// Default to info if unrecognized
 		LogLevel.Set(slog.LevelInfo)
 	}
 }

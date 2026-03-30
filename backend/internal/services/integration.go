@@ -154,7 +154,7 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 
 		names, fetchErr := fetcher.GetCollectionNames()
 		if fetchErr != nil {
-			slog.Warn("Failed to fetch collection names",
+			slog.Error("Failed to fetch collection names",
 				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
 			continue
 		}
@@ -209,7 +209,7 @@ func (s *IntegrationService) FetchLabelValues() ([]integrations.NameValue, error
 
 		names, fetchErr := fetcher.GetLabelNames()
 		if fetchErr != nil {
-			slog.Warn("Failed to fetch label names",
+			slog.Error("Failed to fetch label names",
 				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
 			continue
 		}

@@ -111,7 +111,7 @@ func RegisterRuleRoutes(protected *echo.Group, reg *services.Registry) {
 	protected.POST("/custom-rules", func(c echo.Context) error {
 		var newRule db.CustomRule
 		if err := c.Bind(&newRule); err != nil {
-			slog.Debug("Failed to bind rule payload", "component", "api", "operation", "create_rule", "error", err)
+			slog.Error("Failed to bind rule payload", "component", "api", "operation", "create_rule", "error", err)
 			return apiError(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())
 		}
 

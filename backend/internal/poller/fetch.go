@@ -44,7 +44,7 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 	for id, conn := range registry.Connectors() {
 		now := time.Now()
 		if connErr := conn.TestConnection(); connErr != nil {
-			slog.Warn("Integration connection failed", "component", "poller",
+			slog.Error("Integration connection failed", "component", "poller",
 				"integrationID", id, "error", connErr)
 			_ = integrationSvc.UpdateSyncStatus(id, nil, connErr.Error())
 
@@ -69,7 +69,7 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 		fetchStart := time.Now()
 		items, fetchErr := source.GetMediaItems()
 		if fetchErr != nil {
-			slog.Warn("Media items fetch failed", "component", "poller",
+			slog.Error("Media items fetch failed", "component", "poller",
 				"integrationID", id, "error", fetchErr)
 			continue
 		}
@@ -141,7 +141,7 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 	for id, reporter := range registry.DiskReporters() {
 		folders, err := reporter.GetRootFolders()
 		if err != nil {
-			slog.Warn("Root folder fetch failed", "component", "poller",
+			slog.Error("Root folder fetch failed", "component", "poller",
 				"integrationID", id, "error", err)
 		}
 		for _, f := range folders {
@@ -153,7 +153,7 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 
 		disks, err := reporter.GetDiskSpace()
 		if err != nil {
-			slog.Warn("Disk space fetch failed", "component", "poller",
+			slog.Error("Disk space fetch failed", "component", "poller",
 				"integrationID", id, "error", err)
 			continue
 		}

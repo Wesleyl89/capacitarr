@@ -71,7 +71,7 @@ func (s *VersionService) CheckForUpdate() (*VersionCheckResult, error) {
 	// Load preferences to check if update checks are enabled
 	pref, err := s.preferences.GetPreferences()
 	if err != nil {
-		slog.Warn("Failed to load preferences for version check", "component", "version", "error", err)
+		slog.Error("Failed to load preferences for version check", "component", "version", "error", err)
 		return &VersionCheckResult{Current: s.appVersion}, nil
 	}
 
@@ -105,7 +105,7 @@ func (s *VersionService) ForceCheck() (*VersionCheckResult, error) {
 	// Load preferences to check if update checks are enabled
 	pref, err := s.preferences.GetPreferences()
 	if err != nil {
-		slog.Warn("Failed to load preferences for version check", "component", "version", "error", err)
+		slog.Error("Failed to load preferences for version check", "component", "version", "error", err)
 		return &VersionCheckResult{Current: s.appVersion}, nil
 	}
 
@@ -144,7 +144,7 @@ func (s *VersionService) fetchLatestRelease() VersionCheckResult {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.releasesURL, nil)
 	if err != nil {
-		slog.Warn("Failed to create request for version check", "component", "version", "error", err)
+		slog.Error("Failed to create request for version check", "component", "version", "error", err)
 		return fallback
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("Capacitarr/%s", s.appVersion))
@@ -152,7 +152,7 @@ func (s *VersionService) fetchLatestRelease() VersionCheckResult {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req) //nolint:gosec // URL is set at construction time (DefaultGitHubReleasesURL or test URL), not user-tainted
 	if err != nil {
-		slog.Warn("Failed to fetch latest release from GitHub", "component", "version", "error", err)
+		slog.Error("Failed to fetch latest release from GitHub", "component", "version", "error", err)
 		return fallback
 	}
 	defer func() {
@@ -172,7 +172,7 @@ func (s *VersionService) fetchLatestRelease() VersionCheckResult {
 		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		slog.Warn("Failed to parse GitHub releases response", "component", "version", "error", err)
+		slog.Error("Failed to parse GitHub releases response", "component", "version", "error", err)
 		return fallback
 	}
 

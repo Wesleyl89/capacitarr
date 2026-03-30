@@ -1,6 +1,10 @@
 // Package poster provides image composition for sunset countdown poster overlays.
-// It downloads original posters, composites a "Leaving in X days" banner at the
-// bottom using the bundled Noto Sans font, and returns the modified image as JPEG bytes.
+// It downloads original posters, composites a top banner with an hourglass icon
+// and countdown text, and returns the modified image as JPEG bytes.
+//
+// Two banner styles:
+//   - Sunset (leaving): warm amber background with hourglass icon
+//   - Saved: emerald green background with shield-check icon
 package poster
 
 import (
@@ -9,17 +13,18 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"image/jpeg"
-	_ "image/png" // Register PNG decoder for posters that arrive as PNG
+	"image/png"
 	"math"
 	"sync"
 
+	"golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 
 	"capacitarr/assets/fonts"
+	"capacitarr/assets/icons"
 )
 
 // parsedFont caches the parsed Noto Sans Bold font. Parsed once on first use.
@@ -29,18 +34,86 @@ var (
 	parsedFontErr  error
 )
 
-// BannerHeight is the fraction of the poster height used for the gradient banner.
-const BannerHeight = 0.12
+// Banner layout constants.
+const (
+	// BannerHeight is the fraction of poster height used for the top banner.
+	BannerHeight = 0.07
 
-// ComposeOverlay renders a "Leaving in X days" countdown banner onto the bottom
-// of a poster image. Returns the composited image as JPEG bytes.
-//
-// The banner is a gradient from transparent to semi-opaque black with white text
-// rendered in Noto Sans Bold. Text varies by days remaining:
-//   - 0: "Last day"
-//   - 1: "Leaving tomorrow"
-//   - N: "Leaving in N days"
+	// bannerPaddingFrac is horizontal padding as a fraction of poster width.
+	bannerPaddingFrac = 0.03
+
+	// iconSizeFrac is the icon size as a fraction of banner height.
+	iconSizeFrac = 0.55
+
+	// iconGapFrac is the gap between icon and text as a fraction of banner height.
+	iconGapFrac = 0.25
+)
+
+// Banner color palettes (vertical gradient top → bottom, ~95% opaque).
+var (
+	// Sunset: warm amber (#B45309 → #D97706)
+	sunsetTop    = color.NRGBA{R: 180, G: 83, B: 9, A: 242}
+	sunsetBottom = color.NRGBA{R: 217, G: 119, B: 6, A: 242}
+
+	// Saved: emerald green (#047857 → #059669)
+	savedTop    = color.NRGBA{R: 4, G: 120, B: 87, A: 242}
+	savedBottom = color.NRGBA{R: 5, G: 150, B: 105, A: 242}
+)
+
+// NOTE: Icons are now pre-rendered Lucide PNGs (white on transparent) rather
+// than programmatically drawn shapes. The composeBanner function accepts raw
+// PNG bytes and scales them to fit the banner.
+
+// ─── Public API ─────────────────────────────────────────────────────────────
+
+// ComposeOverlay renders a warm amber top banner with a Lucide hourglass icon and
+// "Leaving in X days" countdown text. Returns the composited image as JPEG bytes.
 func ComposeOverlay(original []byte, daysRemaining int) ([]byte, error) {
+	iconPNG := selectIconSize(icons.Hourglass24, icons.Hourglass48, icons.Hourglass96, original)
+	return composeBanner(original, countdownText(daysRemaining), sunsetTop, sunsetBottom, iconPNG)
+}
+
+// ComposeSavedOverlay renders an emerald green top banner with a Lucide shield-check
+// icon and "Saved by popular demand" text. Returns the composited image as JPEG bytes.
+func ComposeSavedOverlay(original []byte) ([]byte, error) {
+	iconPNG := selectIconSize(icons.ShieldCheck24, icons.ShieldCheck48, icons.ShieldCheck96, original)
+	return composeBanner(original, "Saved by popular demand", savedTop, savedBottom, iconPNG)
+}
+
+// selectIconSize picks the best pre-rendered icon size based on poster height.
+// Uses the 96px icon for large posters, 48px for medium, 24px for small.
+func selectIconSize(small, medium, large []byte, posterData []byte) []byte {
+	// Quick decode just to get dimensions — don't need full pixel data
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(posterData))
+	if err != nil {
+		return medium // safe fallback
+	}
+	bannerH := int(math.Round(float64(cfg.Height) * BannerHeight))
+	iconTarget := int(math.Round(float64(bannerH) * iconSizeFrac))
+
+	switch {
+	case iconTarget >= 72:
+		return large // 96px
+	case iconTarget >= 36:
+		return medium // 48px
+	default:
+		return small // 24px
+	}
+}
+
+// ContentHash returns a hex-encoded SHA-256 hash of the image data.
+// Used to detect if a poster has been changed by the user since it was cached.
+func ContentHash(data []byte) string {
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%x", h[:16]) // 32 hex chars (128 bits) — sufficient for dedup
+}
+
+// ─── Banner Composition ─────────────────────────────────────────────────────
+
+// composeBanner is the shared implementation for both overlay types. It draws a
+// colored banner across the top of the poster with an icon on the left, text to
+// the right, and a subtle drop shadow below the banner.
+func composeBanner(original []byte, text string, topColor, bottomColor color.NRGBA, iconPNG []byte) ([]byte, error) {
 	src, _, err := image.Decode(bytes.NewReader(original))
 	if err != nil {
 		return nil, fmt.Errorf("decode poster image: %w", err)
@@ -52,51 +125,130 @@ func ComposeOverlay(original []byte, daysRemaining int) ([]byte, error) {
 		return nil, fmt.Errorf("poster too small: %dx%d", w, h)
 	}
 
-	// Create output image
 	out := image.NewRGBA(bounds)
 	draw.Draw(out, bounds, src, bounds.Min, draw.Src)
 
-	// Draw gradient banner at the bottom
+	// ── Banner dimensions ────────────────────────────────────────────────
 	bannerH := int(math.Round(float64(h) * BannerHeight))
-	if bannerH < 20 {
-		bannerH = 20
+	if bannerH < 24 {
+		bannerH = 24
 	}
-	bannerTop := h - bannerH
-	for y := bannerTop; y < h; y++ {
-		progress := float64(y-bannerTop) / float64(bannerH) // 0.0 at top → 1.0 at bottom
-		alpha := uint8(math.Round(progress * 200))          // Max 200/255 opacity (~78%)
-		bannerColor := color.NRGBA{R: 0, G: 0, B: 0, A: alpha}
+	bannerTop := bounds.Min.Y
+	bannerBottom := bannerTop + bannerH
+	padding := int(math.Round(float64(w) * bannerPaddingFrac))
+
+	// ── Colored gradient fill (top → bottom) ─────────────────────────────
+	for y := bannerTop; y < bannerBottom; y++ {
+		t := float64(y-bannerTop) / float64(bannerH)
+		rc := lerpU8(topColor.R, bottomColor.R, t)
+		gc := lerpU8(topColor.G, bottomColor.G, t)
+		bc := lerpU8(topColor.B, bottomColor.B, t)
+		ac := lerpU8(topColor.A, bottomColor.A, t)
+		rowColor := color.NRGBA{R: rc, G: gc, B: bc, A: ac}
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			draw.Draw(out,
-				image.Rect(x, y, x+1, y+1),
-				&image.Uniform{C: bannerColor},
-				image.Point{},
-				draw.Over,
-			)
+			draw.Draw(out, image.Rect(x, y, x+1, y+1),
+				&image.Uniform{C: rowColor}, image.Point{}, draw.Over)
 		}
 	}
 
-	// Render countdown text
-	text := countdownText(daysRemaining)
-	if err := drawText(out, text, bounds.Min.X, bannerTop, w, bannerH); err != nil {
-		return nil, fmt.Errorf("draw text: %w", err)
+	// ── Subtle drop shadow below the banner (2px fade) ───────────────────
+	shadowAlphas := [2]uint8{40, 20}
+	for i, alpha := range shadowAlphas {
+		y := bannerBottom + i
+		if y >= bounds.Max.Y {
+			break
+		}
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			draw.Draw(out, image.Rect(x, y, x+1, y+1),
+				&image.Uniform{C: color.NRGBA{A: alpha}}, image.Point{}, draw.Over)
+		}
 	}
 
-	// Encode as JPEG
+	// ── Measure text ─────────────────────────────────────────────────────
+	ft, err := loadFont()
+	if err != nil {
+		return nil, err
+	}
+
+	fontSize := float64(bannerH) * 0.42
+	if fontSize < 10 {
+		fontSize = 10
+	}
+
+	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
+		Size: fontSize, DPI: 72, Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create font face: %w", err)
+	}
+	defer func() { _ = face.Close() }()
+
+	metrics := face.Metrics()
+	textWidth := font.MeasureString(face, text).Ceil()
+	textHeight := (metrics.Ascent + metrics.Descent).Ceil()
+
+	// ── Layout: [icon gap text] centered in banner ───────────────────────
+	iconSize := int(math.Round(float64(bannerH) * iconSizeFrac))
+	iconGap := int(math.Round(float64(bannerH) * iconGapFrac))
+	contentWidth := iconSize + iconGap + textWidth
+
+	maxWidth := w - 2*padding
+	if contentWidth > maxWidth {
+		contentWidth = maxWidth
+	}
+
+	startX := bounds.Min.X + (w-contentWidth)/2
+	iconCX := startX + iconSize/2
+	iconCY := bannerTop + bannerH/2
+
+	// ── Draw icon (decode pre-rendered PNG + scale to fit) ───────────────
+	iconImg, pngErr := png.Decode(bytes.NewReader(iconPNG))
+	if pngErr != nil {
+		return nil, fmt.Errorf("decode icon PNG: %w", pngErr)
+	}
+	// Scale the icon PNG to the target iconSize using high-quality BiLinear
+	iconDst := image.NewRGBA(image.Rect(0, 0, iconSize, iconSize))
+	draw.BiLinear.Scale(iconDst, iconDst.Bounds(), iconImg, iconImg.Bounds(), draw.Over, nil)
+
+	// Composite the scaled icon centered at (iconCX, iconCY)
+	iconRect := image.Rect(
+		iconCX-iconSize/2, iconCY-iconSize/2,
+		iconCX+iconSize/2, iconCY+iconSize/2,
+	)
+	draw.Draw(out, iconRect, iconDst, image.Point{}, draw.Over)
+
+	// ── Draw text with drop shadow ───────────────────────────────────────
+	textX := startX + iconSize + iconGap
+	textY := bannerTop + (bannerH+textHeight)/2
+
+	// Shadow: 1px offset, semi-transparent black
+	shadowOff := max(1, int(math.Round(fontSize*0.04)))
+	shadowDrw := &font.Drawer{
+		Dst:  out,
+		Src:  &image.Uniform{C: color.NRGBA{A: 100}},
+		Face: face,
+		Dot:  fixed.Point26_6{X: fixed.I(textX + shadowOff), Y: fixed.I(textY + shadowOff)},
+	}
+	shadowDrw.DrawString(text)
+
+	// Main text: bright white
+	textDrw := &font.Drawer{
+		Dst:  out,
+		Src:  image.NewUniform(color.White),
+		Face: face,
+		Dot:  fixed.Point26_6{X: fixed.I(textX), Y: fixed.I(textY)},
+	}
+	textDrw.DrawString(text)
+
+	// ── Encode ───────────────────────────────────────────────────────────
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, out, &jpeg.Options{Quality: 92}); err != nil {
 		return nil, fmt.Errorf("encode poster JPEG: %w", err)
 	}
-
 	return buf.Bytes(), nil
 }
 
-// ContentHash returns a hex-encoded SHA-256 hash of the image data.
-// Used to detect if a poster has been changed by the user since it was cached.
-func ContentHash(data []byte) string {
-	h := sha256.Sum256(data)
-	return fmt.Sprintf("%x", h[:16]) // 32 hex chars (128 bits) — sufficient for dedup
-}
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 // countdownText returns the human-readable countdown string.
 func countdownText(daysRemaining int) string {
@@ -121,47 +273,7 @@ func loadFont() (*opentype.Font, error) {
 	return parsedFont, parsedFontErr
 }
 
-// drawText renders white text centered in the banner area using Noto Sans Bold.
-// Font size is calculated dynamically based on banner height to scale with poster resolution.
-func drawText(img *image.RGBA, text string, bannerX, bannerTop, bannerW, bannerH int) error {
-	ft, err := loadFont()
-	if err != nil {
-		return err
-	}
-
-	// Scale font size to ~50% of banner height for readable text
-	fontSize := float64(bannerH) * 0.5
-	if fontSize < 10 {
-		fontSize = 10
-	}
-
-	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-		Size:    fontSize,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return fmt.Errorf("create font face: %w", err)
-	}
-	defer func() { _ = face.Close() }()
-
-	metrics := face.Metrics()
-
-	// Text dimensions
-	textWidth := font.MeasureString(face, text).Ceil()
-	textHeight := (metrics.Ascent + metrics.Descent).Ceil()
-
-	// Center horizontally and vertically in the banner
-	x := bannerX + (bannerW-textWidth)/2
-	y := bannerTop + (bannerH+textHeight)/2
-
-	// Draw text
-	drawer := &font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(color.White),
-		Face: face,
-		Dot:  fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)},
-	}
-	drawer.DrawString(text)
-	return nil
+// lerpU8 linearly interpolates between two uint8 values.
+func lerpU8(a, b uint8, t float64) uint8 {
+	return uint8(math.Round(float64(a)*(1-t) + float64(b)*t))
 }

@@ -117,7 +117,7 @@ func Init(cfg *config.Config) (*gorm.DB, error) {
 	// In-memory databases use "memory" mode; file-based databases should report "wal".
 	var journalMode string
 	if err := database.Raw("PRAGMA journal_mode").Scan(&journalMode).Error; err != nil {
-		slog.Warn("Failed to query journal_mode", "component", "db", "error", err)
+		slog.Error("Failed to query journal_mode", "component", "db", "error", err)
 	}
 
 	slog.Info("Database initialized successfully", "component", "db",

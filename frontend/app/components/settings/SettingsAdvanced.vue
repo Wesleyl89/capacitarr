@@ -124,7 +124,7 @@
           <UiLabel>{{ $t('settings.logLevel') }}</UiLabel>
           <SaveIndicator :status="saveStatus.logLevel ?? 'idle'" />
         </div>
-        <UiSelect v-model="logLevel">
+        <UiSelect v-model="logLevel" :disabled="logLevelOverridden">
           <UiSelectTrigger class="w-full max-w-xs">
             <UiSelectValue placeholder="Select log level" />
           </UiSelectTrigger>
@@ -135,7 +135,10 @@
             <UiSelectItem value="error"> Error </UiSelectItem>
           </UiSelectContent>
         </UiSelect>
-        <p class="text-xs text-muted-foreground/70">
+        <p v-if="logLevelOverridden" class="text-xs text-amber-500">
+          Overridden by DEBUG=true environment variable — log level is pinned to debug.
+        </p>
+        <p v-else class="text-xs text-muted-foreground/70">
           {{ $t('settings.logLevelHint') }}
         </p>
       </div>
@@ -446,7 +449,7 @@ import SaveIndicator from '~/components/settings/SaveIndicator.vue';
 
 const api = useApi();
 const { addToast } = useToast();
-const { saveStatus, initFields, autoSavePreference } = useAutoSave();
+const { saveStatus, initFields, autoSavePreference, patchPreference } = useAutoSave();
 
 initFields([
   'pollInterval',
@@ -463,6 +466,7 @@ initFields([
 const retentionDays = ref(30);
 const pollIntervalSeconds = ref(300);
 const logLevel = ref('info');
+const logLevelOverridden = ref(false);
 const defaultThreshold = ref(85);
 const defaultTarget = ref(75);
 const deletionsEnabled = ref(true);
@@ -496,35 +500,35 @@ const retentionStr = computed({
 // Watch poll interval
 watch(pollIntervalSeconds, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    autoSavePreference('pollInterval', 'pollIntervalSeconds', newVal);
+    patchPreference('pollInterval', 'advanced', 'pollIntervalSeconds', newVal);
   }
 });
 
 // Watch deletion queue delay
 watch(deletionQueueDelaySeconds, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    autoSavePreference('deletionQueueDelay', 'deletionQueueDelaySeconds', newVal);
+    patchPreference('deletionQueueDelay', 'advanced', 'deletionQueueDelaySeconds', newVal);
   }
 });
 
 // Watch retention days
 watch(retentionDays, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    autoSavePreference('retention', 'auditLogRetentionDays', newVal);
+    patchPreference('retention', 'advanced', 'auditLogRetentionDays', newVal);
   }
 });
 
 // Watch log level
 watch(logLevel, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    autoSavePreference('logLevel', 'logLevel', newVal);
+    patchPreference('logLevel', 'advanced', 'logLevel', newVal);
   }
 });
 
 // ─── Check for Updates Toggle ────────────────────────────────────────────────
 function onCheckForUpdatesToggle(checked: boolean) {
   checkForUpdatesEnabled.value = checked;
-  autoSavePreference('checkForUpdates', 'checkForUpdates', checked);
+  patchPreference('checkForUpdates', 'advanced', 'checkForUpdates', checked);
 }
 
 // ─── Deletion Safety Toggle ──────────────────────────────────────────────────
@@ -533,7 +537,7 @@ function onDeletionToggle(checked: boolean) {
     showDeletionConfirmDialog.value = true;
   } else {
     deletionsEnabled.value = false;
-    autoSavePreference('deletionsEnabled', 'deletionsEnabled', false);
+    patchPreference('deletionsEnabled', 'engine', 'deletionsEnabled', false);
     addToast('File deletions disabled — all actions are now simulated', 'success');
   }
 }
@@ -541,7 +545,7 @@ function onDeletionToggle(checked: boolean) {
 function confirmEnableDeletions() {
   deletionsEnabled.value = true;
   showDeletionConfirmDialog.value = false;
-  autoSavePreference('deletionsEnabled', 'deletionsEnabled', true);
+  patchPreference('deletionsEnabled', 'engine', 'deletionsEnabled', true);
   addToast('File deletions enabled — flagged items will be permanently removed', 'error');
 }
 
@@ -578,6 +582,9 @@ async function fetchPreferences() {
     }
     if (prefs?.logLevel) {
       logLevel.value = prefs.logLevel;
+    }
+    if (prefs?.logLevelOverridden !== undefined) {
+      logLevelOverridden.value = prefs.logLevelOverridden;
     }
     if (prefs?.deletionQueueDelaySeconds !== undefined && prefs.deletionQueueDelaySeconds >= 10) {
       deletionQueueDelaySeconds.value = prefs.deletionQueueDelaySeconds;

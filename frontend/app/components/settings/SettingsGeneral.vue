@@ -161,7 +161,7 @@
             @update:model-value="
               (v: AcceptableValue) => {
                 snoozeDurationHours = Number(v);
-                autoSavePreference('snoozeDuration', 'snoozeDurationHours', Number(v));
+                patchPreference('snoozeDuration', 'engine', 'snoozeDurationHours', Number(v));
               }
             "
           >
@@ -215,7 +215,7 @@
             @update:model-value="
               (v: AcceptableValue) => {
                 sunsetDays = Number(v);
-                autoSavePreference('sunsetDays', 'sunsetDays', Number(v));
+                patchPreference('sunsetDays', 'sunset', 'sunsetDays', Number(v));
               }
             "
           >
@@ -251,7 +251,7 @@
                 sunsetLabel = String(v);
               }
             "
-            @change="autoSavePreference('sunsetLabel', 'sunsetLabel', sunsetLabel)"
+            @change="patchPreference('sunsetLabel', 'sunset', 'sunsetLabel', sunsetLabel)"
           />
         </div>
       </div>
@@ -266,11 +266,11 @@
             {{ $t('settings.posterOverlayDesc') }}
           </p>
           <UiSwitch
-            :checked="posterOverlayEnabled"
-            @update:checked="
+            :model-value="posterOverlayEnabled"
+            @update:model-value="
               (v: boolean) => {
                 posterOverlayEnabled = v;
-                autoSavePreference('posterOverlay', 'posterOverlayEnabled', v);
+                patchPreference('posterOverlay', 'sunset', 'posterOverlayEnabled', v);
               }
             "
           />
@@ -296,6 +296,78 @@
           </UiButton>
         </div>
       </div>
+
+      <!-- Daily Score Check (Saved by Popular Demand) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>Daily Score Check</UiLabel>
+            <SaveIndicator :status="saveStatus.sunsetRescore ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            Re-score sunset items daily; save items whose score dropped significantly
+          </p>
+          <UiSwitch
+            :model-value="sunsetRescoreEnabled"
+            @update:model-value="
+              (v: boolean) => {
+                sunsetRescoreEnabled = v;
+                patchPreference('sunsetRescore', 'sunset', 'sunsetRescoreEnabled', v);
+              }
+            "
+          />
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>Saved Duration</UiLabel>
+            <SaveIndicator :status="saveStatus.savedDuration ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            How long the "Saved" marker persists before auto-cleanup
+          </p>
+          <UiSelect
+            :model-value="String(savedDurationDays)"
+            @update:model-value="
+              (v: AcceptableValue) => {
+                savedDurationDays = Number(v);
+                patchPreference('savedDuration', 'sunset', 'savedDurationDays', Number(v));
+              }
+            "
+          >
+            <UiSelectTrigger class="w-full">
+              <UiSelectValue placeholder="Select duration" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem value="3">3 days</UiSelectItem>
+              <UiSelectItem value="5">5 days</UiSelectItem>
+              <UiSelectItem value="7">7 days</UiSelectItem>
+              <UiSelectItem value="14">14 days</UiSelectItem>
+              <UiSelectItem value="30">30 days</UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>Saved Label</UiLabel>
+            <SaveIndicator :status="saveStatus.savedLabel ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            Tag applied to media server items that were saved by activity
+          </p>
+          <UiInput
+            :model-value="savedLabel"
+            placeholder="capacitarr-saved"
+            @update:model-value="
+              (v: string | number) => {
+                savedLabel = String(v);
+              }
+            "
+            @change="patchPreference('savedLabel', 'sunset', 'savedLabel', savedLabel)"
+          />
+        </div>
+      </div>
     </UiCardContent>
   </UiCard>
 </template>
@@ -316,9 +388,18 @@ const {
   setClockFormat,
   setShowExactDates,
 } = useDisplayPrefs();
-const { saveStatus, initFields, autoSavePreference } = useAutoSave();
+const { saveStatus, initFields, patchPreference } = useAutoSave();
 
-initFields(['tiebreaker', 'snoozeDuration', 'posterOverlay', 'sunsetLabel', 'sunsetDays']);
+initFields([
+  'tiebreaker',
+  'snoozeDuration',
+  'posterOverlay',
+  'sunsetLabel',
+  'sunsetDays',
+  'sunsetRescore',
+  'savedDuration',
+  'savedLabel',
+]);
 const { addToast } = useToast();
 
 // Engine behavior state
@@ -327,11 +408,14 @@ const snoozeDurationHours = ref(24);
 const posterOverlayEnabled = ref(true);
 const sunsetLabel = ref('capacitarr-sunset');
 const sunsetDays = ref(30);
+const sunsetRescoreEnabled = ref(true);
+const savedDurationDays = ref(7);
+const savedLabel = ref('capacitarr-saved');
 
 // Watch tiebreaker — immediate save on select change
 watch(engineTiebreakerMethod, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    autoSavePreference('tiebreaker', 'tiebreakerMethod', newVal);
+    patchPreference('tiebreaker', 'engine', 'tiebreakerMethod', newVal);
   }
 });
 
@@ -353,6 +437,15 @@ async function fetchPreferences() {
     }
     if (prefs?.sunsetDays !== undefined) {
       sunsetDays.value = prefs.sunsetDays;
+    }
+    if (prefs?.sunsetRescoreEnabled !== undefined) {
+      sunsetRescoreEnabled.value = prefs.sunsetRescoreEnabled;
+    }
+    if (prefs?.savedDurationDays !== undefined) {
+      savedDurationDays.value = prefs.savedDurationDays;
+    }
+    if (prefs?.savedLabel) {
+      savedLabel.value = prefs.savedLabel;
     }
   } catch (err) {
     console.warn('[SettingsGeneral] fetchPreferences failed:', err);

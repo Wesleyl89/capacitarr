@@ -130,7 +130,7 @@ func Start(reg *services.Registry) *cron.Cron {
 		slog.Error("Failed to add audit log cleanup cron", "component", "jobs", "operation", "add_cron", "error", err)
 	}
 
-	// Job 8: Daily sunset processing — expire countdowns + update poster overlays.
+	// Job 8: Daily sunset processing — expire countdowns, rescore, cleanup saved, update poster overlays.
 	_, err = c.AddFunc("@daily", func() {
 		// Build integration registry for label/poster operations
 		registry, registryErr := reg.Integration.BuildIntegrationRegistry()
@@ -144,24 +144,53 @@ func Start(reg *services.Registry) *cron.Cron {
 			tmdbMap = registry.BuildTMDbToNativeIDMaps()
 		}
 
-		// 1. Process expired sunset items → DeletionService
-		processed, sunsetErr := reg.Sunset.ProcessExpired(services.SunsetDeps{
+		// Load preferences and weights early — needed by rescore + poster overlay steps
+		prefs, prefsErr := reg.Settings.GetPreferences()
+		if prefsErr != nil {
+			slog.Error("Failed to load preferences for sunset cron", "component", "jobs", "error", prefsErr)
+		}
+		weights, weightsErr := reg.Settings.GetWeightMap()
+		if weightsErr != nil {
+			slog.Error("Failed to load scoring weights for sunset cron", "component", "jobs", "error", weightsErr)
+		}
+
+		sunsetDeps := services.SunsetDeps{
 			Registry:       registry,
 			Deletion:       reg.Deletion,
 			Engine:         reg.Engine,
 			Settings:       reg.Settings,
 			PosterOverlay:  reg.PosterOverlay,
 			TMDbToNativeID: tmdbMap,
-		})
+		}
+
+		// 1. Process expired sunset items → DeletionService
+		processed, sunsetErr := reg.Sunset.ProcessExpired(sunsetDeps)
 		if sunsetErr != nil {
 			slog.Error("Failed to process expired sunset items", "component", "jobs", "error", sunsetErr)
 		} else if processed > 0 {
 			slog.Info("Processed expired sunset items", "component", "jobs", "count", processed)
 		}
 
-		// 2. Update poster overlays (if enabled and service is available)
+		// 2. Rescore pending items and save those with dropped scores (if enabled)
+		if prefsErr == nil && prefs.SunsetRescoreEnabled {
+			rescored, rescoreErr := reg.Sunset.RescoreAndSave(sunsetDeps, prefs, weights)
+			if rescoreErr != nil {
+				slog.Error("Failed to rescore sunset items", "component", "jobs", "error", rescoreErr)
+			} else if rescored > 0 {
+				slog.Info("Sunset items saved by popular demand", "component", "jobs", "count", rescored)
+			}
+		}
+
+		// 3. Cleanup saved items whose marker duration has expired
+		cleaned, cleanErr := reg.Sunset.CleanupSaved(sunsetDeps)
+		if cleanErr != nil {
+			slog.Error("Failed to cleanup saved sunset items", "component", "jobs", "error", cleanErr)
+		} else if cleaned > 0 {
+			slog.Info("Cleaned up expired saved sunset markers", "component", "jobs", "count", cleaned)
+		}
+
+		// 4. Update poster overlays (if enabled and service is available)
 		if reg.PosterOverlay != nil {
-			prefs, prefsErr := reg.Settings.GetPreferences()
 			if prefsErr == nil && prefs.PosterOverlayEnabled {
 				if _, overlayErr := reg.PosterOverlay.UpdateAll(reg.Sunset, services.PosterDeps{
 					Registry:       registry,

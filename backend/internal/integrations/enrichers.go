@@ -151,7 +151,7 @@ func (e *TautulliEnricher) Enrich(items []MediaItem) error {
 			watchData, err = e.client.GetWatchHistory(ratingKey)
 		}
 		if err != nil {
-			slog.Debug("Tautulli enrichment failed", "component", "enrichment",
+			slog.Error("Tautulli enrichment failed", "component", "enrichment",
 				"title", item.Title, "tmdbID", item.TMDbID, "ratingKey", ratingKey, "error", err)
 			continue
 		}

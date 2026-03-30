@@ -1029,6 +1029,40 @@ func (e SunsetLabelFailedEvent) EventMessage() string {
 	return fmt.Sprintf("Failed to apply label %q to %s: %s", e.Label, e.MediaName, e.Error)
 }
 
+// SunsetSavedEvent is published when a sunset item is saved due to a score drop
+// during the daily rescore check ("saved by popular demand").
+type SunsetSavedEvent struct {
+	MediaName     string  `json:"mediaName"`
+	MediaType     string  `json:"mediaType"`
+	DiskGroupID   uint    `json:"diskGroupId"`
+	OriginalScore float64 `json:"originalScore"`
+	NewScore      float64 `json:"newScore"`
+}
+
+// EventType implements Event.
+func (e SunsetSavedEvent) EventType() string { return "sunset_saved" }
+
+// EventMessage implements Event.
+func (e SunsetSavedEvent) EventMessage() string {
+	return fmt.Sprintf("%s saved by popular demand — score dropped from %.1f to %.1f", e.MediaName, e.OriginalScore, e.NewScore)
+}
+
+// SunsetSavedCleanedEvent is published when a saved item's marker duration expires
+// and it is fully removed from the queue.
+type SunsetSavedCleanedEvent struct {
+	MediaName   string `json:"mediaName"`
+	MediaType   string `json:"mediaType"`
+	DiskGroupID uint   `json:"diskGroupId"`
+}
+
+// EventType implements Event.
+func (e SunsetSavedCleanedEvent) EventType() string { return "sunset_saved_cleaned" }
+
+// EventMessage implements Event.
+func (e SunsetSavedCleanedEvent) EventMessage() string {
+	return fmt.Sprintf("%s saved marker removed — fully restored", e.MediaName)
+}
+
 // =============================================================================
 // Poster Overlay Events
 // =============================================================================

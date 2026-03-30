@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { HourglassIcon, XCircleIcon, CalendarClockIcon, Trash2Icon } from 'lucide-vue-next';
+import {
+  HourglassIcon,
+  XCircleIcon,
+  CalendarClockIcon,
+  Trash2Icon,
+  ShieldCheckIcon,
+} from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 import type { SunsetQueueItem } from '~/types/api';
 
@@ -90,8 +96,9 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
           :media-type="item.mediaType"
           :score="item.score"
           :size-bytes="item.sizeBytes"
-          :sunset-days-remaining="item.daysRemaining"
+          :sunset-days-remaining="item.status !== 'saved' ? item.daysRemaining : undefined"
           :animation-delay="idx * 30"
+          :queue-status="item.status === 'saved' ? 'approved' : undefined"
           @click="showDetail(item)"
         />
       </div>
@@ -100,11 +107,21 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
       <div v-else class="space-y-1.5">
         <div v-for="(item, idx) in sunsetItems" :key="item.id" v-motion v-bind="listItem(idx * 30)">
           <div
-            class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+            :class="[
+              'flex items-center gap-3 rounded-lg border px-3 py-2',
+              item.status === 'saved'
+                ? 'border-emerald-500/30 bg-emerald-500/5'
+                : 'border-border bg-muted/30',
+            ]"
           >
             <!-- Score (clickable) -->
             <span
-              class="text-xs font-mono tabular-nums font-semibold text-primary shrink-0 w-12 text-right cursor-pointer hover:text-primary/80"
+              :class="[
+                'text-xs font-mono tabular-nums font-semibold shrink-0 w-12 text-right cursor-pointer',
+                item.status === 'saved'
+                  ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-500'
+                  : 'text-primary hover:text-primary/80',
+              ]"
               @click="showDetail(item)"
             >
               {{ item.score.toFixed(2) }}
@@ -113,7 +130,17 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
             <!-- Title + metadata (clickable) -->
             <div class="flex-1 min-w-0 cursor-pointer" @click="showDetail(item)">
               <span class="text-sm font-medium truncate block">{{ item.mediaName }}</span>
-              <span class="text-xs text-muted-foreground">
+              <span
+                v-if="item.status === 'saved'"
+                class="text-xs text-emerald-600 dark:text-emerald-400"
+              >
+                <ShieldCheckIcon class="inline h-3 w-3 mr-0.5 -mt-px" />
+                Saved by popular demand
+                <span v-if="item.savedReason" class="ml-1 text-muted-foreground">
+                  · {{ item.savedReason }}
+                </span>
+              </span>
+              <span v-else class="text-xs text-muted-foreground">
                 {{ item.mediaType }} · {{ formatBytes(item.sizeBytes) }}
                 <span class="ml-1 text-orange-500 dark:text-orange-400">
                   · {{ formatDaysRemaining(item.daysRemaining) }}
@@ -121,8 +148,16 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
               </span>
             </div>
 
-            <!-- Actions -->
-            <div class="flex items-center gap-1 shrink-0">
+            <!-- Saved badge (for saved items) -->
+            <UiBadge
+              v-if="item.status === 'saved'"
+              class="shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+            >
+              Saved
+            </UiBadge>
+
+            <!-- Actions (only for pending items) -->
+            <div v-if="item.status !== 'saved'" class="flex items-center gap-1 shrink-0">
               <!-- Reschedule dropdown -->
               <UiDropdownMenu>
                 <UiDropdownMenuTrigger as-child>
@@ -161,6 +196,19 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
                 <span class="text-xs">{{ t('sunset.cancel') }}</span>
               </UiButton>
             </div>
+            <!-- Cancel button for saved items (still allows removal) -->
+            <UiButton
+              v-if="item.status === 'saved'"
+              variant="ghost"
+              size="sm"
+              class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground shrink-0"
+              :aria-label="t('sunset.cancel')"
+              :title="t('sunset.cancel')"
+              @click="cancelItem(item.id)"
+            >
+              <XCircleIcon class="h-3.5 w-3.5 mr-1" />
+              <span class="text-xs">{{ t('sunset.cancel') }}</span>
+            </UiButton>
           </div>
         </div>
       </div>
@@ -176,7 +224,11 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
     :score="selectedItem.score"
     :score-details="selectedItem.scoreDetails ?? '[]'"
     :size-bytes="selectedItem.sizeBytes"
-    :action="formatDaysRemaining(selectedItem.daysRemaining)"
+    :action="
+      selectedItem.status === 'saved'
+        ? 'Saved by popular demand'
+        : formatDaysRemaining(selectedItem.daysRemaining)
+    "
     :created-at="selectedItem.createdAt"
     @close="selectedItem = null"
   />

@@ -9,22 +9,29 @@ Capacitarr is a single-container application that bundles a Go backend, a Nuxt 4
 The Docker container runs a Go backend that serves the embedded Nuxt frontend. Communication flows through REST API calls and real-time Server-Sent Events.
 
 ```mermaid
-flowchart TD
+flowchart TB
     FRONTEND["Nuxt 4 Frontend<br/>Vue 3 + Tailwind CSS 4 + shadcn-vue"]
-    BACKEND["Go Backend<br/>Echo + GORM + Service Layer"]
+
+    subgraph GO_BACKEND["Go Backend"]
+        direction LR
+        BACKEND["Echo + GORM<br/>Service Layer"]
+        ENGINE["Scoring Engine<br/>Weighted factors + protection rules"]
+        POLLER["Engine Orchestrator<br/>Scheduled disk monitoring"]
+        EVENT_BUS["Event Bus<br/>Typed pub/sub fan-out"]
+        SSE["SSE Broadcaster<br/>Real-time event stream"]
+
+        BACKEND --> ENGINE
+        BACKEND --> POLLER
+        BACKEND -.->|"publish"| EVENT_BUS
+        EVENT_BUS -.->|"subscribe"| SSE
+    end
+
     DB["SQLite Database<br/>/config/capacitarr.db"]
-    ENGINE["Scoring Engine<br/>Weighted factors + protection rules"]
-    POLLER["Engine Orchestrator<br/>Scheduled disk monitoring"]
-    EVENT_BUS["Event Bus<br/>Typed pub/sub fan-out"]
-    SSE["SSE Broadcaster<br/>Real-time event stream"]
 
     FRONTEND -->|"REST API"| BACKEND
     BACKEND --> DB
-    BACKEND --> ENGINE
-    BACKEND --> POLLER
-    BACKEND -.->|"publish"| EVENT_BUS
-    EVENT_BUS -.-> SSE
     SSE -.->|"Server-Sent Events"| FRONTEND
+
 ```
 
 ### External Integrations
@@ -33,10 +40,14 @@ The engine orchestrator fetches data from external services, and the scoring eng
 
 ```mermaid
 flowchart LR
-    POLLER["Engine Orchestrator"]
-    ENGINE["Scoring Engine"]
+    subgraph CAPACITARR["Capacitarr"]
+        direction LR
+        POLLER["Engine Orchestrator"]
+        ENGINE["Scoring Engine"]
+    end
 
     subgraph ARR_APPS["*arr Apps"]
+        direction LR
         SONARR["Sonarr"]
         RADARR["Radarr"]
         LIDARR["Lidarr"]
@@ -44,12 +55,14 @@ flowchart LR
     end
 
     subgraph MEDIA_SERVERS["Media Servers"]
+        direction LR
         PLEX["Plex"]
         JELLYFIN["Jellyfin"]
         EMBY["Emby"]
     end
 
     subgraph ENRICHMENT["Enrichment"]
+        direction LR
         TAUTULLI["Tautulli"]
         JELLYSTAT["Jellystat"]
         SEERR["Seerr"]
@@ -85,17 +98,21 @@ flowchart TD
     SERVICES["Service Layer<br/>Business logic + validation"]
     DB["*gorm.DB<br/>Injected, not global"]
     BUS["Event Bus<br/>Typed pub/sub"]
-    ACTIVITY["ActivityPersister<br/>activity_events table"]
-    NOTIF["NotificationDispatcher<br/>Discord / Apprise"]
-    SSE["SSE Broadcaster<br/>Browser tabs"]
 
-    ROUTES --> SERVICES
-    SERVICES --> DB
+    subgraph SUBSCRIBERS["Subscribers"]
+        ACTIVITY["ActivityPersister<br/>activity_events table"]
+        NOTIF["NotificationDispatcher<br/>Discord / Apprise"]
+        SSE["SSE Broadcaster<br/>Browser tabs"]
+    end
+
+    ROUTES -->|"call"| SERVICES
+    SERVICES -->|"query / persist"| DB
     SERVICES -.->|"publish"| BUS
-    BUS -.-> ACTIVITY
-    BUS -.-> NOTIF
-    BUS -.-> SSE
-    ACTIVITY --> DB
+    BUS -.->|"subscribe"| ACTIVITY
+    BUS -.->|"subscribe"| NOTIF
+    BUS -.->|"subscribe"| SSE
+    ACTIVITY -.->|"persist"| DB
+
 ```
 
 #### Service Registry
@@ -206,17 +223,34 @@ Media items pass through a composable enrichment pipeline after fetching:
 ```mermaid
 flowchart LR
     FETCH["Fetch<br/>MediaSource.GetMediaItems()"]
-    BULK["BulkWatchEnricher<br/>Play counts + last played"]
-    TAUTULLI_E["TautulliEnricher<br/>Per-user watch data"]
-    JELLYSTAT_E["JellystatEnricher<br/>Per-user watch data"]
-    TRACEARR_E["TracearrEnricher<br/>Unified watch data"]
-    REQUEST["RequestEnricher<br/>Seerr request status"]
-    WATCHLIST["WatchlistEnricher<br/>Watchlist/favorites"]
-    COLLECTION["CollectionEnricher<br/>Collection memberships"]
-    LABEL["LabelEnricher<br/>Media server labels"]
-    XREF["CrossReferenceEnricher<br/>Requestor watched?"]
 
-    FETCH --> BULK --> TAUTULLI_E --> JELLYSTAT_E --> TRACEARR_E --> REQUEST --> WATCHLIST --> COLLECTION --> LABEL --> XREF
+    subgraph WATCH_DATA["Watch Data Enrichers"]
+        direction LR
+        BULK["BulkWatchEnricher<br/>Play counts + last played"]
+        TAUTULLI_E["TautulliEnricher<br/>Per-user watch data"]
+        JELLYSTAT_E["JellystatEnricher<br/>Per-user watch data"]
+        TRACEARR_E["TracearrEnricher<br/>Unified watch data"]
+
+        BULK --> TAUTULLI_E --> JELLYSTAT_E --> TRACEARR_E
+    end
+
+    subgraph METADATA["Metadata Enrichers"]
+        direction LR
+        REQUEST["RequestEnricher<br/>Seerr request status"]
+        WATCHLIST["WatchlistEnricher<br/>Watchlist/favorites"]
+        COLLECTION["CollectionEnricher<br/>Collection memberships"]
+        LABEL["LabelEnricher<br/>Media server labels"]
+
+        REQUEST --> WATCHLIST --> COLLECTION --> LABEL
+    end
+
+    subgraph XREF_GROUP["Cross-Reference"]
+        XREF["CrossReferenceEnricher<br/>Requestor watched?"]
+    end
+
+    FETCH --> BULK
+    TRACEARR_E --> REQUEST
+    LABEL --> XREF
 ```
 
 Each enricher implements the `Enricher` interface (`Name()`, `Priority()`, `Enrich(items)`) and is auto-discovered from the registry's capabilities. The pipeline currently includes 9 enrichers.
@@ -272,14 +306,14 @@ The `NotificationDispatchService` uses a **two-gate flush pattern** to ensure cy
 
 ```mermaid
 flowchart LR
-    ENGINE_COMPLETE["EngineCompleteEvent<br/>Gate 1: evaluation stats"]
-    DELETION_BATCH["DeletionBatchCompleteEvent<br/>Gate 2: deletion stats"]
+    ENGINE_COMPLETE["EngineCompleteEvent<br/>Gate 1"]
+    DELETION_BATCH["DeletionBatchCompleteEvent<br/>Gate 2"]
     FLUSH["Flush<br/>Build digest + dispatch"]
     CHANNELS["Discord / Apprise"]
 
-    ENGINE_COMPLETE -.->|"waits"| FLUSH
-    DELETION_BATCH -.->|"waits"| FLUSH
-    FLUSH --> CHANNELS
+    ENGINE_COMPLETE -.->|"evaluation stats"| FLUSH
+    DELETION_BATCH -.->|"deletion stats"| FLUSH
+    FLUSH -->|"deliver"| CHANNELS
 ```
 
 **Cycle digests** are batched summaries sent once per engine run. They include evaluated count, flagged count, deleted count, freed bytes, duration, and disk usage. The digest is only dispatched after both gates fire, ensuring deletion results are included.
@@ -288,7 +322,7 @@ flowchart LR
 
 See [notifications.md](../guides/notifications.md) for the full user-facing guide.
 
-### Event Types (65 total)
+### Event Types (67 total)
 
 | Category | Events |
 |----------|--------|
@@ -300,7 +334,7 @@ See [notifications.md](../guides/notifications.md) for the full user-facing guid
 | **Deletion** | `deletion_success`, `deletion_failed`, `deletion_dry_run`, `deletion_batch_complete`, `deletion_progress`, `deletion_queued`, `deletion_cancelled`, `deletion_grace_period` |
 | **Rules** | `rule_created`, `rule_updated`, `rule_deleted` |
 | **Notifications** | `notification_channel_added`, `notification_channel_updated`, `notification_channel_removed`, `notification_sent`, `notification_delivery_failed` |
-| **Sunset** | `sunset_created`, `sunset_cancelled`, `sunset_expired`, `sunset_rescheduled`, `sunset_escalated`, `sunset_misconfigured`, `sunset_label_applied`, `sunset_label_removed`, `sunset_label_failed` |
+| **Sunset** | `sunset_created`, `sunset_cancelled`, `sunset_expired`, `sunset_rescheduled`, `sunset_escalated`, `sunset_misconfigured`, `sunset_saved`, `sunset_saved_cleaned`, `sunset_label_applied`, `sunset_label_removed`, `sunset_label_failed` |
 | **Poster Overlay** | `poster_overlay_applied`, `poster_overlay_restored`, `poster_overlay_failed` |
 | **Preview** | `preview_updated`, `preview_invalidated`, `analytics_updated` |
 | **Data** | `data_reset` |
@@ -377,7 +411,7 @@ Transient dashboard feed with 7-day retention:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Primary key |
-| `event_type` | TEXT | One of 65 event types |
+| `event_type` | TEXT | One of 67 event types |
 | `message` | TEXT | Human-readable message |
 | `metadata` | TEXT | Optional JSON payload |
 | `created_at` | DATETIME | Row creation |

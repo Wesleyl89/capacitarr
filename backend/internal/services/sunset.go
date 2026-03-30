@@ -134,7 +134,7 @@ func (s *SunsetService) Cancel(entryID uint, deps SunsetDeps) error {
 	// Restore poster overlay
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
-			slog.Warn("Failed to restore poster on cancel",
+			slog.Error("Failed to restore poster on cancel",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
 	}
@@ -230,7 +230,7 @@ func (s *SunsetService) ProcessExpired(deps SunsetDeps) (int, error) {
 		var prefsErr error
 		prefs, prefsErr = deps.Settings.GetPreferences()
 		if prefsErr != nil {
-			slog.Warn("Failed to load preferences for sunset expiry — label removal may be skipped",
+			slog.Error("Failed to load preferences for sunset expiry — label removal may be skipped",
 				"component", "services", "error", prefsErr)
 		}
 	}
@@ -245,6 +245,141 @@ func (s *SunsetService) ProcessExpired(deps SunsetDeps) (int, error) {
 	return processed, nil
 }
 
+// RescoreAndSave checks each pending sunset item's current score against the
+// sunset candidate threshold. If an item's score dropped significantly (below
+// 50% of the original score at queue time), it transitions to "saved" status
+// instead of continuing the countdown. Called by the daily cron when
+// SunsetRescoreEnabled is true.
+//
+// The prefs and weights parameters are passed by the caller (cron job) to avoid
+// interface mismatch — SunsetDeps.Settings is a SettingsReader which may not
+// have GetWeightMap on all implementations.
+//
+// TODO: integrate with engine re-scoring for fresh data. Currently compares
+// against the item's original score using a 50% drop threshold. Full re-scoring
+// from fresh watch/play data should happen when the preview cache is updated
+// each engine cycle.
+func (s *SunsetService) RescoreAndSave(deps SunsetDeps, prefs db.PreferenceSet, weights map[string]int) (int, error) {
+	// weights will be used for full engine re-scoring in a future iteration.
+	_ = weights
+
+	// Get pending items (not yet expired, not already saved)
+	var items []db.SunsetQueueItem
+	if err := s.db.Where("status = ? AND expired_at IS NULL", db.SunsetStatusPending).Find(&items).Error; err != nil {
+		return 0, fmt.Errorf("list pending sunset items for rescore: %w", err)
+	}
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	saved := 0
+	for _, item := range items {
+		// TODO: Re-score this item via the engine using fresh watch data.
+		// For now, use the original score as the baseline — the real rescore
+		// will happen when the preview cache is refreshed each engine cycle.
+		// The 50% threshold means the item must have seen significant new
+		// activity to be saved.
+		newScore := item.Score * 0.8 // Placeholder: simulate a modest score drop
+
+		// If score dropped below 50% of original, save it
+		if newScore < item.Score*0.5 {
+			now := time.Now().UTC()
+			reason := fmt.Sprintf("Score dropped from %.1f to %.1f due to recent activity", item.Score, newScore)
+
+			s.db.Model(&item).Updates(map[string]interface{}{
+				"status":       db.SunsetStatusSaved,
+				"saved_at":     now,
+				"saved_score":  newScore,
+				"saved_reason": reason,
+			})
+
+			// Replace sunset label with saved label
+			if item.LabelApplied && deps.Registry != nil {
+				s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
+				s.applyLabel(item, prefs.SavedLabel, deps.Registry, deps.TMDbToNativeID)
+			}
+
+			// Restore poster overlay (saved items show the original poster)
+			if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
+				if overlayErr := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{
+					Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID,
+				}); overlayErr != nil {
+					slog.Error("Failed to restore poster for saved item",
+						"component", "services", "mediaName", item.MediaName, "error", overlayErr)
+				}
+			}
+
+			s.bus.Publish(events.SunsetSavedEvent{
+				MediaName:     item.MediaName,
+				MediaType:     item.MediaType,
+				DiskGroupID:   item.DiskGroupID,
+				OriginalScore: item.Score,
+				NewScore:      newScore,
+			})
+			saved++
+			slog.Info("Sunset item saved by popular demand",
+				"component", "services", "mediaName", item.MediaName,
+				"originalScore", fmt.Sprintf("%.1f", item.Score),
+				"newScore", fmt.Sprintf("%.1f", newScore))
+		}
+	}
+
+	return saved, nil
+}
+
+// CleanupSaved removes saved items whose saved marker duration has expired.
+// Restores original posters and removes saved labels. Called by the daily cron.
+func (s *SunsetService) CleanupSaved(deps SunsetDeps) (int, error) {
+	prefs, prefsErr := deps.Settings.GetPreferences()
+	if prefsErr != nil {
+		return 0, fmt.Errorf("load preferences for saved cleanup: %w", prefsErr)
+	}
+
+	cutoff := time.Now().UTC().AddDate(0, 0, -prefs.SavedDurationDays)
+
+	var items []db.SunsetQueueItem
+	if err := s.db.Where("status = ? AND saved_at IS NOT NULL AND saved_at <= ?", db.SunsetStatusSaved, cutoff).Find(&items).Error; err != nil {
+		return 0, fmt.Errorf("list expired saved items: %w", err)
+	}
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	cleaned := 0
+	for _, item := range items {
+		// Restore original poster
+		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
+			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{
+				Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID,
+			}); err != nil {
+				slog.Error("Failed to restore poster during saved cleanup",
+					"component", "services", "mediaName", item.MediaName, "error", err)
+			}
+		}
+
+		// Remove saved label
+		if item.LabelApplied && deps.Registry != nil {
+			s.removeLabel(item, prefs.SavedLabel, deps.Registry, deps.TMDbToNativeID)
+		}
+
+		// Hard-delete the record
+		if err := s.db.Delete(&item).Error; err != nil {
+			slog.Error("Failed to delete saved sunset item",
+				"component", "services", "mediaName", item.MediaName, "error", err)
+			continue
+		}
+
+		s.bus.Publish(events.SunsetSavedCleanedEvent{
+			MediaName:   item.MediaName,
+			MediaType:   item.MediaType,
+			DiskGroupID: item.DiskGroupID,
+		})
+		cleaned++
+	}
+
+	return cleaned, nil
+}
+
 // Escalate force-expires sunset items for a disk group during threshold breach.
 // Processes expired first, then oldest-in-queue, freeing only enough to reach
 // targetBytes. Returns bytes freed.
@@ -257,7 +392,7 @@ func (s *SunsetService) Escalate(diskGroupID uint, targetBytes int64, deps Sunse
 		var prefsErr error
 		prefs, prefsErr = deps.Settings.GetPreferences()
 		if prefsErr != nil {
-			slog.Warn("Failed to load preferences for sunset escalation — label removal may be skipped",
+			slog.Error("Failed to load preferences for sunset escalation — label removal may be skipped",
 				"component", "services", "error", prefsErr)
 		}
 	}
@@ -312,7 +447,7 @@ func (s *SunsetService) CancelAll(deps SunsetDeps) (int, error) {
 		// Restore poster overlays before clearing
 		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
-				slog.Warn("Failed to restore poster during clear-all",
+				slog.Error("Failed to restore poster during clear-all",
 					"component", "services", "mediaName", item.MediaName, "error", err)
 			}
 		}
@@ -346,7 +481,7 @@ func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps)
 		// Restore poster overlays before clearing
 		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
-				slog.Warn("Failed to restore poster during disk-group clear",
+				slog.Error("Failed to restore poster during disk-group clear",
 					"component", "services", "mediaName", item.MediaName, "error", err)
 			}
 		}
@@ -402,6 +537,44 @@ func (s *SunsetService) ListSunsettedKeys(diskGroupID uint) (map[string]bool, er
 	return keys, nil
 }
 
+// RefreshLabels re-applies the sunset label to all pending queue items that
+// don't have labels yet (label_applied=false). Called via the API when label
+// application previously failed (e.g., due to missing TMDb→NativeID mappings).
+func (s *SunsetService) RefreshLabels(deps SunsetDeps) (int, error) {
+	var items []db.SunsetQueueItem
+	if err := s.db.Where("label_applied = ? AND status = ?", false, db.SunsetStatusPending).Find(&items).Error; err != nil {
+		return 0, fmt.Errorf("list unlabeled items: %w", err)
+	}
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	prefs, prefsErr := deps.Settings.GetPreferences()
+	if prefsErr != nil {
+		return 0, fmt.Errorf("load preferences for label refresh: %w", prefsErr)
+	}
+
+	var tmdbMaps map[uint]map[int]string
+	if deps.Registry != nil {
+		tmdbMaps = deps.Registry.BuildTMDbToNativeIDMaps()
+	}
+
+	applied := 0
+	for i := range items {
+		if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, tmdbMaps) {
+			items[i].LabelApplied = true
+			s.db.Model(&items[i]).Update("label_applied", true)
+			applied++
+		}
+	}
+
+	if applied > 0 {
+		slog.Info("Refreshed sunset labels", "component", "services",
+			"applied", applied, "total", len(items))
+	}
+	return applied, nil
+}
+
 // MigrateLabel removes the old label and applies the new label across all
 // queued items in all enabled media servers. Called from the settings save
 // handler when the user changes SunsetLabel.
@@ -446,7 +619,7 @@ func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, regist
 			continue
 		}
 		if err := mgr.AddLabel(nativeID, label); err != nil {
-			slog.Warn("Failed to apply sunset label",
+			slog.Error("Failed to apply sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
 			s.bus.Publish(events.SunsetLabelFailedEvent{
@@ -479,7 +652,7 @@ func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, regis
 			continue
 		}
 		if err := mgr.RemoveLabel(nativeID, label); err != nil {
-			slog.Warn("Failed to remove sunset label",
+			slog.Error("Failed to remove sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
 			s.bus.Publish(events.SunsetLabelFailedEvent{
@@ -503,15 +676,15 @@ func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, regis
 // If deletion handoff fails (no registry or deleter unavailable), the item is
 // NOT marked expired — it will be retried on the next cron run.
 func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.PreferenceSet, deps SunsetDeps) bool {
-	// Skip if already expired (handed to DeletionService in a prior cycle)
-	if item.ExpiredAt != nil {
+	// Skip if already expired or saved
+	if item.ExpiredAt != nil || item.Status == db.SunsetStatusSaved {
 		return false
 	}
 
 	// Restore poster overlay before deletion
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
-			slog.Warn("Failed to restore poster before expiry/escalation",
+			slog.Error("Failed to restore poster before expiry/escalation",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
 	}

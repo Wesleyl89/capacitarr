@@ -74,7 +74,7 @@ func MigrateFrom(sourcePath string, destDB *gorm.DB) (*Result, error) {
 	sourceSQLDB, _ := sourceDB.DB()
 	defer func() {
 		if err := sourceSQLDB.Close(); err != nil {
-			slog.Warn("Failed to close source database", "error", err)
+			slog.Error("Failed to close source database", "error", err)
 		}
 	}()
 
@@ -95,20 +95,20 @@ func MigrateFrom(sourcePath string, destDB *gorm.DB) (*Result, error) {
 	// Auth is NOT imported here; it was already auto-imported at startup.
 	idMap, count, err := importIntegrations(ctx, sourceSQLDB, destDB)
 	if err != nil {
-		slog.Warn("Failed to import integrations", "component", "migration", "error", err)
+		slog.Error("Failed to import integrations", "component", "migration", "error", err)
 	}
 	result.IntegrationsImported = count
 
 	// Import disk groups (thresholds, targets, overrides)
 	dgCount, err := importDiskGroups(ctx, sourceSQLDB, destDB)
 	if err != nil {
-		slog.Warn("Failed to import disk groups", "component", "migration", "error", err)
+		slog.Error("Failed to import disk groups", "component", "migration", "error", err)
 	}
 	result.DiskGroupsImported = dgCount
 
 	// Import preferences (default_disk_group_mode forced to dry-run for safety)
 	if err := importPreferences(ctx, sourceSQLDB, destDB); err != nil {
-		slog.Warn("Failed to import preferences", "component", "migration", "error", err)
+		slog.Error("Failed to import preferences", "component", "migration", "error", err)
 	} else {
 		result.PreferencesImported = true
 	}
@@ -116,14 +116,14 @@ func MigrateFrom(sourcePath string, destDB *gorm.DB) (*Result, error) {
 	// Import rules (re-linked to new integration IDs via old→new mapping)
 	rulesCount, err := importRules(ctx, sourceSQLDB, destDB, idMap)
 	if err != nil {
-		slog.Warn("Failed to import rules", "component", "migration", "error", err)
+		slog.Error("Failed to import rules", "component", "migration", "error", err)
 	}
 	result.RulesImported = rulesCount
 
 	// Import notifications (with OnIntegrationStatus defaulting to true)
 	notifCount, err := importNotifications(ctx, sourceSQLDB, destDB)
 	if err != nil {
-		slog.Warn("Failed to import notifications", "component", "migration", "error", err)
+		slog.Error("Failed to import notifications", "component", "migration", "error", err)
 	}
 	result.NotificationsImported = notifCount
 
@@ -149,7 +149,7 @@ func importIntegrations(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (map[
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Warn("Failed to close integration rows", "component", "migration", "error", closeErr)
+			slog.Error("Failed to close integration rows", "component", "migration", "error", closeErr)
 		}
 	}()
 
@@ -164,7 +164,7 @@ func importIntegrations(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (map[
 			enabled bool
 		)
 		if err := rows.Scan(&oldID, &iType, &name, &url, &apiKey, &enabled); err != nil {
-			slog.Warn("Failed to scan integration row", "component", "migration", "error", err)
+			slog.Error("Failed to scan integration row", "component", "migration", "error", err)
 			continue
 		}
 
@@ -176,7 +176,7 @@ func importIntegrations(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (map[
 			Enabled: enabled,
 		}
 		if err := dest.Create(&target).Error; err != nil {
-			slog.Warn("Failed to import integration", "component", "migration",
+			slog.Error("Failed to import integration", "component", "migration",
 				"name", name, "type", iType, "error", err)
 			continue
 		}
@@ -215,7 +215,7 @@ func importDiskGroups(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int, e
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Warn("Failed to close disk group rows", "component", "migration", "error", closeErr)
+			slog.Error("Failed to close disk group rows", "component", "migration", "error", closeErr)
 		}
 	}()
 
@@ -227,7 +227,7 @@ func importDiskGroups(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int, e
 			targetPct    float64
 		)
 		if err := rows.Scan(&mountPath, &thresholdPct, &targetPct); err != nil {
-			slog.Warn("Failed to scan disk group row", "component", "migration", "error", err)
+			slog.Error("Failed to scan disk group row", "component", "migration", "error", err)
 			continue
 		}
 
@@ -249,7 +249,7 @@ func importDiskGroups(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int, e
 			TotalBytesOverride: totalOverride,
 		}
 		if err := dest.Create(&group).Error; err != nil {
-			slog.Warn("Failed to import disk group", "component", "migration",
+			slog.Error("Failed to import disk group", "component", "migration",
 				"mount", mountPath, "error", err)
 			continue
 		}
@@ -338,7 +338,7 @@ func importPreferences(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) error 
 		if err := dest.Model(&db.ScoringFactorWeight{}).
 			Where("factor_key = ?", factorKey).
 			Update("weight", weight).Error; err != nil {
-			slog.Warn("Failed to import scoring factor weight",
+			slog.Error("Failed to import scoring factor weight",
 				"component", "migration", "factor_key", factorKey, "error", err)
 		}
 	}
@@ -360,7 +360,7 @@ func importRules(ctx context.Context, srcDB *sql.DB, dest *gorm.DB, idMap map[ui
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Warn("Failed to close rule rows", "component", "migration", "error", closeErr)
+			slog.Error("Failed to close rule rows", "component", "migration", "error", closeErr)
 		}
 	}()
 
@@ -376,7 +376,7 @@ func importRules(ctx context.Context, srcDB *sql.DB, dest *gorm.DB, idMap map[ui
 			integrationID sql.NullInt64
 		)
 		if err := rows.Scan(&field, &operator, &value, &effect, &enabled, &sortOrder, &integrationID); err != nil {
-			slog.Warn("Failed to scan rule row", "component", "migration", "error", err)
+			slog.Error("Failed to scan rule row", "component", "migration", "error", err)
 			continue
 		}
 
@@ -401,7 +401,7 @@ func importRules(ctx context.Context, srcDB *sql.DB, dest *gorm.DB, idMap map[ui
 		}
 
 		if err := dest.Create(&target).Error; err != nil {
-			slog.Warn("Failed to import rule", "component", "migration",
+			slog.Error("Failed to import rule", "component", "migration",
 				"field", field, "error", err)
 			continue
 		}
@@ -425,7 +425,7 @@ func importNotifications(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Warn("Failed to close notification rows", "component", "migration", "error", closeErr)
+			slog.Error("Failed to close notification rows", "component", "migration", "error", closeErr)
 		}
 	}()
 
@@ -448,7 +448,7 @@ func importNotifications(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int
 		if err := rows.Scan(&nType, &name, &webhookURL, &appriseTags, &enabled,
 			&onCycleDigest, &onError, &onModeChanged, &onServerStarted,
 			&onThresholdBreach, &onUpdateAvailable, &onApprovalActivity); err != nil {
-			slog.Warn("Failed to scan notification row", "component", "migration", "error", err)
+			slog.Error("Failed to scan notification row", "component", "migration", "error", err)
 			continue
 		}
 
@@ -468,7 +468,7 @@ func importNotifications(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int
 			OnIntegrationStatus: true, // New in 2.0 — default to true to match freshly-created channel behavior
 		}
 		if err := dest.Create(&target).Error; err != nil {
-			slog.Warn("Failed to import notification", "component", "migration",
+			slog.Error("Failed to import notification", "component", "migration",
 				"name", name, "error", err)
 			continue
 		}
@@ -531,7 +531,7 @@ func ImportAuthOnly(sourcePath string, destDB *gorm.DB) error {
 	sourceSQLDB, _ := sourceDB.DB()
 	defer func() {
 		if closeErr := sourceSQLDB.Close(); closeErr != nil {
-			slog.Warn("Failed to close source database backup", "error", closeErr)
+			slog.Error("Failed to close source database backup", "error", closeErr)
 		}
 	}()
 
