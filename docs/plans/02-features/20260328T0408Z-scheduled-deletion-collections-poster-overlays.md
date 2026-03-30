@@ -28,7 +28,7 @@ The term **"sunset"** is used internally to describe the countdown/deferral life
 | **Poster overlay approach** | Server-side image composition | Full control over visual output; works with all three media servers; Go `image` stdlib is mature |
 | **Media server visibility** | Labels/tags (not managed collections) | Simpler implementation (2-method `LabelManager` vs 5-method `CollectionManager`); users control how labels are displayed; no cross-item state to manage in the media server; less opinionated |
 | **Sunset label** | Configurable, default `"capacitarr-sunset"` | Namespaced (won't collide with user labels), lowercase-kebab (consistent across Plex/Jellyfin/Emby), self-descriptive. Static label set once on entry, removed on cancel/expire — no daily churn. |
-| **Threshold ordering** | `sunsetPct < targetPct < thresholdPct` | Escalation only frees down to `targetPct` (above sunset threshold), preserving the sunset queue. Items promised "leaving in 20 days" keep their promise unless things get catastrophic. |
+| **Threshold ordering** | `sunsetPct < targetPct < criticalPct` | Escalation only frees down to `targetPct` (above sunset threshold), preserving the sunset queue. Items promised "leaving in 20 days" keep their promise unless things get catastrophic. |
 | **`sunsetPct` default** | `NULL` (not 0) | A default of 0 is dangerous — every engine cycle would see `usedPct >= 0%` and start sunsetting immediately. NULL means sunset mode won't activate until the user explicitly configures the threshold. Engine publishes a warning event if mode is `sunset` but `sunsetPct` is NULL. |
 | **TEXT for mode/status columns** | TEXT with Go-level validation (not SQL ENUM/CHECK) | SQLite has no native ENUM type. All constrained string fields in the codebase use the same pattern. CHECK constraints could be added project-wide as a separate effort. |
 | **Global `ExecutionMode`** | Renamed to `DefaultDiskGroupMode` on `PreferenceSet`; used only as default for new disk group creation | Existing global mode migrates to each disk group at upgrade time |
@@ -36,35 +36,35 @@ The term **"sunset"** is used internally to describe the countdown/deferral life
 
 ---
 
-## The Threshold Problem and Solution
+## The Critical Threshold Problem and Solution
 
 ### The Core Tension
 
-Capacitarr's current model is **reactive** — disk hits threshold, engine fires, items are deleted to reach target. A 30-day sunset countdown directly contradicts this: the disk stays full for 30 days, *arr apps stop downloading, and users lose the capacity management Capacitarr exists to provide.
+Capacitarr's current model is **reactive** — disk hits critical, engine fires, items are deleted to reach target. A 30-day sunset countdown directly contradicts this: the disk stays full for 30 days, *arr apps stop downloading, and users lose the capacity management Capacitarr exists to provide.
 
-### Solution: Sunset as a Pre-Threshold Mode
+### Solution: Sunset as a Pre-Critical Mode
 
-Sunset mode operates at a **lower threshold** (`sunsetPct`) than the deletion threshold (`thresholdPct`), giving items a warning period *before* space is critically needed. The deletion threshold is preserved as an escalation safety net.
+Sunset mode operates at a **lower threshold** (`sunsetPct`) than the critical threshold (`criticalPct`, stored as `thresholdPct` in the DB), giving items a warning period *before* space is critically needed. The critical threshold is preserved as an escalation safety net.
 
-The threshold ordering for sunset mode is `sunsetPct < targetPct < thresholdPct`:
+The threshold ordering for sunset mode is `sunsetPct < targetPct < criticalPct`:
 
 ```
 Disk usage (sunset-mode disk group):
 |---------|-----------|-----------|---------|
 0%       75%        90%         95%       100%
           ^           ^           ^
-       Sunset      Target      Threshold
+       Sunset      Target      Critical
        (NEW)      (existing)   (existing, now escalation)
 ```
 
 - **75% (sunset threshold):** Engine evaluates, selects candidates, places them in `sunset_queue` with a 30-day countdown. A `capacitarr-sunset` label is applied to items in the media server. Poster overlays show "Leaving in 30 days." No bytes are freed yet.
 - **75–90% (sunset → target):** Normal operation. Sunset items are counting down. Daily cron processes expiries, handing them to `DeletionService`, gradually freeing space. Disk usage fluctuates in this zone.
 - **90% (target):** The "healthy" level after escalation. Not a trigger — just the ceiling that escalation frees down to.
-- **95% (threshold / escalation trigger):** If disk reaches this despite active sunsets (e.g., heavy download period), the engine escalates. Force-expires sunset items, but **only enough to get back to 90% (target)**. Sunset items below 90% are preserved — users who were told "leaving in 20 days" keep their promise.
+- **95% (critical / escalation trigger):** If disk reaches this despite active sunsets (e.g., heavy download period), the engine escalates. Force-expires sunset items, but **only enough to get back to 90% (target)**. Sunset items below 90% are preserved — users who were told "leaving in 20 days" keep their promise.
 
-### Why `sunsetPct < targetPct < thresholdPct`
+### Why `sunsetPct < targetPct < criticalPct`
 
-The earlier draft had `targetPct < sunsetPct < thresholdPct`, which meant escalation would try to free space all the way down to `targetPct` (below the sunset threshold) — wiping the entire sunset queue every time escalation fires. The corrected ordering ensures escalation is proportionate: it only clears the *excess* above `targetPct`, not the entire sunset queue.
+The earlier draft had `targetPct < sunsetPct < criticalPct`, which meant escalation would try to free space all the way down to `targetPct` (below the sunset threshold) — wiping the entire sunset queue every time escalation fires. The corrected ordering ensures escalation is proportionate: it only clears the *excess* above `targetPct`, not the entire sunset queue.
 
 ### Escalation Ladder (Sunset-Mode Groups Only)
 
@@ -72,7 +72,7 @@ When a sunset-mode disk group breaches the deletion threshold while sunset items
 
 ```mermaid
 flowchart TD
-    BREACH["Disk exceeds thresholdPct<br/>while sunset items exist"]
+    BREACH["Disk exceeds criticalPct<br/>while sunset items exist"]
     STEP1["1. Delete expired sunset items<br/>countdown already finished"]
     STEP2["2. Delete oldest sunset items<br/>longest in queue, most warning given"]
     STEP3["3. Normal immediate deletion<br/>score-based, no sunset period"]
@@ -101,12 +101,12 @@ The global `ExecutionMode` on `PreferenceSet` is replaced by a per-disk-group `M
 
 ### Mode Definitions
 
-| Mode | Behavior | Trigger Threshold | Queue / Target |
+| Mode | Behavior | Trigger | Queue / Target |
 |---|---|---|---|
-| **`dry-run`** | Log what would be deleted. No actual deletions. | `thresholdPct` | Audit log only |
-| **`approval`** | Engine selects candidates → user approves → immediate deletion | `thresholdPct` | `approval_queue` |
-| **`auto`** | Engine selects candidates → immediate deletion | `thresholdPct` | `DeletionService` directly |
-| **`sunset`** | Engine selects at `sunsetPct` → countdown → gradual deletion. `thresholdPct` is the escalation safety net. | `sunsetPct` (primary), `thresholdPct` (escalation) | `sunset_queue` (new) |
+| **`dry-run`** | Log what would be deleted. No actual deletions. | `criticalPct` | Audit log only |
+| **`approval`** | Engine selects candidates → user approves → immediate deletion | `criticalPct` | `approval_queue` |
+| **`auto`** | Engine selects candidates → immediate deletion | `criticalPct` | `DeletionService` directly |
+| **`sunset`** | Engine selects at `sunsetPct` → countdown → gradual deletion. `criticalPct` is the escalation safety net. | `sunsetPct` (primary), `criticalPct` (escalation) | `sunset_queue` (new) |
 
 Each mode is self-contained. No conditional logic, no mode-within-a-mode, no overrides.
 
@@ -118,29 +118,30 @@ flowchart TD
     CHECK_MODE{group.Mode?}
 
     subgraph DRY_RUN["dry-run"]
-        DR_THRESH{"usedPct >= thresholdPct?"}
+        DR_THRESH{"usedPct >= criticalPct?"}
         DR_LOG["Score + log candidates<br/>(audit log only)"]
         DR_SKIP["No action"]
     end
 
     subgraph APPROVAL["approval"]
-        AP_THRESH{"usedPct >= thresholdPct?"}
+        AP_THRESH{"usedPct >= criticalPct?"}
         AP_QUEUE["Score + queue to approval_queue<br/>(status=pending)"]
         AP_SKIP["No action"]
     end
 
     subgraph AUTO["auto"]
-        AU_THRESH{"usedPct >= thresholdPct?"}
+        AU_THRESH{"usedPct >= criticalPct?"}
         AU_DELETE["Score + queue to DeletionService"]
         AU_SKIP["No action"]
     end
 
     subgraph SUNSET["sunset"]
-        SU_DEL_THRESH{"usedPct >= thresholdPct?"}
-        SU_ESCALATE["Escalation ladder:<br/>expired → oldest → immediate<br/>(free to targetPct only)"]
         SU_SUN_THRESH{"usedPct >= sunsetPct?"}
         SU_QUEUE["Score + queue to sunset_queue<br/>deletion_date = now + sunsetDays<br/>+ apply label to media server"]
         SU_SKIP["No action"]
+        SU_DEL_THRESH{"usedPct >= criticalPct?"}
+        SU_ESCALATE["Escalation ladder:<br/>expired → oldest → immediate<br/>(free to targetPct only)"]
+        SU_DONE["Done"]
     end
 
     EVAL --> CHECK_MODE
@@ -156,11 +157,14 @@ flowchart TD
     AU_THRESH -->|"Yes"| AU_DELETE
     AU_THRESH -->|"No"| AU_SKIP
 
-    CHECK_MODE -->|"sunset"| SU_DEL_THRESH
-    SU_DEL_THRESH -->|"Yes"| SU_ESCALATE
-    SU_DEL_THRESH -->|"No"| SU_SUN_THRESH
+    CHECK_MODE -->|"sunset"| SU_SUN_THRESH
     SU_SUN_THRESH -->|"Yes"| SU_QUEUE
     SU_SUN_THRESH -->|"No"| SU_SKIP
+    SU_QUEUE --> SU_DEL_THRESH
+    SU_SKIP --> SU_DEL_THRESH
+    SU_DEL_THRESH -->|"Yes"| SU_ESCALATE
+    SU_DEL_THRESH -->|"No"| SU_DONE
+    SU_ESCALATE --> SU_DONE
 ```
 
 ### Schema Changes — `DiskGroup` Model
@@ -173,7 +177,7 @@ flowchart TD
 **Validation rules:**
 - `mode` must be one of `dry-run`, `approval`, `auto`, `sunset` — validated in the service layer.
 - When `mode == "sunset"` and `sunset_pct IS NULL`, the engine refuses to evaluate the group and publishes a `sunset_misconfigured` warning event. Sunset never activates with an unconfigured threshold.
-- When `mode == "sunset"` and `sunset_pct IS NOT NULL`, enforce `sunsetPct < targetPct < thresholdPct`.
+- When `mode == "sunset"` and `sunset_pct IS NOT NULL`, enforce `sunsetPct < targetPct < criticalPct`.
 - For all other modes, `sunset_pct` is ignored.
 
 ### Schema Changes — `PreferenceSet` Model
@@ -322,7 +326,7 @@ const (
 ### Settings UI
 
 - **"Disk Group Defaults" section:** Default disk group mode selector (dry-run / approval / auto / sunset). Applied when new disk groups are auto-discovered.
-- **Each disk group card:** Mode dropdown. When `sunset` is selected, sunset-specific fields appear (`sunsetPct` slider with validation against `targetPct` and `thresholdPct`).
+- **Each disk group card:** Mode dropdown. When `sunset` is selected, sunset-specific fields appear (`sunsetPct` slider with validation against `targetPct` and `criticalPct`).
 - The global "Running in X mode" banner is replaced by per-group mode indicators on each disk group card.
 - A summary line: e.g., "2 groups in approval, 1 in sunset, 1 in dry-run"
 
@@ -349,7 +353,7 @@ flowchart TD
     POLLER -->|"mode=approval"| APPROVAL
     POLLER -->|"mode=auto"| DELETION
     POLLER -->|"mode=sunset<br/>sunsetPct breached"| SUNSET_SVC
-    POLLER -->|"mode=sunset<br/>thresholdPct breached"| SUNSET_SVC
+    POLLER -->|"mode=sunset<br/>criticalPct breached"| SUNSET_SVC
     SUNSET_SVC -->|"Apply/remove labels"| MEDIA_SERVERS["Media Servers<br/>(Plex, Jellyfin, Emby)"]
     SUNSET_SVC -->|"Items in countdown"| POSTER_SVC
     SUNSET_SVC -->|"Countdown expired /<br/>Escalation"| DELETION
@@ -495,18 +499,20 @@ type SunsetDeps struct {
 ```go
 switch group.Mode {
 case db.ModeSunset:
-    // 1. Check thresholdPct first → escalate (free to targetPct only)
-    // 2. Else check sunsetPct → score + queue to sunset_queue + apply labels
+    // 1. Always queue at sunsetPct → score + queue to sunset_queue + apply labels
+    // 2. Then escalate at criticalPct → force-expire from queue to free space
+    // Both steps run independently each cycle.
 case db.ModeAuto:    // unchanged
 case db.ModeApproval: // unchanged
 default:              // dry-run, unchanged
 }
 ```
 
-For sunset mode specifically:
-1. Checks `usedPct >= thresholdPct` → if yes, calls `SunsetService.Escalate()` (frees down to `targetPct` only, preserving the sunset queue)
-2. Else checks `usedPct >= sunsetPct` → if yes, scores items, calls `SunsetService.BulkQueueSunset()`
-3. Skips items already in the sunset queue via `SunsetService.ListSunsettedKeys()` (same pattern as `ApprovalService.ListSnoozedKeys()`)
+For sunset mode specifically (both steps run independently each cycle):
+1. Checks `usedPct >= sunsetPct` → if yes, scores items, calls `SunsetService.BulkQueueSunset()`. Skips items already in the sunset queue via `SunsetService.ListSunsettedKeys()`.
+2. Checks `usedPct >= criticalPct` → if yes, calls `SunsetService.Escalate()` (frees down to `targetPct` only, preserving the rest of the sunset queue). This processes items that were just queued in step 1 or already existed.
+
+This design ensures items are always marked for sunset once past the sunset threshold, even when the disk is simultaneously past critical. Escalation then processes from the queue rather than bypassing it.
 
 ### Approval Queue — Untouched
 
@@ -662,7 +668,7 @@ On cancel, expiry, or escalation: restore original from cache → upload → del
 | `sunset_cancelled` | Sunset item cancelled (row removed) |
 | `sunset_expired` | Countdown expired, item handed to `DeletionService` |
 | `sunset_rescheduled` | `deletion_date` changed |
-| `sunset_escalated` | Sunset-mode group hit `thresholdPct`; items force-expired down to `targetPct` |
+| `sunset_escalated` | Sunset-mode group hit `criticalPct`; items force-expired down to `targetPct` |
 | `sunset_misconfigured` | Engine skipped sunset-mode group because `sunsetPct` is NULL |
 | `sunset_label_applied` | Sunset label added to item in media server |
 | `sunset_label_removed` | Sunset label removed from item in media server |
@@ -765,7 +771,7 @@ frontend/                                  — Disk group mode selector; SunsetQ
 3. Rename `ExecutionMode` to `DefaultDiskGroupMode` on `PreferenceSet`; add sunset preference fields (`SunsetDays`, `SunsetLabel`, `PosterOverlayEnabled`)
 4. Write data migration: set all existing `disk_groups.mode` to `"dry-run"`; reset `preference_sets.default_disk_group_mode` to `"dry-run"`
 5. Create `SunsetQueueItem` model
-6. Add validation: `sunsetPct < targetPct < thresholdPct` when `mode == "sunset"`; reject if `sunsetPct IS NULL`
+6. Add validation: `sunsetPct < targetPct < criticalPct` when `mode == "sunset"`; reject if `sunsetPct IS NULL`
 7. Create `SunsetService` with full lifecycle methods (including label application/removal)
 8. Create `LabelManager` capability interface
 9. Implement `LabelManager` on `PlexClient`, `JellyfinClient`, `EmbyClient`
@@ -843,7 +849,7 @@ Custom rules are currently per-integration; scoring factor weights are global. W
 | **Execution mode scope** | Per-disk-group `Mode` field | Eliminates global-vs-per-group conflicts; each group is self-contained |
 | **Sunset data storage** | Dedicated `sunset_queue` table | Different lifecycle from approval queue; avoids behavioral complexity |
 | **Service naming** | `SunsetService` | Manages transition period, not deletion |
-| **Threshold ordering** | `sunsetPct < targetPct < thresholdPct` | Escalation frees to `targetPct` only, preserving sunset queue below |
+| **Threshold ordering** | `sunsetPct < targetPct < criticalPct` | Escalation frees to `targetPct` only, preserving sunset queue below |
 | **Media server visibility** | Labels/tags via `LabelManager` (not managed collections) | Simpler; users control display; no cross-item state; existing `LabelDataProvider` pattern |
 | **Sunset label** | Static, configurable, default `"capacitarr-sunset"` | Set once on entry, removed on exit; no daily churn; namespaced |
 | **Poster overlay** | Server-side image composition | Full visual control; Go stdlib mature |
@@ -861,7 +867,7 @@ Custom rules are currently per-integration; scoring factor weights are global. W
 |---|---|---|
 | **3.0 breaking change** — per-disk-group modes | High | All existing disk groups reset to `dry-run` on upgrade (safety-first); API deprecation period for global mode endpoints; clear upgrade docs |
 | **Poster corruption** | High | Cache originals before upload; `poster_overlay_active` flag; "Restore All Posters" emergency button |
-| **Disk fills during sunset window** | High | Escalation ladder frees to `targetPct` only; `thresholdPct` is always the safety net |
+| **Disk fills during sunset window** | High | Escalation ladder frees to `targetPct` only; `criticalPct` is always the safety net |
 | **Media server API breakage** | Medium | Integration tests; graceful degradation |
 | **Performance at scale** | Medium | Batch label operations; poster composition once/day |
 | **Label rename while items queued** | Low | On preference save, remove old label and apply new one across all sunset items |
@@ -873,19 +879,19 @@ Custom rules are currently per-integration; scoring factor weights are global. W
 
 ## Codebase Alignment Checklist
 
-- [ ] **Service layer** — `SunsetService`, `PosterOverlayService` follow `*gorm.DB` + `*events.EventBus` pattern
-- [ ] **Capability interfaces** — `LabelManager`, `PosterManager` follow existing pattern
-- [ ] **No new factories** — new interfaces on existing clients
-- [ ] **Event bus** — new event types for SSE, notifications, activity
-- [ ] **Cron pattern** — daily tick follows `jobs/cron.go` pattern
-- [ ] **Registry wiring** — `reg.Sunset` with `Wired()` validation
-- [ ] **Route handlers** — thin, no direct DB access
-- [ ] **Integration registry** — `LabelManagers()`, `PosterManagers()` follow discovery pattern
-- [ ] **TMDb matching** — reuses existing cross-reference
-- [ ] **New table** — `sunset_queue` follows GORM patterns with indexes and FK references
-- [ ] **Approval queue untouched** — zero changes to `approval_queue` or `ApprovalService`
-- [ ] **Notification support** — new events feed into existing dispatch
-- [ ] **No direct DB access from routes**
-- [ ] **No integration client creation from routes**
-- [ ] **Unit tests** — in-memory SQLite pattern
-- [ ] **`make ci` passes**
+- [x] **Service layer** — `SunsetService`, `PosterOverlayService` follow `*gorm.DB` + `*events.EventBus` pattern
+- [x] **Capability interfaces** — `LabelManager`, `PosterManager` follow existing pattern
+- [x] **No new factories** — new interfaces on existing clients
+- [x] **Event bus** — new event types for SSE, notifications, activity
+- [x] **Cron pattern** — daily tick follows `jobs/cron.go` pattern
+- [x] **Registry wiring** — `reg.Sunset` with `Wired()` validation
+- [x] **Route handlers** — thin, no direct DB access
+- [x] **Integration registry** — `LabelManagers()`, `PosterManagers()` follow discovery pattern
+- [x] **TMDb matching** — reuses existing cross-reference
+- [x] **New table** — `sunset_queue` follows GORM patterns with indexes and FK references
+- [x] **Approval queue untouched** — zero changes to `approval_queue` or `ApprovalService`
+- [x] **Notification support** — new events feed into existing dispatch
+- [x] **No direct DB access from routes**
+- [x] **No integration client creation from routes**
+- [x] **Unit tests** — in-memory SQLite pattern
+- [x] **`make ci` passes**

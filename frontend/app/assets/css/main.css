@@ -891,7 +891,10 @@ html {
   height: 18px;
 }
 
-/* Target thumb (first = 2nd child after the track) — emerald green */
+/* ── 2-thumb mode (target + critical) ──
+   Child order: track(1), target(2), critical(3) */
+
+/* Target thumb — emerald green (2-thumb: nth-child(2)) */
 [data-slot='threshold-slider'] [data-slot='slider-thumb']:nth-child(2) {
   background: oklch(0.648 0.2 160);
   border-color: oklch(0.75 0.18 160);
@@ -909,7 +912,7 @@ html {
     0 0 10px oklch(0.648 0.2 160 / 0.12);
 }
 
-/* Threshold thumb (last = 3rd child after track + target thumb) — red */
+/* Critical thumb — red (2-thumb: nth-child(3)) */
 [data-slot='threshold-slider'] [data-slot='slider-thumb']:nth-child(3) {
   background: oklch(0.577 0.245 27.325);
   border-color: oklch(0.65 0.22 27);
@@ -919,6 +922,65 @@ html {
 }
 
 .dark [data-slot='threshold-slider'] [data-slot='slider-thumb']:nth-child(3) {
+  background: oklch(0.577 0.245 27.325);
+  border-color: oklch(0.65 0.22 27);
+  box-shadow:
+    0 1px 6px oklch(0.577 0.245 27.325 / 0.4),
+    0 0 0 2px oklch(0.577 0.245 27.325 / 0.15),
+    0 0 10px oklch(0.577 0.245 27.325 / 0.12);
+}
+
+/* ── 3-thumb mode (sunset + target + critical) ──
+   Child order: track(1), sunset(2), target(3), critical(4)
+   The [data-sunset-mode] attribute on the slider container activates these
+   overrides, shifting target to nth-child(3) and critical to nth-child(4). */
+
+/* Sunset thumb — amber/warning (3-thumb: nth-child(2)) */
+[data-sunset-mode] [data-slot='slider-thumb']:nth-child(2) {
+  background: oklch(0.75 0.16 70);
+  border-color: oklch(0.82 0.14 70);
+  box-shadow:
+    0 1px 4px oklch(0.75 0.16 70 / 0.3),
+    0 0 0 2px oklch(0.75 0.16 70 / 0.1);
+}
+
+.dark [data-sunset-mode] [data-slot='slider-thumb']:nth-child(2) {
+  background: oklch(0.75 0.16 70);
+  border-color: oklch(0.82 0.14 70);
+  box-shadow:
+    0 1px 6px oklch(0.75 0.16 70 / 0.4),
+    0 0 0 2px oklch(0.75 0.16 70 / 0.15),
+    0 0 10px oklch(0.75 0.16 70 / 0.12);
+}
+
+/* Target thumb — emerald green (3-thumb: nth-child(3)) */
+[data-sunset-mode] [data-slot='slider-thumb']:nth-child(3) {
+  background: oklch(0.648 0.2 160);
+  border-color: oklch(0.75 0.18 160);
+  box-shadow:
+    0 1px 4px oklch(0.648 0.2 160 / 0.3),
+    0 0 0 2px oklch(0.648 0.2 160 / 0.1);
+}
+
+.dark [data-sunset-mode] [data-slot='slider-thumb']:nth-child(3) {
+  background: oklch(0.648 0.2 160);
+  border-color: oklch(0.75 0.18 160);
+  box-shadow:
+    0 1px 6px oklch(0.648 0.2 160 / 0.4),
+    0 0 0 2px oklch(0.648 0.2 160 / 0.15),
+    0 0 10px oklch(0.648 0.2 160 / 0.12);
+}
+
+/* Critical thumb — red (3-thumb: nth-child(4)) */
+[data-sunset-mode] [data-slot='slider-thumb']:nth-child(4) {
+  background: oklch(0.577 0.245 27.325);
+  border-color: oklch(0.65 0.22 27);
+  box-shadow:
+    0 1px 4px oklch(0.577 0.245 27.325 / 0.3),
+    0 0 0 2px oklch(0.577 0.245 27.325 / 0.1);
+}
+
+.dark [data-sunset-mode] [data-slot='slider-thumb']:nth-child(4) {
   background: oklch(0.577 0.245 27.325);
   border-color: oklch(0.65 0.22 27);
   box-shadow:

@@ -56,6 +56,28 @@ type mockDeletionStatsWriter struct{}
 
 func (m *mockDeletionStatsWriter) IncrementDeletionStats(_ int64) error { return nil }
 
+// mockDiskGroupModeReader implements DiskGroupModeReader for deletion tests.
+type mockDiskGroupModeReader struct {
+	mode string // If empty, GetByID returns an error (simulates no group found)
+}
+
+func (m *mockDiskGroupModeReader) GetByID(_ uint) (*db.DiskGroup, error) {
+	if m.mode == "" {
+		return nil, errors.New("not found")
+	}
+	return &db.DiskGroup{Mode: m.mode}, nil
+}
+
+// mockSunsetQueueCleaner implements SunsetQueueCleaner for deletion tests.
+type mockSunsetQueueCleaner struct {
+	removedIDs []uint
+}
+
+func (m *mockSunsetQueueCleaner) RemoveCompleted(id uint) error {
+	m.removedIDs = append(m.removedIDs, id)
+	return nil
+}
+
 // mockIntegration implements integrations.Integration for deletion tests.
 type mockIntegration struct {
 	deleteErr error
@@ -154,6 +176,8 @@ func TestDeletionService_BatchTracking_AllSuccess(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -200,6 +224,8 @@ func TestDeletionService_BatchTracking_MixedSuccessFailure(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -259,6 +285,8 @@ func TestDeletionService_BatchTracking_CorrectCounts(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -311,6 +339,8 @@ func TestDeletionService_GracefulShutdown_DrainsQueue(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	svc.Start()
@@ -380,6 +410,8 @@ func TestDeletionService_ProgressEvent_DryRun(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -438,6 +470,8 @@ func TestDeletionService_ProgressEvent_ActualDeletion(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -496,6 +530,8 @@ func TestDeletionService_ForceDryRun_OverridesDeletionsEnabled(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -550,6 +586,8 @@ func TestDeletionService_NoDryRun_WhenDeletionsDisabled(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -608,6 +646,8 @@ func TestDeletionService_CancelDeletion_ReturnsTrue_WhenItemInQueue(t *testing.T
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	// Queue an item (service NOT started — item stays in channel and tracking slice)
@@ -654,6 +694,8 @@ func TestDeletionService_ProcessJob_SkipsCancelledItem(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -820,6 +862,8 @@ func TestDeletionService_ProgressEvent_Failure(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -895,6 +939,8 @@ func TestDeletionService_UpsertAudit_UsesUpsertSemantics(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	svc.Start()
@@ -948,6 +994,8 @@ func TestDeletionService_UpsertAudit_False_AppendsMultiple(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	svc.Start()
@@ -990,6 +1038,8 @@ func TestDeletionService_NilClient_DryRunSucceeds(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1053,6 +1103,8 @@ func TestDeletionService_NilClient_ActualDeletion_Fails(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1101,6 +1153,8 @@ func TestDeletionService_QueueDeletion_PublishesDeletionQueuedEvent(t *testing.T
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1160,6 +1214,8 @@ func TestDeletionService_GracePeriod_StartsOnQueue(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 	svc.Start()
 	defer svc.Stop()
@@ -1192,6 +1248,8 @@ func TestDeletionService_GracePeriod_ExpiresAndProcesses(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1224,6 +1282,8 @@ func TestDeletionService_ClearQueue_CancelsAll(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		&mockApprovalReturner{},
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	// Queue 3 items without starting the worker
@@ -1438,6 +1498,8 @@ func TestDeletionService_DryRun_ReturnsToPending_WhenApprovalEntrySet(t *testing
 		&mockDeletionStatsWriter{},
 		returner,
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1483,6 +1545,8 @@ func TestDeletionService_DryRun_DoesNotReturn_WhenNoApprovalEntry(t *testing.T) 
 		&mockDeletionStatsWriter{},
 		returner,
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1524,6 +1588,8 @@ func TestDeletionService_ActualDelete_RemovesApprovalEntry(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		returner,
 		&mockApprovalSnoozer{},
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1574,6 +1640,8 @@ func TestDeletionService_DryRunLoop_ApproveAndReturn(t *testing.T) {
 		&mockDeletionStatsWriter{},
 		approvalSvc, // Wire real ApprovalService as the returner
 		approvalSvc, // Wire real ApprovalService as the snoozer
+		&mockDiskGroupModeReader{},
+		&mockSunsetQueueCleaner{},
 	)
 
 	ch := bus.Subscribe()
@@ -1648,7 +1716,7 @@ func TestProcessJob_ModeChangeCancelsJob(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode has already changed
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1709,7 +1777,7 @@ func TestProcessJob_SameModeNotCancelled(t *testing.T) {
 		executionMode:             db.ModeAuto,
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1765,7 +1833,7 @@ func TestProcessJob_EmptyEnqueuedModeSkipsCheck(t *testing.T) {
 		executionMode:             db.ModeApproval,
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1822,7 +1890,7 @@ func TestProcessJob_AutoToDryRunCancelsJob(t *testing.T) {
 		executionMode:             db.ModeDryRun, // mode changed to dry-run
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1887,7 +1955,7 @@ func TestProcessJob_DryRunToAutoCancelsJob(t *testing.T) {
 		executionMode:             db.ModeAuto, // mode changed to auto
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -1945,7 +2013,7 @@ func TestDrainAll_MultiplItemsModeChangeCancelsRemaining(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode changed from auto to approval
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -2008,7 +2076,7 @@ func TestProcessJob_ModeChangeCancelsJob_PublishesCancelledEvent(t *testing.T) {
 		executionMode:             db.ModeApproval, // mode changed
 		deletionQueueDelaySeconds: 1,
 	}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{})
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, &mockApprovalSnoozer{}, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
@@ -2065,7 +2133,7 @@ func TestDeletionService_SnoozeDeletionItem(t *testing.T) {
 		snoozeDurationHours: 48,
 	}
 	snoozer := &mockApprovalSnoozer{}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer)
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	// Queue an item first so SnoozeDeletionItem can find it
 	err := svc.QueueDeletion(DeleteJob{
@@ -2120,7 +2188,7 @@ func TestDeletionService_SnoozeDeletionItem_NotInQueue(t *testing.T) {
 		snoozeDurationHours: 24,
 	}
 	snoozer := &mockApprovalSnoozer{}
-	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer)
+	svc.SetDependencies(settings, &mockEngineStatsWriter{}, &mockDeletionStatsWriter{}, &mockApprovalReturner{}, snoozer, &mockDiskGroupModeReader{}, &mockSunsetQueueCleaner{})
 
 	// Snooze an item that isn't in the queue — should still succeed
 	// (creates snoozed entry with integrationID=0)

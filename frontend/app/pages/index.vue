@@ -104,8 +104,7 @@
             {{ $t('dashboard.runNow') }}
           </UiButton>
           <span class="text-xs text-muted-foreground">
-            <template v-if="engineIsRunning"> 🔄 {{ $t('dashboard.engineRunning') }} </template>
-            <template v-else-if="engineLastRunEpoch">
+            <template v-if="engineLastRunEpoch">
               <i18n-t keypath="dashboard.lastRun" tag="span">
                 <template #time>
                   <DateDisplay :date="new Date(engineLastRunEpoch * 1000).toISOString()" />

@@ -290,6 +290,62 @@ func (r *IntegrationRegistry) LabelManagers() map[uint]LabelManager {
 	return out
 }
 
+// BuildTMDbToNativeIDMaps builds per-integration TMDb ID → media server native
+// ID maps for all registered LabelManager-capable integrations (Plex, Jellyfin,
+// Emby). Returns map[integrationID]map[tmdbID]nativeID. Each integration has
+// its own map because the same TMDb ID resolves to different native IDs on
+// different media servers (Plex ratingKey vs Jellyfin/Emby item ID).
+//
+// Used by SunsetService and PosterOverlayService to translate TMDb IDs from
+// *arr items into the correct per-server identifiers for label and poster
+// operations.
+func (r *IntegrationRegistry) BuildTMDbToNativeIDMaps() map[uint]map[int]string {
+	// Snapshot label manager IDs under lock, then release — the API calls
+	// below are slow and must not hold the registry lock.
+	r.mu.RLock()
+	ids := make([]uint, 0, len(r.labelManagers))
+	for id := range r.labelManagers {
+		ids = append(ids, id)
+	}
+	r.mu.RUnlock()
+
+	result := make(map[uint]map[int]string, len(ids))
+	for _, id := range ids {
+		if plex, ok := r.PlexClient(id); ok {
+			plexMap, err := plex.GetTMDbToRatingKeyMap()
+			if err != nil {
+				slog.Warn("Failed to build TMDb→RatingKey map for sunset",
+					"component", "integrations", "integrationID", id, "error", err)
+				continue
+			}
+			result[id] = plexMap
+			continue
+		}
+		if jf, ok := r.JellyfinClient(id); ok {
+			jfMap, err := jf.GetTMDbToItemIDMap()
+			if err != nil {
+				slog.Warn("Failed to build TMDb→ItemID map for sunset",
+					"component", "integrations", "integrationID", id, "error", err)
+				continue
+			}
+			result[id] = jfMap
+			continue
+		}
+		if emby, ok := r.EmbyClient(id); ok {
+			embyMap, err := emby.GetTMDbToItemIDMap()
+			if err != nil {
+				slog.Warn("Failed to build TMDb→ItemID map for sunset",
+					"component", "integrations", "integrationID", id, "error", err)
+				continue
+			}
+			result[id] = embyMap
+			continue
+		}
+	}
+
+	return result
+}
+
 // PosterManagers returns all registered PosterManager implementations with their IDs.
 // Returns a defensive copy. Used by PosterOverlayService to upload/restore poster images.
 func (r *IntegrationRegistry) PosterManagers() map[uint]PosterManager {

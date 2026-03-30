@@ -741,6 +741,53 @@ func (e *EmbyClient) RestorePosterImage(itemID string) error {
 	return DoAPIRequestWithBody("DELETE", fullURL, nil, "X-Emby-Token", e.APIKey)
 }
 
+// GetTMDbToItemIDMap builds a mapping from TMDb ID to Emby item ID by
+// scanning all movies and series. Used by SunsetService to translate TMDb IDs
+// from *arr items into Emby native IDs for label operations.
+func (e *EmbyClient) GetTMDbToItemIDMap() (map[int]string, error) {
+	adminID, err := e.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Emby admin user for TMDb mapping: %w", err)
+	}
+
+	result := make(map[int]string)
+	startIndex := 0
+	pageSize := 500
+
+	for {
+		endpoint := fmt.Sprintf(
+			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds&StartIndex=%d&Limit=%d",
+			adminID, startIndex, pageSize,
+		)
+		body, fetchErr := e.doRequest(endpoint)
+		if fetchErr != nil {
+			return result, fmt.Errorf("failed to fetch Emby items for TMDb mapping: %w", fetchErr)
+		}
+
+		var resp struct {
+			Items            []embyItem `json:"Items"`
+			TotalRecordCount int        `json:"TotalRecordCount"`
+		}
+		if parseErr := json.Unmarshal(body, &resp); parseErr != nil {
+			return result, fmt.Errorf("failed to parse Emby items for TMDb mapping: %w", parseErr)
+		}
+
+		for _, item := range resp.Items {
+			tmdbID := extractTMDbID(item.ProviderIDs)
+			if tmdbID > 0 {
+				result[tmdbID] = item.ID
+			}
+		}
+
+		startIndex += len(resp.Items)
+		if startIndex >= resp.TotalRecordCount || len(resp.Items) == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
 var _ Connectable = (*EmbyClient)(nil)
 var _ WatchDataProvider = (*EmbyClient)(nil)
 var _ WatchlistProvider = (*EmbyClient)(nil)

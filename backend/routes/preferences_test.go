@@ -114,7 +114,7 @@ func TestSavePreferences_InvalidLogLevel(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "dry-run",
+		"defaultDiskGroupMode": "dry-run",
 		"tiebreakerMethod": "size_desc",
 		"logLevel": "verbose"
 	}`
@@ -132,7 +132,7 @@ func TestSavePreferences_InvalidTiebreaker(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "dry-run",
+		"defaultDiskGroupMode": "dry-run",
 		"tiebreakerMethod": "random_order",
 		"logLevel": "info"
 	}`
@@ -150,7 +150,7 @@ func TestSavePreferences_InvalidPollInterval(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "dry-run",
+		"defaultDiskGroupMode": "dry-run",
 		"tiebreakerMethod": "size_desc",
 		"logLevel": "info",
 		"pollIntervalSeconds": 30,
@@ -170,7 +170,7 @@ func TestSavePreferences_InvalidDeletionQueueDelay(t *testing.T) {
 	e := testutil.SetupTestServer(t, database)
 
 	body := `{
-		"executionMode": "dry-run",
+		"defaultDiskGroupMode": "dry-run",
 		"tiebreakerMethod": "size_desc",
 		"logLevel": "info",
 		"pollIntervalSeconds": 60,

@@ -497,8 +497,13 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 }
 
 // evaluateSunsetMode handles the sunset-mode disk group evaluation.
-// Sunset mode uses sunsetPct as the primary trigger (queue items for countdown)
-// and thresholdPct as the escalation safety net (force-expire to targetPct).
+// Both steps run independently each cycle:
+//  1. Queue: if currentPct >= sunsetPct, score items and add to sunset_queue
+//  2. Escalate: if currentPct >= criticalPct, force-expire from the queue to free space
+//
+// This ensures items are always marked for sunset once past the sunset threshold,
+// even when the disk is simultaneously past critical. Escalation then processes
+// items that were just queued (or already existed) from the sunset queue.
 func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, allItems []integrations.MediaItem, registry *integrations.IntegrationRegistry, _ uint, prefs db.PreferenceSet, weights map[string]int, rules []db.CustomRule, evalCtx *engine.EvaluationContext, effectiveTotal int64, currentPct float64) int {
 	// Validation: sunsetPct must be configured
 	if group.SunsetPct == nil {
@@ -513,118 +518,117 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 
 	sunsetPct := *group.SunsetPct
 
-	// Step 1: Check for escalation (thresholdPct breached)
+	// Lazy-build TMDb→NativeID map once per poll cycle (cached on accumulator)
+	if !acc.tmdbMapInit && registry != nil {
+		acc.tmdbMap = registry.BuildTMDbToNativeIDMaps()
+		acc.tmdbMapInit = true
+	}
+
+	sunsetDeps := services.SunsetDeps{
+		Registry:       registry,
+		Deletion:       p.reg.Deletion,
+		Engine:         p.reg.Engine,
+		Settings:       p.reg.Settings,
+		PosterOverlay:  p.reg.PosterOverlay,
+		TMDbToNativeID: acc.tmdbMap,
+	}
+
+	// Step 1: Queue items to sunset if sunsetPct is breached
+	if currentPct >= sunsetPct {
+		slog.Info("Sunset threshold breached, evaluating media for sunset queue", "component", "poller",
+			"mount", group.MountPath, "currentPct", fmt.Sprintf("%.1f", currentPct),
+			"sunsetPct", sunsetPct)
+
+		// Filter items on this mount
+		normalizedMount := normalizePath(group.MountPath)
+		var diskItems []integrations.MediaItem
+		for _, item := range allItems {
+			if strings.HasPrefix(normalizePath(item.Path), normalizedMount) {
+				diskItems = append(diskItems, item)
+			}
+		}
+
+		// Score items
+		evaluator := engine.NewEvaluator()
+		evalResult := evaluator.Evaluate(diskItems, weights, rules, prefs.TiebreakerMethod, evalCtx)
+		acc.Evaluated += int64(evalResult.TotalCount)
+		acc.Protected += int64(len(evalResult.Protected))
+
+		// Calculate how much to sunset (based on currentPct → targetPct range)
+		targetBytesToFree := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
+		if targetBytesToFree > 0 {
+			candidates := evalResult.CandidatesForDeletion(targetBytesToFree)
+
+			// Pre-build set of already-sunsetted items for dedup
+			sunsettedKeys, keysErr := p.reg.Sunset.ListSunsettedKeys(group.ID)
+			if keysErr != nil {
+				slog.Error("Failed to load sunsetted keys", "component", "poller", "error", keysErr)
+				sunsettedKeys = make(map[string]bool)
+			}
+
+			// Calculate sunset deletion date
+			deletionDate := time.Now().UTC().AddDate(0, 0, prefs.SunsetDays)
+
+			var sunsetItems []db.SunsetQueueItem
+			for _, candidate := range candidates {
+				key := candidate.Item.Title + "|" + string(candidate.Item.Type)
+				if sunsettedKeys[key] {
+					continue // Already in sunset queue
+				}
+
+				factorsJSON, _ := json.Marshal(candidate.Factors)
+				sunsetItems = append(sunsetItems, db.SunsetQueueItem{
+					MediaName:       candidate.Item.Title,
+					MediaType:       string(candidate.Item.Type),
+					TmdbID:          &candidate.Item.TMDbID,
+					IntegrationID:   candidate.Item.IntegrationID,
+					ExternalID:      candidate.Item.ExternalID,
+					SizeBytes:       candidate.Item.SizeBytes,
+					Score:           candidate.Score,
+					ScoreDetails:    string(factorsJSON),
+					PosterURL:       candidate.Item.PosterURL,
+					DiskGroupID:     group.ID,
+					CollectionGroup: "", // Collection groups are handled by approval/auto mode expansion; sunset evaluates items individually
+					Trigger:         db.TriggerEngine,
+					DeletionDate:    deletionDate,
+				})
+			}
+
+			if len(sunsetItems) > 0 {
+				created, err := p.reg.Sunset.BulkQueueSunset(sunsetItems, sunsetDeps)
+				if err != nil {
+					slog.Error("Failed to queue sunset items", "component", "poller",
+						"mount", group.MountPath, "error", err)
+				} else {
+					slog.Info("Sunset items queued", "component", "poller",
+						"mount", group.MountPath, "count", created,
+						"deletionDate", deletionDate.Format("2006-01-02"))
+					acc.Candidates += int64(created)
+				}
+			}
+		}
+	} else {
+		slog.Debug("Disk within sunset threshold, no action needed", "component", "poller",
+			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
+			"sunsetPct", sunsetPct)
+	}
+
+	// Step 2: Escalate if criticalPct is also breached (independent of step 1)
 	if currentPct >= group.ThresholdPct {
-		slog.Warn("Sunset escalation triggered — disk exceeds threshold",
+		slog.Warn("Sunset escalation triggered — disk exceeds critical",
 			"component", "poller", "mount", group.MountPath,
 			"currentPct", fmt.Sprintf("%.1f", currentPct),
-			"thresholdPct", group.ThresholdPct,
+			"criticalPct", group.ThresholdPct,
 			"targetPct", group.TargetPct)
 
 		// Calculate bytes to free down to targetPct (NOT sunsetPct — preserves queue)
 		targetBytes := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
-		freed, err := p.reg.Sunset.Escalate(group.ID, targetBytes, services.SunsetDeps{
-			Registry:      registry,
-			Deletion:      p.reg.Deletion,
-			Engine:        p.reg.Engine,
-			Settings:      p.reg.Settings,
-			PosterOverlay: p.reg.PosterOverlay,
-		})
+		freed, err := p.reg.Sunset.Escalate(group.ID, targetBytes, sunsetDeps)
 		if err != nil {
 			slog.Error("Sunset escalation failed", "component", "poller",
 				"mount", group.MountPath, "error", err)
 		}
 		acc.FreedBytes += freed
-		return 0
-	}
-
-	// Step 2: Check if sunsetPct is breached — queue items for sunset countdown
-	if currentPct < sunsetPct {
-		slog.Debug("Disk within sunset threshold, no action needed", "component", "poller",
-			"mount", group.MountPath, "usedPct", fmt.Sprintf("%.1f", currentPct),
-			"sunsetPct", sunsetPct)
-		return 0
-	}
-
-	slog.Info("Sunset threshold breached, evaluating media for sunset queue", "component", "poller",
-		"mount", group.MountPath, "currentPct", fmt.Sprintf("%.1f", currentPct),
-		"sunsetPct", sunsetPct)
-
-	// Filter items on this mount
-	normalizedMount := normalizePath(group.MountPath)
-	var diskItems []integrations.MediaItem
-	for _, item := range allItems {
-		if strings.HasPrefix(normalizePath(item.Path), normalizedMount) {
-			diskItems = append(diskItems, item)
-		}
-	}
-
-	// Score items
-	evaluator := engine.NewEvaluator()
-	evalResult := evaluator.Evaluate(diskItems, weights, rules, prefs.TiebreakerMethod, evalCtx)
-	acc.Evaluated += int64(evalResult.TotalCount)
-	acc.Protected += int64(len(evalResult.Protected))
-
-	// Calculate how much to sunset (based on sunsetPct → targetPct range)
-	targetBytesToFree := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
-	if targetBytesToFree <= 0 {
-		return 0
-	}
-
-	candidates := evalResult.CandidatesForDeletion(targetBytesToFree)
-
-	// Pre-build set of already-sunsetted items for dedup
-	sunsettedKeys, keysErr := p.reg.Sunset.ListSunsettedKeys(group.ID)
-	if keysErr != nil {
-		slog.Error("Failed to load sunsetted keys", "component", "poller", "error", keysErr)
-		sunsettedKeys = make(map[string]bool)
-	}
-
-	// Calculate sunset deletion date
-	deletionDate := time.Now().UTC().AddDate(0, 0, prefs.SunsetDays)
-
-	var sunsetItems []db.SunsetQueueItem
-	for _, candidate := range candidates {
-		key := candidate.Item.Title + "|" + string(candidate.Item.Type)
-		if sunsettedKeys[key] {
-			continue // Already in sunset queue
-		}
-
-		factorsJSON, _ := json.Marshal(candidate.Factors)
-		sunsetItems = append(sunsetItems, db.SunsetQueueItem{
-			MediaName:       candidate.Item.Title,
-			MediaType:       string(candidate.Item.Type),
-			TmdbID:          &candidate.Item.TMDbID,
-			IntegrationID:   candidate.Item.IntegrationID,
-			ExternalID:      candidate.Item.ExternalID,
-			SizeBytes:       candidate.Item.SizeBytes,
-			Score:           candidate.Score,
-			ScoreDetails:    string(factorsJSON),
-			PosterURL:       candidate.Item.PosterURL,
-			DiskGroupID:     group.ID,
-			CollectionGroup: "", // Collection groups are handled by approval/auto mode expansion; sunset evaluates items individually
-			Trigger:         db.TriggerEngine,
-			DeletionDate:    deletionDate,
-		})
-	}
-
-	if len(sunsetItems) > 0 {
-		created, err := p.reg.Sunset.BulkQueueSunset(sunsetItems, services.SunsetDeps{
-			Registry:      registry,
-			Deletion:      p.reg.Deletion,
-			Engine:        p.reg.Engine,
-			Settings:      p.reg.Settings,
-			PosterOverlay: p.reg.PosterOverlay,
-		})
-		if err != nil {
-			slog.Error("Failed to queue sunset items", "component", "poller",
-				"mount", group.MountPath, "error", err)
-		} else {
-			slog.Info("Sunset items queued", "component", "poller",
-				"mount", group.MountPath, "count", created,
-				"deletionDate", deletionDate.Format("2006-01-02"))
-			acc.Candidates += int64(created)
-		}
 	}
 
 	return 0 // Sunset mode doesn't queue immediate deletions

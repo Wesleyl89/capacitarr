@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS sunset_queue (
     deletion_date         DATE NOT NULL,
     label_applied         INTEGER NOT NULL DEFAULT 0,
     poster_overlay_active INTEGER NOT NULL DEFAULT 0,
+    expired_at            DATETIME,
     created_at            DATETIME,
     updated_at            DATETIME
 );
@@ -39,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_sunset_queue_deletion_date ON sunset_queue(deleti
 -- Add sunset preferences to preference_sets
 ALTER TABLE preference_sets ADD COLUMN sunset_days INTEGER NOT NULL DEFAULT 30;
 ALTER TABLE preference_sets ADD COLUMN sunset_label TEXT NOT NULL DEFAULT 'capacitarr-sunset';
-ALTER TABLE preference_sets ADD COLUMN poster_overlay_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE preference_sets ADD COLUMN poster_overlay_enabled INTEGER NOT NULL DEFAULT 1;
 
 -- Add sunset notification toggle to notification_configs
 ALTER TABLE notification_configs ADD COLUMN on_sunset_activity INTEGER NOT NULL DEFAULT 1;

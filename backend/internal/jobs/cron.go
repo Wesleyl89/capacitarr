@@ -138,13 +138,20 @@ func Start(reg *services.Registry) *cron.Cron {
 			slog.Error("Failed to build integration registry for sunset cron", "component", "jobs", "error", registryErr)
 		}
 
+		// Build TMDb→NativeID map once for the entire cron cycle
+		var tmdbMap map[uint]map[int]string
+		if registry != nil {
+			tmdbMap = registry.BuildTMDbToNativeIDMaps()
+		}
+
 		// 1. Process expired sunset items → DeletionService
 		processed, sunsetErr := reg.Sunset.ProcessExpired(services.SunsetDeps{
-			Registry:      registry,
-			Deletion:      reg.Deletion,
-			Engine:        reg.Engine,
-			Settings:      reg.Settings,
-			PosterOverlay: reg.PosterOverlay,
+			Registry:       registry,
+			Deletion:       reg.Deletion,
+			Engine:         reg.Engine,
+			Settings:       reg.Settings,
+			PosterOverlay:  reg.PosterOverlay,
+			TMDbToNativeID: tmdbMap,
 		})
 		if sunsetErr != nil {
 			slog.Error("Failed to process expired sunset items", "component", "jobs", "error", sunsetErr)
@@ -156,8 +163,9 @@ func Start(reg *services.Registry) *cron.Cron {
 		if reg.PosterOverlay != nil {
 			prefs, prefsErr := reg.Settings.GetPreferences()
 			if prefsErr == nil && prefs.PosterOverlayEnabled {
-				if overlayErr := reg.PosterOverlay.UpdateAll(reg.Sunset, services.PosterDeps{
-					Registry: registry,
+				if _, overlayErr := reg.PosterOverlay.UpdateAll(reg.Sunset, services.PosterDeps{
+					Registry:       registry,
+					TMDbToNativeID: tmdbMap,
 				}); overlayErr != nil {
 					slog.Error("Failed to update poster overlays", "component", "jobs", "error", overlayErr)
 				}

@@ -30,16 +30,16 @@
           :key="dg.id"
           class="rounded-lg border border-border bg-muted/50 p-5 space-y-4"
         >
-          <!-- Mount path & current usage -->
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
+          <!-- Header: mount path, integration badges, usage -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
               <div
                 class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                 :class="diskStatusBgClass(diskUsagePct(dg), editTarget(dg), editThreshold(dg))"
               >
                 <component :is="HardDriveIcon" class="w-4.5 h-4.5 text-white" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <span class="text-sm font-medium text-foreground truncate" :title="dg.mountPath">
                     {{ dg.mountPath }}
@@ -152,13 +152,31 @@
             <div class="relative w-full h-3 rounded-full overflow-hidden">
               <!-- Segmented background zones -->
               <div class="absolute inset-0 flex">
-                <div
-                  class="h-full"
-                  :style="{
-                    width: editTarget(dg) + '%',
-                    backgroundColor: 'oklch(0.648 0.2 160 / 0.2)',
-                  }"
-                />
+                <template v-if="editMode(dg) === MODE_SUNSET && editSunsetPct(dg)">
+                  <div
+                    class="h-full"
+                    :style="{
+                      width: editSunsetPct(dg) + '%',
+                      backgroundColor: 'oklch(0.648 0.2 160 / 0.2)',
+                    }"
+                  />
+                  <div
+                    class="h-full"
+                    :style="{
+                      width: Math.max(editTarget(dg) - (editSunsetPct(dg) ?? 0), 0) + '%',
+                      backgroundColor: 'oklch(0.75 0.16 70 / 0.2)',
+                    }"
+                  />
+                </template>
+                <template v-else>
+                  <div
+                    class="h-full"
+                    :style="{
+                      width: editTarget(dg) + '%',
+                      backgroundColor: 'oklch(0.648 0.2 160 / 0.2)',
+                    }"
+                  />
+                </template>
                 <div
                   class="h-full"
                   :style="{
@@ -195,6 +213,19 @@
               />
             </div>
 
+            <!-- Sunset marker ABOVE the bar (visible in sunset mode) -->
+            <div
+              v-if="editMode(dg) === MODE_SUNSET && editSunsetPct(dg)"
+              class="absolute bottom-3 flex flex-col items-center z-20"
+              :style="{ left: editSunsetPct(dg) + '%', transform: 'translateX(-50%)' }"
+            >
+              <span
+                class="text-[10px] font-medium text-orange-500 dark:text-orange-400 whitespace-nowrap mb-0.5"
+              >
+                Sunset {{ editSunsetPct(dg) }}%
+              </span>
+              <span class="text-orange-500 text-[10px] leading-none mb-0.5">▼</span>
+            </div>
             <!-- Target marker ABOVE the bar -->
             <div
               class="absolute bottom-3 flex flex-col items-center z-20"
@@ -207,7 +238,7 @@
               </span>
               <span class="text-emerald-500 text-[10px] leading-none mb-0.5">▼</span>
             </div>
-            <!-- Threshold marker BELOW the bar -->
+            <!-- Critical marker BELOW the bar -->
             <div
               class="absolute top-3 flex flex-col items-center z-20"
               :style="{ left: editThreshold(dg) + '%', transform: 'translateX(-50%)' }"
@@ -216,7 +247,7 @@
               <span
                 class="text-[10px] font-medium text-red-500 dark:text-red-400 whitespace-nowrap mt-0.5"
               >
-                Threshold {{ editThreshold(dg) }}%
+                Critical {{ editThreshold(dg) }}%
               </span>
             </div>
           </div>
@@ -229,11 +260,15 @@
             </span>
           </div>
 
-          <!-- Dual-thumb range slider -->
+          <!-- Threshold slider (dual-thumb, or triple-thumb in sunset mode) -->
           <div class="space-y-2">
-            <div data-slot="threshold-slider" class="relative">
+            <div
+              data-slot="threshold-slider"
+              :data-sunset-mode="editMode(dg) === MODE_SUNSET ? '' : undefined"
+              class="relative"
+            >
               <UiSlider
-                :model-value="[editTarget(dg), editThreshold(dg)]"
+                :model-value="sliderValues(dg)"
                 :min="1"
                 :max="99"
                 :step="1"
@@ -245,96 +280,120 @@
                 "
               />
               <!-- Zone color overlays on the slider track -->
-              <div
-                class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-l-full pointer-events-none z-1"
-                :style="{
-                  left: '0%',
-                  width: editTarget(dg) + '%',
-                  background: 'oklch(0.648 0.2 160 / 0.5)',
-                }"
-              />
-              <div
-                class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
-                :style="{
-                  left: editTarget(dg) + '%',
-                  width: editThreshold(dg) - editTarget(dg) + '%',
-                  background: 'oklch(0.75 0.183 55.934 / 0.5)',
-                }"
-              />
-              <div
-                class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-r-full pointer-events-none z-1"
-                :style="{
-                  left: editThreshold(dg) + '%',
-                  width: 100 - editThreshold(dg) + '%',
-                  background: 'oklch(0.577 0.245 27.325 / 0.5)',
-                }"
-              />
+              <!-- In sunset mode: green | orange-sunset | amber | red -->
+              <!-- In other modes: green | amber | red -->
+              <template v-if="editMode(dg) === MODE_SUNSET && editSunsetPct(dg)">
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-l-full pointer-events-none z-1"
+                  :style="{
+                    left: '0%',
+                    width: editSunsetPct(dg) + '%',
+                    background: 'oklch(0.648 0.2 160 / 0.5)',
+                  }"
+                />
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
+                  :style="{
+                    left: editSunsetPct(dg) + '%',
+                    width: Math.max(editTarget(dg) - (editSunsetPct(dg) ?? 0), 0) + '%',
+                    background: 'oklch(0.75 0.16 70 / 0.5)',
+                  }"
+                />
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
+                  :style="{
+                    left: editTarget(dg) + '%',
+                    width: editThreshold(dg) - editTarget(dg) + '%',
+                    background: 'oklch(0.75 0.183 55.934 / 0.5)',
+                  }"
+                />
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-r-full pointer-events-none z-1"
+                  :style="{
+                    left: editThreshold(dg) + '%',
+                    width: 100 - editThreshold(dg) + '%',
+                    background: 'oklch(0.577 0.245 27.325 / 0.5)',
+                  }"
+                />
+              </template>
+              <template v-else>
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-l-full pointer-events-none z-1"
+                  :style="{
+                    left: '0%',
+                    width: editTarget(dg) + '%',
+                    background: 'oklch(0.648 0.2 160 / 0.5)',
+                  }"
+                />
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 pointer-events-none z-1"
+                  :style="{
+                    left: editTarget(dg) + '%',
+                    width: editThreshold(dg) - editTarget(dg) + '%',
+                    background: 'oklch(0.75 0.183 55.934 / 0.5)',
+                  }"
+                />
+                <div
+                  class="absolute top-1/2 -translate-y-1/2 h-2.5 rounded-r-full pointer-events-none z-1"
+                  :style="{
+                    left: editThreshold(dg) + '%',
+                    width: 100 - editThreshold(dg) + '%',
+                    background: 'oklch(0.577 0.245 27.325 / 0.5)',
+                  }"
+                />
+              </template>
             </div>
 
             <!-- Labels below the slider -->
             <div class="flex items-center justify-between text-[11px]">
               <span class="text-emerald-600 dark:text-emerald-400 font-medium">
+                <template v-if="editMode(dg) === MODE_SUNSET && editSunsetPct(dg)">
+                  ● Sunset {{ editSunsetPct(dg) }}%
+                  <span class="text-muted-foreground mx-1">·</span>
+                </template>
                 ● Target {{ editTarget(dg) }}%
               </span>
               <span class="text-red-500 dark:text-red-400 font-medium">
-                ● Threshold {{ editThreshold(dg) }}%
+                ● Critical {{ editThreshold(dg) }}%
               </span>
             </div>
           </div>
 
-          <!-- Execution Mode Selector -->
-          <div class="flex items-center gap-3 pt-1">
-            <UiLabel class="text-xs text-muted-foreground shrink-0">{{
-              $t('rules.diskMode')
-            }}</UiLabel>
-            <div class="flex gap-1.5">
+          <!-- Mode selector + Save button row -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-1.5">
               <UiButton
                 v-for="m in diskGroupModes"
                 :key="m.value"
                 size="sm"
-                :variant="editMode(dg) === m.value ? 'default' : 'outline'"
-                class="h-6 px-2 text-[11px]"
+                :variant="editMode(dg) === m.value ? 'default' : 'ghost'"
+                class="rounded-full h-7 px-3 text-xs"
+                :class="
+                  editMode(dg) === m.value ? modeActiveClass(m.value) : 'text-muted-foreground'
+                "
                 @click="setDiskGroupMode(dg, m.value)"
               >
+                <component :is="modeIcon(m.value)" class="w-3.5 h-3.5 mr-1" />
                 {{ m.label }}
               </UiButton>
             </div>
-          </div>
-
-          <!-- Sunset Threshold (visible only in sunset mode) -->
-          <div v-if="editMode(dg) === MODE_SUNSET" class="flex items-center gap-3">
-            <UiLabel class="text-xs text-muted-foreground shrink-0">{{
-              $t('rules.sunsetThreshold')
-            }}</UiLabel>
-            <UiInput
-              type="number"
-              :model-value="editSunsetPct(dg)"
-              class="h-7 w-20 text-xs"
-              min="1"
-              max="99"
-              @update:model-value="(v: string | number) => setSunsetPct(dg, Number(v))"
-            />
-            <span class="text-xs text-muted-foreground">%</span>
-          </div>
-
-          <!-- Validation error + Save button row -->
-          <div class="flex items-center justify-between">
-            <p v-if="thresholdValidation(dg.id, dg)" class="text-xs text-red-500">
-              {{ thresholdValidation(dg.id, dg) }}
-            </p>
-            <span v-else />
-            <UiButton
-              size="sm"
-              :disabled="!hasChanges(dg) || !!thresholdValidation(dg.id, dg) || isSaving(dg.id)"
-              @click="saveThresholds(dg)"
-            >
-              <component
-                :is="isSaving(dg.id) ? LoaderCircleIcon : SaveIcon"
-                class="w-3.5 h-3.5 mr-1.5"
-                :class="{ 'animate-spin': isSaving(dg.id) }"
-              />
-              {{ isSaving(dg.id) ? $t('common.saving') : $t('common.save') }}
-            </UiButton>
+            <div class="flex items-center gap-2">
+              <p v-if="thresholdValidation(dg.id, dg)" class="text-xs text-red-500">
+                {{ thresholdValidation(dg.id, dg) }}
+              </p>
+              <UiButton
+                size="sm"
+                :disabled="!hasChanges(dg) || !!thresholdValidation(dg.id, dg) || isSaving(dg.id)"
+                @click="saveThresholds(dg)"
+              >
+                <component
+                  :is="isSaving(dg.id) ? LoaderCircleIcon : SaveIcon"
+                  class="w-3.5 h-3.5 mr-1.5"
+                  :class="{ 'animate-spin': isSaving(dg.id) }"
+                />
+                {{ isSaving(dg.id) ? $t('common.saving') : $t('common.save') }}
+              </UiButton>
+            </div>
           </div>
         </div>
       </template>
@@ -350,6 +409,10 @@ import {
   PencilIcon,
   XIcon,
   CheckIcon,
+  ShieldIcon,
+  HandIcon,
+  ZapIcon,
+  HourglassIcon,
 } from 'lucide-vue-next';
 import {
   formatBytes,
@@ -475,6 +538,34 @@ const diskGroupModes = [
   { value: MODE_AUTO, label: 'Auto' },
   { value: MODE_SUNSET, label: 'Sunset' },
 ];
+
+/** Icon per mode — gives each pill a distinctive shape at a glance. */
+function modeIcon(mode: string) {
+  switch (mode) {
+    case MODE_AUTO:
+      return ZapIcon;
+    case MODE_APPROVAL:
+      return HandIcon;
+    case MODE_SUNSET:
+      return HourglassIcon;
+    default:
+      return ShieldIcon;
+  }
+}
+
+/** Active-state accent class per mode — applied only to the selected pill. */
+function modeActiveClass(mode: string): string {
+  switch (mode) {
+    case MODE_AUTO:
+      return 'bg-red-600 hover:bg-red-700 text-white border-red-600';
+    case MODE_APPROVAL:
+      return '';
+    case MODE_SUNSET:
+      return 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600';
+    default:
+      return 'bg-muted text-foreground hover:bg-muted/80';
+  }
+}
 
 // Per-disk-group mode overrides (not yet saved)
 const modeEdits = reactive<Record<number, { mode: string; sunsetPct: number | null }>>({});
@@ -608,12 +699,29 @@ async function applyInlineOverride(dg: DiskGroup) {
   }
 }
 
-/** Handle slider value changes — array is [target, threshold]. */
+/** Returns the slider model-value array. In sunset mode it's a 3-value
+ *  array [sunsetPct, targetPct, thresholdPct]; otherwise [targetPct, thresholdPct]. */
+function sliderValues(dg: DiskGroup): number[] {
+  if (editMode(dg) === MODE_SUNSET) {
+    const sunset = editSunsetPct(dg) ?? Math.max(1, editTarget(dg) - 10);
+    return [sunset, editTarget(dg), editThreshold(dg)];
+  }
+  return [editTarget(dg), editThreshold(dg)];
+}
+
+/** Handle slider value changes — array is [target, threshold] or
+ *  [sunsetPct, target, threshold] when in sunset mode. */
 function onSliderChange(dg: DiskGroup, values: number[]) {
   ensureThresholdEdit(dg.id, dg);
   const edit = thresholdEdits[dg.id]!;
-  edit.target = values[0] ?? dg.targetPct;
-  edit.threshold = values[1] ?? dg.thresholdPct;
+  if (editMode(dg) === MODE_SUNSET && values.length === 3) {
+    setSunsetPct(dg, values[0]!);
+    edit.target = values[1] ?? dg.targetPct;
+    edit.threshold = values[2] ?? dg.thresholdPct;
+  } else {
+    edit.target = values[0] ?? dg.targetPct;
+    edit.threshold = values[1] ?? dg.thresholdPct;
+  }
 }
 
 function thresholdValidation(dgId: number, dg: DiskGroup): string {
@@ -621,7 +729,7 @@ function thresholdValidation(dgId: number, dg: DiskGroup): string {
   const g = editTarget(dg);
   if (t == null || g == null) return 'Both values are required';
   if (t < 1 || t > 99 || g < 1 || g > 99) return 'Values must be between 1 and 99';
-  if (t <= g) return 'Threshold must be greater than target';
+  if (t <= g) return 'Critical must be greater than target';
   // Suppress false positives when dgId is used only for lookup
   void dgId;
   return '';
@@ -684,9 +792,9 @@ async function saveThresholds(dg: DiskGroup) {
       };
     }
 
-    addToast(`Thresholds saved for ${dg.mountPath}`, 'success');
+    addToast(`Settings saved for ${dg.mountPath}`, 'success');
   } catch (err: unknown) {
-    const errMsg = (err as ApiError)?.message || 'Failed to save thresholds';
+    const errMsg = (err as ApiError)?.message || 'Failed to save settings';
     addToast('Failed to save: ' + errMsg, 'error');
   } finally {
     edit.saving = false;

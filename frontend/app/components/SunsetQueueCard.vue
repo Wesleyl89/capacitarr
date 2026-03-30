@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { SunsetIcon, XCircleIcon } from 'lucide-vue-next';
+import { HourglassIcon, XCircleIcon, CalendarClockIcon, Trash2Icon } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
+import type { SunsetQueueItem } from '~/types/api';
 
 const { t } = useI18n();
-const { sunsetItems, fetchSunsetItems, cancelItem } = useSunsetQueue();
+const { listItem } = useMotionPresets();
+const { viewMode } = useDisplayPrefs();
+const { sunsetItems, fetchSunsetItems, cancelItem, rescheduleItem, clearAll } = useSunsetQueue();
 
 // Fetch on mount
 onMounted(() => {
   fetchSunsetItems();
 });
+
+/** Selected item for the score detail modal */
+const selectedItem = ref<SunsetQueueItem | null>(null);
+
+function showDetail(item: SunsetQueueItem) {
+  selectedItem.value = item;
+}
 
 /**
  * Format days remaining as a human-readable countdown.
@@ -18,6 +28,14 @@ function formatDaysRemaining(days: number): string {
   if (days <= 0) return t('sunset.lastDay');
   if (days === 1) return t('sunset.leavingTomorrow');
   return t('sunset.leavingInDays', { days });
+}
+
+/** Reschedule an item by adding days to its current deletion date. */
+function rescheduleByDays(itemId: number, currentDate: string, addDays: number) {
+  const date = new Date(currentDate + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + addDays);
+  const iso = date.toISOString().split('T')[0]!;
+  rescheduleItem(itemId, iso);
 }
 </script>
 
@@ -33,55 +51,133 @@ function formatDaysRemaining(days: number): string {
       <div class="flex items-center justify-between">
         <div>
           <UiCardTitle class="flex items-center gap-2">
-            <SunsetIcon class="w-4.5 h-4.5" />
+            <HourglassIcon class="w-4.5 h-4.5" />
             {{ t('sunset.title') }}
           </UiCardTitle>
           <UiCardDescription class="mt-1">
             {{ t('sunset.subtitle') }}
           </UiCardDescription>
         </div>
-        <UiBadge variant="secondary" class="text-xs">
-          {{ t('sunset.count', { count: sunsetItems.length }) }}
-        </UiBadge>
-      </div>
-    </UiCardHeader>
-    <UiCardContent>
-      <div class="space-y-1.5">
-        <div
-          v-for="item in sunsetItems"
-          :key="item.id"
-          v-motion
-          :initial="{ opacity: 0, x: -8 }"
-          :enter="{
-            opacity: 1,
-            x: 0,
-            transition: { type: 'spring', stiffness: 260, damping: 24 },
-          }"
-          :leave="{ opacity: 0, x: 8 }"
-          class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
-        >
-          <div class="flex-1 min-w-0">
-            <span class="text-sm font-medium truncate block">{{ item.mediaName }}</span>
-            <span class="text-xs text-muted-foreground">
-              {{ item.mediaType }} · {{ formatBytes(item.sizeBytes) }}
-              <span class="ml-1 text-orange-500 dark:text-orange-400">
-                · {{ formatDaysRemaining(item.daysRemaining) }}
-              </span>
-            </span>
-          </div>
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+          <ViewModeToggle />
+          <UiBadge variant="secondary" class="text-xs">
+            {{ t('sunset.count', { count: sunsetItems.length }) }}
+          </UiBadge>
           <UiButton
             variant="ghost"
             size="sm"
-            class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground shrink-0"
-            :aria-label="t('sunset.cancel')"
-            :title="t('sunset.cancel')"
-            @click="cancelItem(item.id)"
+            class="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+            :title="t('sunset.clearAll')"
+            @click="clearAll()"
           >
-            <XCircleIcon class="h-3.5 w-3.5 mr-1" />
-            <span class="text-xs">{{ t('sunset.cancel') }}</span>
+            <Trash2Icon class="h-3.5 w-3.5 mr-1" />
+            {{ t('sunset.clearAll') }}
           </UiButton>
+        </div>
+      </div>
+    </UiCardHeader>
+    <UiCardContent>
+      <!-- Grid / poster view -->
+      <div
+        v-if="viewMode === 'grid'"
+        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"
+      >
+        <MediaPosterCard
+          v-for="(item, idx) in sunsetItems"
+          :key="item.id"
+          :title="item.mediaName"
+          :poster-url="item.posterUrl"
+          :media-type="item.mediaType"
+          :score="item.score"
+          :size-bytes="item.sizeBytes"
+          :sunset-days-remaining="item.daysRemaining"
+          :animation-delay="idx * 30"
+          @click="showDetail(item)"
+        />
+      </div>
+
+      <!-- List view -->
+      <div v-else class="space-y-1.5">
+        <div v-for="(item, idx) in sunsetItems" :key="item.id" v-motion v-bind="listItem(idx * 30)">
+          <div
+            class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+          >
+            <!-- Score (clickable) -->
+            <span
+              class="text-xs font-mono tabular-nums font-semibold text-primary shrink-0 w-12 text-right cursor-pointer hover:text-primary/80"
+              @click="showDetail(item)"
+            >
+              {{ item.score.toFixed(2) }}
+            </span>
+
+            <!-- Title + metadata (clickable) -->
+            <div class="flex-1 min-w-0 cursor-pointer" @click="showDetail(item)">
+              <span class="text-sm font-medium truncate block">{{ item.mediaName }}</span>
+              <span class="text-xs text-muted-foreground">
+                {{ item.mediaType }} · {{ formatBytes(item.sizeBytes) }}
+                <span class="ml-1 text-orange-500 dark:text-orange-400">
+                  · {{ formatDaysRemaining(item.daysRemaining) }}
+                </span>
+              </span>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-1 shrink-0">
+              <!-- Reschedule dropdown -->
+              <UiDropdownMenu>
+                <UiDropdownMenuTrigger as-child>
+                  <UiButton
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground"
+                    :title="t('sunset.reschedule')"
+                  >
+                    <CalendarClockIcon class="h-3.5 w-3.5 mr-1" />
+                    <span class="text-xs">{{ t('sunset.reschedule') }}</span>
+                  </UiButton>
+                </UiDropdownMenuTrigger>
+                <UiDropdownMenuContent align="end">
+                  <UiDropdownMenuItem @click="rescheduleByDays(item.id, item.deletionDate, 7)">
+                    + 7 {{ t('sunset.days') }}
+                  </UiDropdownMenuItem>
+                  <UiDropdownMenuItem @click="rescheduleByDays(item.id, item.deletionDate, 14)">
+                    + 14 {{ t('sunset.days') }}
+                  </UiDropdownMenuItem>
+                  <UiDropdownMenuItem @click="rescheduleByDays(item.id, item.deletionDate, 30)">
+                    + 30 {{ t('sunset.days') }}
+                  </UiDropdownMenuItem>
+                </UiDropdownMenuContent>
+              </UiDropdownMenu>
+              <!-- Cancel button -->
+              <UiButton
+                variant="ghost"
+                size="sm"
+                class="h-7 p-0 px-2 text-muted-foreground hover:text-foreground"
+                :aria-label="t('sunset.cancel')"
+                :title="t('sunset.cancel')"
+                @click="cancelItem(item.id)"
+              >
+                <XCircleIcon class="h-3.5 w-3.5 mr-1" />
+                <span class="text-xs">{{ t('sunset.cancel') }}</span>
+              </UiButton>
+            </div>
+          </div>
         </div>
       </div>
     </UiCardContent>
   </UiCard>
+
+  <!-- Score Detail Modal -->
+  <ScoreDetailModal
+    v-if="selectedItem"
+    :visible="!!selectedItem"
+    :media-name="selectedItem.mediaName"
+    :media-type="selectedItem.mediaType"
+    :score="selectedItem.score"
+    :score-details="selectedItem.scoreDetails ?? '[]'"
+    :size-bytes="selectedItem.sizeBytes"
+    :action="formatDaysRemaining(selectedItem.daysRemaining)"
+    :created-at="selectedItem.createdAt"
+    @close="selectedItem = null"
+  />
 </template>

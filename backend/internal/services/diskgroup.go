@@ -151,6 +151,16 @@ func (s *DiskGroupService) UpdateThresholds(groupID uint, threshold, target floa
 		return nil, fmt.Errorf("disk group not found: %w", err)
 	}
 
+	// Validate sunset configuration at save-time. Rejects invalid configs
+	// rather than letting them fail silently at engine evaluation time.
+	effectiveMode := mode
+	if effectiveMode == "" {
+		effectiveMode = group.Mode
+	}
+	if err := ValidateSunsetConfig(effectiveMode, sunsetPct, target, threshold); err != nil {
+		return nil, err
+	}
+
 	updates := map[string]any{
 		"threshold_pct": threshold,
 		"target_pct":    target,

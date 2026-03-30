@@ -389,6 +389,7 @@ export interface SunsetQueueItem {
   daysRemaining: number;
   labelApplied: boolean;
   posterOverlayActive: boolean;
+  expiredAt?: string;
   createdAt: string;
 }
 

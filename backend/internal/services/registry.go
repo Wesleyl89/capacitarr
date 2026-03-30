@@ -57,11 +57,13 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	metricsSvc := NewMetricsService(database, engineSvc, deletionSvc)
 	approvalSvc := NewApprovalService(database, bus)
 
+	sunsetSvc := NewSunsetService(database, bus)
+
 	// Wire cross-service dependencies that cannot be injected at construction
 	// time due to circular initialization (DeletionService needs Settings,
-	// Engine, Metrics, ApprovalReturner, and ApprovalSnoozer but they are
-	// constructed in the same function).
-	deletionSvc.SetDependencies(settingsSvc, engineSvc, metricsSvc, approvalSvc, approvalSvc)
+	// Engine, Metrics, ApprovalReturner, ApprovalSnoozer, DiskGroups, and
+	// SunsetCleaner but they are constructed in the same function).
+	deletionSvc.SetDependencies(settingsSvc, engineSvc, metricsSvc, approvalSvc, approvalSvc, diskGroupSvc, sunsetSvc)
 
 	notifChannelSvc := NewNotificationChannelService(database, bus)
 	notifDispatch := NewNotificationDispatchService(bus, notifChannelSvc, nil, "")
@@ -89,7 +91,7 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 		Metrics:              metricsSvc,
 		WatchAnalytics:       NewWatchAnalyticsService(previewSvc),
 		Migration:            NewMigrationService(database, bus, filepath.Dir(cfg.Database)),
-		Sunset:               NewSunsetService(database, bus),
+		Sunset:               sunsetSvc,
 	}
 
 	// Initialize PosterOverlayService — cache dir is alongside the database file

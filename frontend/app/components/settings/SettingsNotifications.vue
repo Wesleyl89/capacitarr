@@ -115,7 +115,7 @@
                   (val: boolean) => updateChannelEvent(channel, 'onThresholdBreach', val)
                 "
               />
-              <span>Threshold Breached</span>
+              <span>Critical Breached</span>
             </UiLabel>
             <p class="text-xs text-muted-foreground ml-11">
               Disk usage exceeded the configured limit
@@ -324,7 +324,7 @@
                 }
               "
             />
-            <span>Threshold Breached</span>
+            <span>Critical Breached</span>
           </UiLabel>
           <UiLabel class="flex items-center gap-2 text-sm font-normal">
             <UiSwitch

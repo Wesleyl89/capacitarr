@@ -19,18 +19,19 @@ import (
 
 // DeleteJob describes a media item to be deleted.
 type DeleteJob struct {
-	Client          integrations.MediaDeleter
-	Item            integrations.MediaItem
-	Score           float64
-	Factors         []engine.ScoreFactor
-	Trigger         string // "engine", "user", "approval"
-	RunStatsID      uint   // Engine run stats row to increment Deleted counter
-	DiskGroupID     *uint  // Disk group that triggered this deletion (nil for user-initiated deletes)
-	ForceDryRun     bool   // When true, skip actual deletion even if DeletionsEnabled=true
-	UpsertAudit     bool   // When true, use AuditLog.UpsertDryRun() (idempotent poller dry-runs); when false, use AuditLog.Create() (append-only)
-	ApprovalEntryID uint   // Non-zero if this job originated from an approval queue item
-	CollectionGroup string // Non-empty if this job is part of a collection deletion (e.g., "Sonic the Hedgehog Collection")
-	EnqueuedMode    string // Execution mode when this job was enqueued (defense-in-depth: processJob cancels if mode changed)
+	Client            integrations.MediaDeleter
+	Item              integrations.MediaItem
+	Score             float64
+	Factors           []engine.ScoreFactor
+	Trigger           string // "engine", "user", "approval"
+	RunStatsID        uint   // Engine run stats row to increment Deleted counter
+	DiskGroupID       *uint  // Disk group that triggered this deletion (nil for user-initiated deletes)
+	ForceDryRun       bool   // When true, skip actual deletion even if DeletionsEnabled=true
+	UpsertAudit       bool   // When true, use AuditLog.UpsertDryRun() (idempotent poller dry-runs); when false, use AuditLog.Create() (append-only)
+	ApprovalEntryID   uint   // Non-zero if this job originated from an approval queue item
+	SunsetQueueItemID uint   // Non-zero if this job originated from a sunset queue item; cleaned up after successful deletion
+	CollectionGroup   string // Non-empty if this job is part of a collection deletion (e.g., "Sonic the Hedgehog Collection")
+	EnqueuedMode      string // Execution mode when this job was enqueued (defense-in-depth: processJob cancels if mode changed)
 }
 
 // DeleteJobSummary is a serialisable snapshot of a queued deletion job,
@@ -63,6 +64,8 @@ type DeletionService struct {
 	metrics          DeletionStatsWriter
 	approvalReturner ApprovalReturner
 	approvalSnoozer  ApprovalSnoozer
+	diskGroups       DiskGroupModeReader
+	sunsetCleaner    SunsetQueueCleaner
 	rateLimiter      *rate.Limiter
 	done             chan struct{}
 
@@ -132,6 +135,20 @@ type ApprovalSnoozer interface {
 	CreateSnoozedEntry(mediaName, mediaType string, integrationID uint, snoozeDurationHours int) (*time.Time, error)
 }
 
+// DiskGroupModeReader allows the DeletionService to look up the per-disk-group
+// execution mode. Used by the mode-change safety check so it compares against
+// the actual group mode rather than the global default.
+type DiskGroupModeReader interface {
+	GetByID(id uint) (*db.DiskGroup, error)
+}
+
+// SunsetQueueCleaner allows the DeletionService to remove sunset queue items
+// after a file has been successfully deleted. This closes the sunset lifecycle:
+// item enters queue → countdown expires → DeletionService deletes file → row removed.
+type SunsetQueueCleaner interface {
+	RemoveCompleted(id uint) error
+}
+
 // NewDeletionService creates a new DeletionService.
 // The settings, engine, and metrics dependencies are injected via SetDependencies()
 // after registry construction to avoid circular initialization.
@@ -152,17 +169,19 @@ func NewDeletionService(bus *events.EventBus, auditLog *AuditLogService) *Deleti
 // Wired returns true when all lazily-injected dependencies are non-nil.
 // Used by Registry.Validate() to catch missing wiring at startup.
 func (s *DeletionService) Wired() bool {
-	return s.settings != nil && s.engine != nil && s.metrics != nil && s.approvalReturner != nil && s.approvalSnoozer != nil
+	return s.settings != nil && s.engine != nil && s.metrics != nil && s.approvalReturner != nil && s.approvalSnoozer != nil && s.diskGroups != nil && s.sunsetCleaner != nil
 }
 
 // SetDependencies wires cross-service dependencies that cannot be injected
 // at construction time due to circular initialization in the registry.
-func (s *DeletionService) SetDependencies(settings SettingsReader, engine EngineStatsWriter, metrics DeletionStatsWriter, approvalReturner ApprovalReturner, approvalSnoozer ApprovalSnoozer) {
+func (s *DeletionService) SetDependencies(settings SettingsReader, engine EngineStatsWriter, metrics DeletionStatsWriter, approvalReturner ApprovalReturner, approvalSnoozer ApprovalSnoozer, diskGroups DiskGroupModeReader, sunsetCleaner SunsetQueueCleaner) {
 	s.settings = settings
 	s.engine = engine
 	s.metrics = metrics
 	s.approvalReturner = approvalReturner
 	s.approvalSnoozer = approvalSnoozer
+	s.diskGroups = diskGroups
+	s.sunsetCleaner = sunsetCleaner
 }
 
 // Start begins the background deletion worker. Panics if SetDependencies()
@@ -427,14 +446,13 @@ drainLoop:
 		// one-by-one through the rate limiter. This avoids wasting ~3s per
 		// item on jobs that processJob() would cancel anyway.
 		if job.EnqueuedMode != "" {
-			if prefs, err := s.settings.GetPreferences(); err == nil {
-				if prefs.DefaultDiskGroupMode != job.EnqueuedMode {
-					// Process this one job (processJob will cancel it via mode-change guard),
-					// then cancel all remaining jobs in bulk without rate limiting.
-					s.processJob(job, &deferredAuditEntries)
-					s.cancelRemainingOnModeChange(job.EnqueuedMode, &deferredAuditEntries)
-					break drainLoop
-				}
+			currentMode := s.resolveCurrentMode(job.DiskGroupID)
+			if currentMode != "" && currentMode != job.EnqueuedMode {
+				// Process this one job (processJob will cancel it via mode-change guard),
+				// then cancel all remaining jobs in bulk without rate limiting.
+				s.processJob(job, &deferredAuditEntries)
+				s.cancelRemainingOnModeChange(job.EnqueuedMode, &deferredAuditEntries)
+				break drainLoop
 			}
 		}
 
@@ -536,39 +554,41 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	// treat it as cancelled. This catches items that were dequeued between the
 	// ClearQueue() call and the mode change, or race conditions where the worker
 	// dequeues an item just before ClearQueue() marks it.
+	// Uses the per-disk-group mode when DiskGroupID is available, falling back
+	// to DefaultDiskGroupMode for jobs without a group (shouldn't happen, but
+	// keeps the safety net).
 	if job.EnqueuedMode != "" {
-		if prefs, err := s.settings.GetPreferences(); err == nil {
-			if prefs.DefaultDiskGroupMode != job.EnqueuedMode {
-				s.processed.Add(1)
-				s.batchSucceeded.Add(1)
+		currentMode := s.resolveCurrentMode(job.DiskGroupID)
+		if currentMode != "" && currentMode != job.EnqueuedMode {
+			s.processed.Add(1)
+			s.batchSucceeded.Add(1)
 
-				logEntry := db.AuditLogEntry{
-					MediaName:       job.Item.Title,
-					MediaType:       string(job.Item.Type),
-					Action:          db.ActionCancelled,
-					SizeBytes:       job.Item.SizeBytes,
-					Trigger:         job.Trigger,
-					DiskGroupID:     job.DiskGroupID,
-					CollectionGroup: job.CollectionGroup,
-				}
-				if err := s.auditLog.Create(logEntry); err != nil {
-					slog.Error("Failed to create audit log entry", "component", "services", "error", err)
-				}
-
-				s.bus.Publish(events.DeletionCancelledEvent{
-					MediaName: job.Item.Title,
-					MediaType: string(job.Item.Type),
-					SizeBytes: job.Item.SizeBytes,
-				})
-				s.publishProgress()
-
-				slog.Info("Deletion cancelled — execution mode changed since enqueue",
-					"component", "services",
-					"media", job.Item.Title,
-					"enqueuedMode", job.EnqueuedMode,
-					"currentMode", prefs.DefaultDiskGroupMode)
-				return
+			logEntry := db.AuditLogEntry{
+				MediaName:       job.Item.Title,
+				MediaType:       string(job.Item.Type),
+				Action:          db.ActionCancelled,
+				SizeBytes:       job.Item.SizeBytes,
+				Trigger:         job.Trigger,
+				DiskGroupID:     job.DiskGroupID,
+				CollectionGroup: job.CollectionGroup,
 			}
+			if err := s.auditLog.Create(logEntry); err != nil {
+				slog.Error("Failed to create audit log entry", "component", "services", "error", err)
+			}
+
+			s.bus.Publish(events.DeletionCancelledEvent{
+				MediaName: job.Item.Title,
+				MediaType: string(job.Item.Type),
+				SizeBytes: job.Item.SizeBytes,
+			})
+			s.publishProgress()
+
+			slog.Info("Deletion cancelled — execution mode changed since enqueue",
+				"component", "services",
+				"media", job.Item.Title,
+				"enqueuedMode", job.EnqueuedMode,
+				"currentMode", currentMode)
+			return
 		}
 	}
 
@@ -710,8 +730,41 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 		}
 	}
 
+	// Clean up the sunset queue entry after successful actual deletion.
+	// The item was marked ExpiredAt when handed to DeletionService; now that
+	// the file is actually gone, remove the row so it disappears from the
+	// dashboard sunset queue.
+	if job.SunsetQueueItemID != 0 && s.sunsetCleaner != nil {
+		if err := s.sunsetCleaner.RemoveCompleted(job.SunsetQueueItemID); err != nil {
+			slog.Error("Failed to clean up sunset queue entry after deletion",
+				"component", "services", "sunsetItemID", job.SunsetQueueItemID, "error", err)
+		}
+	}
+
 	slog.Info("Deletion completed", "component", "services",
 		"media", job.Item.Title, "action", "Deleted", "freed", job.Item.SizeBytes)
+}
+
+// resolveCurrentMode returns the current execution mode for a deletion job.
+// When the job has a DiskGroupID, it looks up the per-group mode. Falls back
+// to DefaultDiskGroupMode from preferences if the group lookup fails or the
+// job has no group. Returns "" if the mode could not be determined.
+func (s *DeletionService) resolveCurrentMode(diskGroupID *uint) string {
+	if diskGroupID != nil && s.diskGroups != nil {
+		group, err := s.diskGroups.GetByID(*diskGroupID)
+		if err != nil {
+			// Group lookup failed (e.g., group deleted while jobs were queued).
+			// Return "" so the caller's "currentMode != ''" guard skips the
+			// comparison rather than using a potentially wrong fallback.
+			return ""
+		}
+		return group.Mode
+	}
+	// Fallback for jobs without a disk group (shouldn't happen for engine jobs)
+	if prefs, err := s.settings.GetPreferences(); err == nil {
+		return prefs.DefaultDiskGroupMode
+	}
+	return ""
 }
 
 // determineDryRunReason returns the structured reason for a dry-run.

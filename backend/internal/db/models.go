@@ -109,7 +109,7 @@ type PreferenceSet struct {
 	StaleContentDays          int       `gorm:"default:180;not null" json:"staleContentDays"`                                          // Days since last watch for "stale content" report
 	SunsetDays                int       `gorm:"default:30;not null" json:"sunsetDays"`                                                 // Default countdown period in days for sunset mode
 	SunsetLabel               string    `gorm:"default:'capacitarr-sunset';not null" json:"sunsetLabel"`                               // Label/tag applied to media server items in sunset queue
-	PosterOverlayEnabled      bool      `gorm:"default:false;not null" json:"posterOverlayEnabled"`                                    // Whether to apply countdown overlays to posters
+	PosterOverlayEnabled      bool      `gorm:"default:true;not null" json:"posterOverlayEnabled"`                                     // Whether to apply countdown overlays to posters
 	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
@@ -211,24 +211,25 @@ func (ApprovalQueueItem) TableName() string {
 // are time-driven (daily cron), not reconciled per engine cycle, and persist
 // across cycles regardless of threshold changes.
 type SunsetQueueItem struct {
-	ID                  uint      `gorm:"primarykey" json:"id"`
-	MediaName           string    `gorm:"index;not null" json:"mediaName"`
-	MediaType           string    `gorm:"not null" json:"mediaType"`                            // movie, show, season, episode, artist, book
-	TmdbID              *int      `gorm:"index" json:"tmdbId,omitempty"`                        // TMDb ID for media server label/poster targeting; nil if not matched
-	IntegrationID       uint      `gorm:"not null" json:"integrationId"`                        // FK to IntegrationConfig
-	ExternalID          string    `gorm:"not null;default:''" json:"externalId"`                // *arr external ID
-	SizeBytes           int64     `gorm:"not null;default:0" json:"sizeBytes"`                  // File size in bytes
-	Score               float64   `gorm:"not null;default:0" json:"score"`                      // Score at time of scheduling
-	ScoreDetails        string    `gorm:"type:text" json:"scoreDetails"`                        // JSON-encoded score factors
-	PosterURL           string    `json:"posterUrl,omitempty"`                                  // Original poster URL from *arr
-	DiskGroupID         uint      `gorm:"index;not null" json:"diskGroupId"`                    // FK to DiskGroup
-	CollectionGroup     string    `gorm:"not null;default:''" json:"collectionGroup,omitempty"` // Collection deletion group
-	Trigger             string    `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user"
-	DeletionDate        time.Time `gorm:"index;not null" json:"deletionDate"`                   // When to hand to DeletionService
-	LabelApplied        bool      `gorm:"not null;default:false" json:"labelApplied"`           // Whether sunset label has been applied to media server
-	PosterOverlayActive bool      `gorm:"not null;default:false" json:"posterOverlayActive"`    // Whether an overlay poster is currently uploaded
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	ID                  uint       `gorm:"primarykey" json:"id"`
+	MediaName           string     `gorm:"index;not null" json:"mediaName"`
+	MediaType           string     `gorm:"not null" json:"mediaType"`                            // movie, show, season, episode, artist, book
+	TmdbID              *int       `gorm:"index" json:"tmdbId,omitempty"`                        // TMDb ID for media server label/poster targeting; nil if not matched
+	IntegrationID       uint       `gorm:"not null" json:"integrationId"`                        // FK to IntegrationConfig
+	ExternalID          string     `gorm:"not null;default:''" json:"externalId"`                // *arr external ID
+	SizeBytes           int64      `gorm:"not null;default:0" json:"sizeBytes"`                  // File size in bytes
+	Score               float64    `gorm:"not null;default:0" json:"score"`                      // Score at time of scheduling
+	ScoreDetails        string     `gorm:"type:text" json:"scoreDetails"`                        // JSON-encoded score factors
+	PosterURL           string     `json:"posterUrl,omitempty"`                                  // Original poster URL from *arr
+	DiskGroupID         uint       `gorm:"index;not null" json:"diskGroupId"`                    // FK to DiskGroup
+	CollectionGroup     string     `gorm:"not null;default:''" json:"collectionGroup,omitempty"` // Collection deletion group
+	Trigger             string     `gorm:"not null;default:'engine'" json:"trigger"`             // "engine", "user"
+	DeletionDate        time.Time  `gorm:"index;not null" json:"deletionDate"`                   // When to hand to DeletionService
+	LabelApplied        bool       `gorm:"not null;default:false" json:"labelApplied"`           // Whether sunset label has been applied to media server
+	PosterOverlayActive bool       `gorm:"not null;default:false" json:"posterOverlayActive"`    // Whether an overlay poster is currently uploaded
+	ExpiredAt           *time.Time `json:"expiredAt,omitempty"`                                  // Non-nil when countdown expired and item was handed to DeletionService; item remains in queue for visibility
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
 // TableName returns the database table name for SunsetQueueItem.

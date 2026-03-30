@@ -122,39 +122,6 @@
       </div>
     </UiCardHeader>
     <UiCardContent class="pt-5 space-y-6">
-      <!-- Execution Mode -->
-      <div class="space-y-3">
-        <div class="flex items-center gap-2">
-          <UiLabel>{{ $t('settings.executionMode') }}</UiLabel>
-          <SaveIndicator :status="saveStatus.defaultDiskGroupMode ?? 'idle'" />
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button
-            v-for="mode in executionModes"
-            :key="mode.value"
-            data-slot="execution-mode-card"
-            :data-active="engineExecutionMode === mode.value"
-            class="px-4 py-3 rounded-xl border-2 text-left transition-all"
-            :class="
-              engineExecutionMode === mode.value
-                ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
-                : 'border-border hover:border-border'
-            "
-            @click="setExecutionMode(mode.value)"
-          >
-            <div
-              class="text-sm font-medium"
-              :class="engineExecutionMode === mode.value ? 'text-primary' : ''"
-            >
-              {{ mode.label }}
-            </div>
-            <div class="text-xs text-muted-foreground mt-0.5">
-              {{ mode.description }}
-            </div>
-          </button>
-        </div>
-      </div>
-
       <!-- Score Tiebreaker + Snooze Duration — side by side -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <!-- Score Tiebreaker -->
@@ -233,30 +200,101 @@
       <UiCardDescription>{{ $t('settings.sunsetSettingsDesc') }}</UiCardDescription>
     </UiCardHeader>
     <UiCardContent class="space-y-5">
-      <div class="flex items-center justify-between">
-        <div>
-          <UiLabel>{{ $t('settings.posterOverlay') }}</UiLabel>
-          <p class="text-xs text-muted-foreground mt-0.5">
+      <!-- Sunset Days -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.sunsetDays') }}</UiLabel>
+            <SaveIndicator :status="saveStatus.sunsetDays ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.sunsetDaysDesc') }}
+          </p>
+          <UiSelect
+            :model-value="String(sunsetDays)"
+            @update:model-value="
+              (v: AcceptableValue) => {
+                sunsetDays = Number(v);
+                autoSavePreference('sunsetDays', 'sunsetDays', Number(v));
+              }
+            "
+          >
+            <UiSelectTrigger class="w-full">
+              <UiSelectValue placeholder="Select duration" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem value="7">7 days</UiSelectItem>
+              <UiSelectItem value="14">14 days</UiSelectItem>
+              <UiSelectItem value="21">21 days</UiSelectItem>
+              <UiSelectItem value="30">30 days</UiSelectItem>
+              <UiSelectItem value="45">45 days</UiSelectItem>
+              <UiSelectItem value="60">60 days</UiSelectItem>
+              <UiSelectItem value="90">90 days</UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </div>
+
+        <!-- Sunset Label -->
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.sunsetLabel') }}</UiLabel>
+            <SaveIndicator :status="saveStatus.sunsetLabel ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.sunsetLabelDesc') }}
+          </p>
+          <UiInput
+            :model-value="sunsetLabel"
+            placeholder="capacitarr-sunset"
+            @update:model-value="
+              (v: string | number) => {
+                sunsetLabel = String(v);
+              }
+            "
+            @change="autoSavePreference('sunsetLabel', 'sunsetLabel', sunsetLabel)"
+          />
+        </div>
+      </div>
+
+      <!-- Poster Overlay Toggle + Restore -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.posterOverlay') }}</UiLabel>
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
             {{ $t('settings.posterOverlayDesc') }}
           </p>
+          <UiSwitch
+            :checked="posterOverlayEnabled"
+            @update:checked="
+              (v: boolean) => {
+                posterOverlayEnabled = v;
+                autoSavePreference('posterOverlay', 'posterOverlayEnabled', v);
+              }
+            "
+          />
         </div>
-        <UiSwitch
-          :checked="posterOverlayEnabled"
-          @update:checked="
-            (v: boolean) => {
-              posterOverlayEnabled = v;
-              autoSavePreference('posterOverlay', 'posterOverlayEnabled', v);
-            }
-          "
-        />
+        <div class="space-y-1.5">
+          <UiLabel>{{ $t('settings.refreshPosters') }}</UiLabel>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.refreshPostersDesc') }}
+          </p>
+          <UiButton variant="outline" size="sm" @click="refreshAllPosters">
+            {{ $t('settings.refreshPosters') }}
+          </UiButton>
+        </div>
       </div>
-      <div>
-        <UiButton variant="destructive" size="sm" @click="restoreAllPosters">
-          {{ $t('settings.restoreAllPosters') }}
-        </UiButton>
-        <p class="text-xs text-muted-foreground mt-1">
-          {{ $t('settings.restoreAllPostersDesc') }}
-        </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <UiLabel>{{ $t('settings.restoreAllPosters') }}</UiLabel>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.restoreAllPostersDesc') }}
+          </p>
+          <UiButton variant="destructive" size="sm" @click="restoreAllPosters">
+            {{ $t('settings.restoreAllPosters') }}
+          </UiButton>
+        </div>
       </div>
     </UiCardContent>
   </UiCard>
@@ -265,13 +303,7 @@
 <script setup lang="ts">
 import { MonitorIcon, CogIcon } from 'lucide-vue-next';
 import type { PreferenceSet } from '~/types/api';
-import {
-  MODE_DRY_RUN,
-  MODE_APPROVAL,
-  MODE_AUTO,
-  MODE_SUNSET,
-  TIEBREAKER_SIZE_DESC,
-} from '~/constants';
+import { TIEBREAKER_SIZE_DESC } from '~/constants';
 import type { AcceptableValue } from 'reka-ui';
 import SaveIndicator from '~/components/settings/SaveIndicator.vue';
 
@@ -286,26 +318,15 @@ const {
 } = useDisplayPrefs();
 const { saveStatus, initFields, autoSavePreference } = useAutoSave();
 
-initFields(['defaultDiskGroupMode', 'tiebreaker', 'snoozeDuration', 'posterOverlay']);
+initFields(['tiebreaker', 'snoozeDuration', 'posterOverlay', 'sunsetLabel', 'sunsetDays']);
 const { addToast } = useToast();
 
 // Engine behavior state
-const engineExecutionMode = ref<string>(MODE_DRY_RUN);
 const engineTiebreakerMethod = ref<string>(TIEBREAKER_SIZE_DESC);
 const snoozeDurationHours = ref(24);
-const posterOverlayEnabled = ref(false);
-
-const executionModes = [
-  { value: MODE_DRY_RUN, label: 'Dry Run', description: 'Log only, no deletions' },
-  { value: MODE_APPROVAL, label: 'Approval', description: 'Queue for manual approval' },
-  { value: MODE_AUTO, label: 'Automatic', description: 'Delete automatically' },
-  { value: MODE_SUNSET, label: 'Sunset', description: 'Countdown before deletion' },
-];
-
-function setExecutionMode(mode: string) {
-  engineExecutionMode.value = mode;
-  autoSavePreference('defaultDiskGroupMode', 'defaultDiskGroupMode', mode);
-}
+const posterOverlayEnabled = ref(true);
+const sunsetLabel = ref('capacitarr-sunset');
+const sunsetDays = ref(30);
 
 // Watch tiebreaker — immediate save on select change
 watch(engineTiebreakerMethod, (newVal, oldVal) => {
@@ -318,9 +339,6 @@ watch(engineTiebreakerMethod, (newVal, oldVal) => {
 async function fetchPreferences() {
   try {
     const prefs = (await api('/api/v1/preferences')) as PreferenceSet;
-    if (prefs?.defaultDiskGroupMode) {
-      engineExecutionMode.value = prefs.defaultDiskGroupMode;
-    }
     if (prefs?.tiebreakerMethod) {
       engineTiebreakerMethod.value = prefs.tiebreakerMethod;
     }
@@ -330,8 +348,25 @@ async function fetchPreferences() {
     if (prefs?.posterOverlayEnabled !== undefined) {
       posterOverlayEnabled.value = prefs.posterOverlayEnabled;
     }
+    if (prefs?.sunsetLabel) {
+      sunsetLabel.value = prefs.sunsetLabel;
+    }
+    if (prefs?.sunsetDays !== undefined) {
+      sunsetDays.value = prefs.sunsetDays;
+    }
   } catch (err) {
     console.warn('[SettingsGeneral] fetchPreferences failed:', err);
+  }
+}
+
+async function refreshAllPosters() {
+  try {
+    const result = (await api('/api/v1/sunset-queue/refresh-posters', {
+      method: 'POST',
+    })) as { updated: number };
+    addToast(`Refreshed ${result.updated} poster(s)`, 'success');
+  } catch {
+    addToast('Failed to refresh posters', 'error');
   }
 }
 

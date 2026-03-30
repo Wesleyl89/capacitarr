@@ -759,6 +759,53 @@ func (j *JellyfinClient) RestorePosterImage(itemID string) error {
 	return DoAPIRequestWithBody("DELETE", fullURL, nil, "X-Emby-Token", j.APIKey)
 }
 
+// GetTMDbToItemIDMap builds a mapping from TMDb ID to Jellyfin item ID by
+// scanning all movies and series. Used by SunsetService to translate TMDb IDs
+// from *arr items into Jellyfin native IDs for label operations.
+func (j *JellyfinClient) GetTMDbToItemIDMap() (map[int]string, error) {
+	adminID, err := j.GetAdminUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Jellyfin admin user for TMDb mapping: %w", err)
+	}
+
+	result := make(map[int]string)
+	startIndex := 0
+	pageSize := 500
+
+	for {
+		endpoint := fmt.Sprintf(
+			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds&StartIndex=%d&Limit=%d",
+			adminID, startIndex, pageSize,
+		)
+		body, fetchErr := j.doRequest(endpoint)
+		if fetchErr != nil {
+			return result, fmt.Errorf("failed to fetch Jellyfin items for TMDb mapping: %w", fetchErr)
+		}
+
+		var resp struct {
+			Items            []jellyfinItem `json:"Items"`
+			TotalRecordCount int            `json:"TotalRecordCount"`
+		}
+		if parseErr := json.Unmarshal(body, &resp); parseErr != nil {
+			return result, fmt.Errorf("failed to parse Jellyfin items for TMDb mapping: %w", parseErr)
+		}
+
+		for _, item := range resp.Items {
+			tmdbID := extractTMDbID(item.ProviderIDs)
+			if tmdbID > 0 {
+				result[tmdbID] = item.ID
+			}
+		}
+
+		startIndex += len(resp.Items)
+		if startIndex >= resp.TotalRecordCount || len(resp.Items) == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
 var _ Connectable = (*JellyfinClient)(nil)
 var _ WatchDataProvider = (*JellyfinClient)(nil)
 var _ WatchlistProvider = (*JellyfinClient)(nil)

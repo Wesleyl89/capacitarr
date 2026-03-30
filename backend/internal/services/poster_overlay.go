@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"capacitarr/internal/db"
@@ -27,7 +26,8 @@ type PosterOverlayService struct {
 
 // PosterDeps holds dependencies for poster overlay operations.
 type PosterDeps struct {
-	Registry *integrations.IntegrationRegistry
+	Registry       *integrations.IntegrationRegistry
+	TMDbToNativeID map[uint]map[int]string // integrationID → (TMDb ID → native ID); built via IntegrationRegistry.BuildTMDbToNativeIDMaps()
 }
 
 // NewPosterOverlayService creates a new poster overlay service with a filesystem
@@ -47,17 +47,26 @@ func (s *PosterOverlayService) UpdateOverlay(item db.SunsetQueueItem, daysRemain
 		return nil
 	}
 
-	tmdbStr := strconv.Itoa(*item.TmdbID)
 	managers := deps.Registry.PosterManagers()
 	if len(managers) == 0 {
 		return nil
 	}
 
 	for integrationID, mgr := range managers {
+		// Resolve TMDb ID → native ID for this specific integration
+		idMap := deps.TMDbToNativeID[integrationID]
+		if idMap == nil {
+			continue
+		}
+		nativeID, ok := idMap[*item.TmdbID]
+		if !ok {
+			continue
+		}
+
 		cacheKey := s.cacheKeyForItem(integrationID, item)
 
 		// Download the current poster from the media server
-		currentData, _, dlErr := mgr.GetPosterImage(tmdbStr)
+		currentData, _, dlErr := mgr.GetPosterImage(nativeID)
 		if dlErr != nil {
 			slog.Warn("Failed to download poster for overlay",
 				"component", "services", "mediaName", item.MediaName,
@@ -113,7 +122,7 @@ func (s *PosterOverlayService) UpdateOverlay(item db.SunsetQueueItem, daysRemain
 		}
 
 		// Upload overlay
-		if err := mgr.UploadPosterImage(tmdbStr, overlayData, "image/jpeg"); err != nil {
+		if err := mgr.UploadPosterImage(nativeID, overlayData, "image/jpeg"); err != nil {
 			slog.Warn("Failed to upload poster overlay",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -141,15 +150,24 @@ func (s *PosterOverlayService) RestoreOriginal(item db.SunsetQueueItem, deps Pos
 		return nil
 	}
 
-	tmdbStr := strconv.Itoa(*item.TmdbID)
 	managers := deps.Registry.PosterManagers()
 
 	for integrationID, mgr := range managers {
+		// Resolve TMDb ID → native ID for this specific integration
+		idMap := deps.TMDbToNativeID[integrationID]
+		if idMap == nil {
+			continue
+		}
+		nativeID, ok := idMap[*item.TmdbID]
+		if !ok {
+			continue
+		}
+
 		cacheKey := s.cacheKeyForItem(integrationID, item)
 		originalData, found, err := s.cache.Get(cacheKey)
 		if err != nil || !found {
 			// No cached original — try to restore via the media server's native restore
-			if restoreErr := mgr.RestorePosterImage(tmdbStr); restoreErr != nil {
+			if restoreErr := mgr.RestorePosterImage(nativeID); restoreErr != nil {
 				slog.Warn("Failed to restore poster via media server",
 					"component", "services", "mediaName", item.MediaName,
 					"integrationID", integrationID, "error", restoreErr)
@@ -158,7 +176,7 @@ func (s *PosterOverlayService) RestoreOriginal(item db.SunsetQueueItem, deps Pos
 		}
 
 		// Upload the cached original back
-		if err := mgr.UploadPosterImage(tmdbStr, originalData, "image/jpeg"); err != nil {
+		if err := mgr.UploadPosterImage(nativeID, originalData, "image/jpeg"); err != nil {
 			slog.Warn("Failed to upload original poster",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -179,11 +197,12 @@ func (s *PosterOverlayService) RestoreOriginal(item db.SunsetQueueItem, deps Pos
 }
 
 // UpdateAll updates poster overlays for all sunset queue items.
-// Called by the daily cron job.
-func (s *PosterOverlayService) UpdateAll(sunset *SunsetService, deps PosterDeps) error {
+// Called by the daily cron job and the force-refresh route.
+// Returns the number of items successfully updated.
+func (s *PosterOverlayService) UpdateAll(sunset *SunsetService, deps PosterDeps) (int, error) {
 	items, err := sunset.ListAll()
 	if err != nil {
-		return fmt.Errorf("list sunset items: %w", err)
+		return 0, fmt.Errorf("list sunset items: %w", err)
 	}
 
 	updated := 0
@@ -200,7 +219,7 @@ func (s *PosterOverlayService) UpdateAll(sunset *SunsetService, deps PosterDeps)
 	if updated > 0 {
 		slog.Info("Updated poster overlays", "component", "services", "count", updated)
 	}
-	return nil
+	return updated, nil
 }
 
 // RestoreAll restores original posters for all sunset queue items that have

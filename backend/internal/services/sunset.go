@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"capacitarr/internal/db"
@@ -28,11 +27,12 @@ type SunsetService struct {
 // Follows the same pattern as ExecuteApprovalDeps in approval.go.
 // SettingsReader is the existing interface defined in deletion.go — reuse it.
 type SunsetDeps struct {
-	Registry      *integrations.IntegrationRegistry
-	Deletion      *DeletionService
-	Engine        *EngineService
-	Settings      SettingsReader
-	PosterOverlay *PosterOverlayService // Optional: if set, posters are restored on cancel/expire/escalate
+	Registry       *integrations.IntegrationRegistry
+	Deletion       *DeletionService
+	Engine         *EngineService
+	Settings       SettingsReader
+	PosterOverlay  *PosterOverlayService   // Optional: if set, posters are restored on cancel/expire/escalate
+	TMDbToNativeID map[uint]map[int]string // integrationID → (TMDb ID → native ID); built once per cycle via IntegrationRegistry.BuildTMDbToNativeIDMaps()
 }
 
 // NewSunsetService creates a new sunset queue service.
@@ -50,7 +50,7 @@ func (s *SunsetService) QueueSunset(item db.SunsetQueueItem, deps SunsetDeps) er
 	// Apply label to media servers
 	if deps.Registry != nil && deps.Settings != nil {
 		if prefs, err := deps.Settings.GetPreferences(); err == nil && prefs.SunsetLabel != "" {
-			if s.applyLabel(item, prefs.SunsetLabel, deps.Registry) {
+			if s.applyLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID) {
 				item.LabelApplied = true
 				s.db.Model(&item).Update("label_applied", true)
 			}
@@ -102,7 +102,7 @@ func (s *SunsetService) BulkQueueSunset(items []db.SunsetQueueItem, deps SunsetD
 	// Apply labels outside the transaction (media server calls shouldn't block DB)
 	if deps.Registry != nil && prefs.SunsetLabel != "" {
 		for i := range items {
-			if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry) {
+			if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID) {
 				items[i].LabelApplied = true
 				s.db.Model(&items[i]).Update("label_applied", true)
 			}
@@ -133,7 +133,7 @@ func (s *SunsetService) Cancel(entryID uint, deps SunsetDeps) error {
 
 	// Restore poster overlay
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry}); err != nil {
+		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
 			slog.Warn("Failed to restore poster on cancel",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
@@ -142,7 +142,7 @@ func (s *SunsetService) Cancel(entryID uint, deps SunsetDeps) error {
 	// Remove label from media servers
 	if item.LabelApplied && deps.Registry != nil && deps.Settings != nil {
 		if prefs, err := deps.Settings.GetPreferences(); err == nil && prefs.SunsetLabel != "" {
-			s.removeLabel(item, prefs.SunsetLabel, deps.Registry)
+			s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
 		}
 	}
 
@@ -196,10 +196,11 @@ func (s *SunsetService) ListAll() ([]db.SunsetQueueItem, error) {
 	return items, err
 }
 
-// GetExpired returns items where deletion_date <= now.
+// GetExpired returns items where deletion_date <= now that have not already
+// been handed to DeletionService (expired_at IS NULL).
 func (s *SunsetService) GetExpired() ([]db.SunsetQueueItem, error) {
 	var items []db.SunsetQueueItem
-	err := s.db.Where("deletion_date <= ?", time.Now().UTC()).Order("deletion_date ASC").Find(&items).Error
+	err := s.db.Where("deletion_date <= ? AND expired_at IS NULL", time.Now().UTC()).Order("deletion_date ASC").Find(&items).Error
 	return items, err
 }
 
@@ -261,9 +262,9 @@ func (s *SunsetService) Escalate(diskGroupID uint, targetBytes int64, deps Sunse
 		}
 	}
 
-	// Step 1: Delete already-expired items first
+	// Step 1: Delete already-expired items first (skip those already handed off)
 	var expired []db.SunsetQueueItem
-	s.db.Where("disk_group_id = ? AND deletion_date <= ?", diskGroupID, time.Now().UTC()).
+	s.db.Where("disk_group_id = ? AND deletion_date <= ? AND expired_at IS NULL", diskGroupID, time.Now().UTC()).
 		Order("deletion_date ASC").Find(&expired)
 
 	for _, item := range expired {
@@ -283,7 +284,7 @@ func (s *SunsetService) Escalate(diskGroupID uint, targetBytes int64, deps Sunse
 
 	// Step 2: Delete oldest items (longest in queue, most warning given)
 	var oldest []db.SunsetQueueItem
-	s.db.Where("disk_group_id = ? AND deletion_date > ?", diskGroupID, time.Now().UTC()).
+	s.db.Where("disk_group_id = ? AND deletion_date > ? AND expired_at IS NULL", diskGroupID, time.Now().UTC()).
 		Order("created_at ASC").Find(&oldest)
 
 	for _, item := range oldest {
@@ -307,11 +308,21 @@ func (s *SunsetService) CancelAll(deps SunsetDeps) (int, error) {
 		return 0, err
 	}
 
+	for _, item := range items {
+		// Restore poster overlays before clearing
+		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
+			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+				slog.Warn("Failed to restore poster during clear-all",
+					"component", "services", "mediaName", item.MediaName, "error", err)
+			}
+		}
+	}
+
 	if deps.Registry != nil && deps.Settings != nil {
 		if prefs, prefsErr := deps.Settings.GetPreferences(); prefsErr == nil && prefs.SunsetLabel != "" {
 			for _, item := range items {
 				if item.LabelApplied {
-					s.removeLabel(item, prefs.SunsetLabel, deps.Registry)
+					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
 				}
 			}
 		}
@@ -331,11 +342,21 @@ func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps)
 		return 0, err
 	}
 
+	for _, item := range items {
+		// Restore poster overlays before clearing
+		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
+			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+				slog.Warn("Failed to restore poster during disk-group clear",
+					"component", "services", "mediaName", item.MediaName, "error", err)
+			}
+		}
+	}
+
 	if deps.Registry != nil && deps.Settings != nil {
 		if prefs, prefsErr := deps.Settings.GetPreferences(); prefsErr == nil && prefs.SunsetLabel != "" {
 			for _, item := range items {
 				if item.LabelApplied {
-					s.removeLabel(item, prefs.SunsetLabel, deps.Registry)
+					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
 				}
 			}
 		}
@@ -346,6 +367,13 @@ func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps)
 		return 0, result.Error
 	}
 	return int(result.RowsAffected), nil
+}
+
+// RemoveCompleted hard-deletes a sunset queue item after the file has been
+// successfully deleted by DeletionService. No label removal or poster restore
+// is needed — processExpiredItem already handled those before handoff.
+func (s *SunsetService) RemoveCompleted(id uint) error {
+	return s.db.Delete(&db.SunsetQueueItem{}, id).Error
 }
 
 // IsSunsetted checks if a media item is already in the sunset queue.
@@ -383,9 +411,14 @@ func (s *SunsetService) MigrateLabel(oldLabel, newLabel string, registry *integr
 		return fmt.Errorf("list labeled items: %w", err)
 	}
 
+	var tmdbMaps map[uint]map[int]string
+	if registry != nil {
+		tmdbMaps = registry.BuildTMDbToNativeIDMaps()
+	}
+
 	for _, item := range items {
-		s.removeLabel(item, oldLabel, registry)
-		s.applyLabel(item, newLabel, registry)
+		s.removeLabel(item, oldLabel, registry, tmdbMaps)
+		s.applyLabel(item, newLabel, registry, tmdbMaps)
 	}
 
 	slog.Info("Migrated sunset labels", "component", "services",
@@ -398,14 +431,21 @@ func (s *SunsetService) MigrateLabel(oldLabel, newLabel string, registry *integr
 // applyLabel applies the sunset label to an item across all LabelManager-capable
 // media servers. Returns true if at least one media server succeeded.
 // Errors are logged but not propagated (label is best-effort).
-func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry) bool {
+func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, tmdbMaps map[uint]map[int]string) bool {
 	if registry == nil || item.TmdbID == nil {
 		return false
 	}
-	itemID := strconv.Itoa(*item.TmdbID)
 	anySuccess := false
 	for integrationID, mgr := range registry.LabelManagers() {
-		if err := mgr.AddLabel(itemID, label); err != nil {
+		idMap := tmdbMaps[integrationID]
+		if idMap == nil {
+			continue
+		}
+		nativeID, ok := idMap[*item.TmdbID]
+		if !ok {
+			continue
+		}
+		if err := mgr.AddLabel(nativeID, label); err != nil {
 			slog.Warn("Failed to apply sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -425,13 +465,20 @@ func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, regist
 
 // removeLabel removes the sunset label from an item across all LabelManager-capable
 // media servers.
-func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry) {
+func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, tmdbMaps map[uint]map[int]string) {
 	if registry == nil || item.TmdbID == nil {
 		return
 	}
-	itemID := strconv.Itoa(*item.TmdbID)
 	for integrationID, mgr := range registry.LabelManagers() {
-		if err := mgr.RemoveLabel(itemID, label); err != nil {
+		idMap := tmdbMaps[integrationID]
+		if idMap == nil {
+			continue
+		}
+		nativeID, ok := idMap[*item.TmdbID]
+		if !ok {
+			continue
+		}
+		if err := mgr.RemoveLabel(nativeID, label); err != nil {
 			slog.Warn("Failed to remove sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -447,16 +494,23 @@ func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, regis
 	}
 }
 
-// processExpiredItem handles a single item: restores poster, removes label,
-// queues for deletion, publishes event, and deletes from sunset queue.
 // processExpiredItem handles a single expired/escalated item: restores poster,
-// removes label, queues for deletion, publishes event, and removes from sunset queue.
-// If deletion handoff fails (no registry or deleter unavailable), the item is NOT
-// removed from the queue — it will be retried on the next cron run.
+// removes label, queues for deletion, and marks as expired. The item is NOT
+// deleted from sunset_queue — it remains visible in the dashboard until the
+// user removes it via Cancel or Clear All. The ExpiredAt timestamp prevents
+// re-processing on subsequent engine cycles and cron runs.
+//
+// If deletion handoff fails (no registry or deleter unavailable), the item is
+// NOT marked expired — it will be retried on the next cron run.
 func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.PreferenceSet, deps SunsetDeps) bool {
+	// Skip if already expired (handed to DeletionService in a prior cycle)
+	if item.ExpiredAt != nil {
+		return false
+	}
+
 	// Restore poster overlay before deletion
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry}); err != nil {
+		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
 			slog.Warn("Failed to restore poster before expiry/escalation",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
@@ -464,7 +518,7 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 
 	// Remove label
 	if item.LabelApplied && deps.Registry != nil && prefs.SunsetLabel != "" {
-		s.removeLabel(item, prefs.SunsetLabel, deps.Registry)
+		s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
 	}
 
 	// Hand off to DeletionService — if this fails, keep item in queue for retry
@@ -489,11 +543,12 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 			SizeBytes:  item.SizeBytes,
 			ExternalID: item.ExternalID,
 		},
-		DiskGroupID:     &item.DiskGroupID,
-		Trigger:         db.TriggerEngine,
-		CollectionGroup: item.CollectionGroup,
-		EnqueuedMode:    db.ModeSunset,
-		Score:           item.Score,
+		DiskGroupID:       &item.DiskGroupID,
+		Trigger:           db.TriggerEngine,
+		CollectionGroup:   item.CollectionGroup,
+		EnqueuedMode:      db.ModeSunset,
+		SunsetQueueItemID: item.ID,
+		Score:             item.Score,
 	})
 
 	s.bus.Publish(events.SunsetExpiredEvent{
@@ -503,8 +558,34 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 		SizeBytes:   item.SizeBytes,
 	})
 
-	s.db.Delete(&item)
+	// Mark as expired — item stays in sunset_queue for dashboard visibility
+	now := time.Now().UTC()
+	s.db.Model(&item).Update("expired_at", now)
 	return true
+}
+
+// ValidateSunsetConfig validates sunset-mode configuration on a disk group.
+// Returns an error if the configuration is invalid:
+//   - mode is "sunset" but sunsetPct is nil → must be explicitly configured
+//   - mode is "sunset" and sunsetPct >= targetPct → ordering violated
+//   - mode is "sunset" and sunsetPct >= thresholdPct → ordering violated
+//
+// This is called from the disk group update path to reject invalid configs
+// at save-time rather than silently failing at engine evaluation time.
+func ValidateSunsetConfig(mode string, sunsetPct *float64, targetPct, thresholdPct float64) error {
+	if mode != db.ModeSunset {
+		return nil
+	}
+	if sunsetPct == nil {
+		return fmt.Errorf("sunset mode requires a sunset threshold to be configured")
+	}
+	if *sunsetPct >= targetPct {
+		return fmt.Errorf("sunset threshold (%.1f%%) must be less than target threshold (%.1f%%)", *sunsetPct, targetPct)
+	}
+	if *sunsetPct >= thresholdPct {
+		return fmt.Errorf("sunset threshold (%.1f%%) must be less than critical threshold (%.1f%%)", *sunsetPct, thresholdPct)
+	}
+	return nil
 }
 
 // publishEscalationEvent publishes the escalation summary.

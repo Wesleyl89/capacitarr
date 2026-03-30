@@ -24,6 +24,12 @@ type RunAccumulator struct {
 	Protected   int64
 	FreedBytes  int64
 	Collections int64 // distinct collection group expansions
+
+	// tmdbMap caches the per-integration TMDb→NativeID maps for sunset label
+	// and poster operations. Built lazily on first use per poll cycle, shared
+	// across all sunset disk group evaluations to avoid redundant API calls.
+	tmdbMap     map[uint]map[int]string
+	tmdbMapInit bool
 }
 
 // Poller orchestrates periodic media library polling and capacity evaluation.

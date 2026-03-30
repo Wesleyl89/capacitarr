@@ -63,16 +63,14 @@ func RegisterDiskGroupRoutes(g *echo.Group, reg *services.Registry) {
 			}
 		}
 
-		// Validate sunset threshold ordering: sunsetPct < targetPct < thresholdPct
-		if req.Mode == db.ModeSunset && req.SunsetPct != nil {
-			if *req.SunsetPct >= req.TargetPct {
-				return apiError(c, http.StatusBadRequest, "Sunset threshold must be less than target threshold")
-			}
-		}
+		// Sunset threshold validation (sunsetPct < targetPct < thresholdPct, nil
+		// rejection for sunset mode) is handled in the service layer by
+		// ValidateSunsetConfig, called inside UpdateThresholds.
 
 		updated, err := reg.DiskGroup.UpdateThresholds(group.ID, req.ThresholdPct, req.TargetPct, req.TotalBytesOverride, req.Mode, req.SunsetPct)
 		if err != nil {
-			return apiError(c, http.StatusInternalServerError, "Failed to update disk group")
+			// Surface validation errors (from ValidateSunsetConfig) as 400, not 500.
+			return apiError(c, http.StatusBadRequest, err.Error())
 		}
 
 		return c.JSON(http.StatusOK, updated)

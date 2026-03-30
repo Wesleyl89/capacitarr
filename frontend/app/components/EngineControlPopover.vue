@@ -5,20 +5,11 @@
         variant="ghost"
         size="icon"
         aria-label="Engine controls"
-        class="relative"
         :class="isRunning ? 'text-primary animate-pulse' : ''"
       >
-        <!-- Mode icon: shield=dry-run, hand=approval, zap=auto -->
         <component
-          :is="isRunning ? LoaderCircleIcon : modeIcon"
+          :is="isRunning ? LoaderCircleIcon : PlayIcon"
           :class="['w-5 h-5', isRunning ? 'animate-spin' : '']"
-        />
-        <!-- Health status dot -->
-        <span
-          aria-live="polite"
-          :aria-label="isRunning ? 'Engine running' : 'Engine idle'"
-          class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-background"
-          :class="[statusDotColor, isRunning || runNowLoading ? 'animate-pulse' : '']"
         />
       </UiButton>
     </UiPopoverTrigger>
@@ -29,37 +20,6 @@
           <h4 class="font-semibold text-sm">
             {{ $t('engine.control') }}
           </h4>
-          <UiBadge
-            :variant="
-              executionMode === MODE_AUTO
-                ? 'destructive'
-                : executionMode === MODE_APPROVAL
-                  ? 'outline'
-                  : 'secondary'
-            "
-          >
-            {{ modeLabel(executionMode) }}
-          </UiBadge>
-        </div>
-
-        <!-- Mode Toggle -->
-        <div class="space-y-1.5">
-          <span class="text-xs text-muted-foreground font-medium">{{
-            $t('engine.executionMode')
-          }}</span>
-          <div class="flex gap-1">
-            <UiButton
-              v-for="mode in modes"
-              :key="mode.value"
-              :variant="executionMode === mode.value ? 'default' : 'outline'"
-              size="sm"
-              class="flex-1 text-xs"
-              :disabled="changingMode"
-              @click="handleModeChange(mode.value)"
-            >
-              {{ mode.label }}
-            </UiButton>
-          </div>
         </div>
 
         <!-- Stats -->
@@ -104,45 +64,15 @@
         <UiButton class="w-full" :disabled="runNowLoading" @click="triggerRunNow">
           <LoaderCircleIcon v-if="runNowLoading" class="w-4 h-4 animate-spin" />
           <PlayIcon v-else class="w-4 h-4" />
-          {{ executionMode === MODE_DRY_RUN ? $t('engine.dryRun') : $t('engine.runNow') }}
+          {{ $t('engine.runNow') }}
         </UiButton>
       </div>
     </UiPopoverContent>
   </UiPopover>
-
-  <!-- Auto mode confirmation dialog -->
-  <UiDialog :open="showAutoConfirm" @update:open="(v: boolean) => (showAutoConfirm = v)">
-    <UiDialogContent class="max-w-sm">
-      <UiDialogHeader>
-        <UiDialogTitle class="text-destructive">
-          {{ $t('engine.enableAutoMode') }}
-        </UiDialogTitle>
-      </UiDialogHeader>
-      <p class="text-sm text-muted-foreground">
-        {{ $t('engine.autoModeWarning') }}
-      </p>
-      <UiDialogFooter>
-        <UiButton variant="ghost" @click="showAutoConfirm = false">
-          {{ $t('common.cancel') }}
-        </UiButton>
-        <UiButton variant="destructive" @click="confirmAutoMode">
-          {{ $t('engine.enableAutoModeConfirm') }}
-        </UiButton>
-      </UiDialogFooter>
-    </UiDialogContent>
-  </UiDialog>
 </template>
 
 <script setup lang="ts">
-import {
-  ShieldIcon,
-  HandIcon,
-  ZapIcon,
-  ClockIcon,
-  PlayIcon,
-  LoaderCircleIcon,
-} from 'lucide-vue-next';
-import { MODE_DRY_RUN, MODE_APPROVAL, MODE_AUTO, MODE_SUNSET } from '~/constants';
+import { PlayIcon, LoaderCircleIcon } from 'lucide-vue-next';
 
 const { scaleIn } = useMotionPresets();
 
@@ -155,62 +85,15 @@ const props = withDefaults(
 );
 
 const {
-  executionMode,
   lastRunEpoch,
   lastRunEvaluated,
   lastRunCandidates,
   queueDepth,
   isRunning,
   runNowLoading,
-  changingMode,
-  modeLabel,
   fetchStats,
-  setMode,
   triggerRunNow,
 } = useEngineControl();
-
-const showAutoConfirm = ref(false);
-
-const modes = [
-  { value: MODE_DRY_RUN, label: 'Dry-Run' },
-  { value: MODE_APPROVAL, label: 'Approval' },
-  { value: MODE_AUTO, label: 'Auto' },
-  { value: MODE_SUNSET, label: 'Sunset' },
-];
-
-// Mode icon — distinct shape per mode, NOT color-coded
-const modeIcon = computed(() => {
-  switch (executionMode.value) {
-    case MODE_AUTO:
-      return ZapIcon; // ⚡ auto = lightning bolt
-    case MODE_APPROVAL:
-      return HandIcon; // ✋ manual review
-    case MODE_SUNSET:
-      return ClockIcon; // ⏰ sunset = countdown
-    default:
-      return ShieldIcon; // 🛡️ dry-run = protected/safe
-  }
-});
-
-// Health status dot — green=healthy, green+pulse=running, amber=loading
-const statusDotColor = computed(() => {
-  if (isRunning.value) return 'bg-primary';
-  if (runNowLoading.value) return 'bg-amber-500';
-  return 'bg-green-500';
-});
-
-function handleModeChange(mode: string) {
-  if (mode === MODE_AUTO) {
-    showAutoConfirm.value = true;
-  } else {
-    setMode(mode);
-  }
-}
-
-async function confirmAutoMode() {
-  showAutoConfirm.value = false;
-  await setMode(MODE_AUTO);
-}
 
 // Fetch stats on mount for initial hydration.
 // Ongoing updates arrive via SSE (engine_start / engine_complete / engine_error).

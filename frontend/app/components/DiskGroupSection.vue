@@ -27,6 +27,9 @@
             >
               {{ integ.type }}
             </UiBadge>
+            <UiBadge :variant="modeBadgeVariant" class="text-[10px] px-1.5 py-0">
+              {{ modeBadgeLabel }}
+            </UiBadge>
           </div>
           <span class="text-xs text-muted-foreground">
             {{ formatBytes(group.usedBytes) }} / {{ formatBytes(effectiveTotalBytes) }}
@@ -111,6 +114,7 @@
 <script setup lang="ts">
 import { HardDriveIcon, TrendingUpIcon, TrendingDownIcon, ClockIcon } from 'lucide-vue-next';
 import { formatBytes, diskStatusBgClass } from '~/utils/format';
+import { MODE_AUTO, MODE_APPROVAL, MODE_SUNSET } from '~/constants';
 import type { DiskGroup } from '~/types/api';
 
 const props = defineProps<{
@@ -120,6 +124,34 @@ const props = defineProps<{
 }>();
 
 const api = useApi();
+
+/** Mode badge variant — matches UiBadge styling convention. */
+const modeBadgeVariant = computed(() => {
+  switch (props.group.mode) {
+    case MODE_AUTO:
+      return 'destructive' as const;
+    case MODE_APPROVAL:
+      return 'outline' as const;
+    case MODE_SUNSET:
+      return 'secondary' as const;
+    default:
+      return 'secondary' as const;
+  }
+});
+
+/** Mode badge label — human-readable mode name. */
+const modeBadgeLabel = computed(() => {
+  switch (props.group.mode) {
+    case MODE_AUTO:
+      return 'Auto';
+    case MODE_APPROVAL:
+      return 'Approval';
+    case MODE_SUNSET:
+      return 'Sunset';
+    default:
+      return 'Dry-Run';
+  }
+});
 
 const { destructiveColor, successColor, colorAlpha } = useEChartsDefaults();
 

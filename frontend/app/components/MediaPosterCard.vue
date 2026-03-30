@@ -12,6 +12,7 @@ import {
   ZapIcon,
   LoaderCircleIcon,
   LayersIcon,
+  HourglassIcon,
 } from 'lucide-vue-next';
 
 const { gridItem } = useMotionPresets();
@@ -31,6 +32,8 @@ const props = defineProps<{
   queueStatus?: 'pending' | 'approved' | 'user_initiated' | 'deleting';
   /** Collection name if the item belongs to a collection (e.g., "Sonic the Hedgehog Collection") */
   collectionName?: string;
+  /** Sunset countdown — when set, an amber "Leaving in X days" banner is shown */
+  sunsetDaysRemaining?: number;
   /** Animation stagger delay in ms (e.g., index * 30). Defaults to 0. */
   animationDelay?: number;
 }>();
@@ -140,6 +143,14 @@ const queueStatusLabel = computed(() => {
     default:
       return '';
   }
+});
+
+/** Human-readable sunset countdown for the poster banner */
+const sunsetLabel = computed(() => {
+  if (props.sunsetDaysRemaining == null) return '';
+  if (props.sunsetDaysRemaining <= 0) return 'Last day';
+  if (props.sunsetDaysRemaining === 1) return 'Leaving tomorrow';
+  return `Leaving in ${props.sunsetDaysRemaining} days`;
 });
 </script>
 
@@ -271,6 +282,15 @@ const queueStatusLabel = computed(() => {
       <ZapIcon v-else-if="queueStatus === 'user_initiated'" class="w-3 h-3" />
       <LoaderCircleIcon v-else-if="queueStatus === 'deleting'" class="w-3 h-3 animate-spin" />
       <span>{{ queueStatusLabel }}</span>
+    </div>
+
+    <!-- Sunset countdown banner (above title gradient) -->
+    <div
+      v-if="sunsetDaysRemaining != null && !queueStatus"
+      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm bg-orange-500/70 text-white"
+    >
+      <HourglassIcon class="w-3 h-3" />
+      <span>{{ sunsetLabel }}</span>
     </div>
   </div>
 </template>

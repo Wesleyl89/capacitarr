@@ -263,9 +263,14 @@ func (p ssePayload) MarshalJSON() ([]byte, error) {
 
 	// Happy path: event serializes as a JSON object {…}
 	if len(eventJSON) >= 2 && eventJSON[0] == '{' && eventJSON[len(eventJSON)-1] == '}' {
+		inner := eventJSON[1 : len(eventJSON)-1] // content between { and }
 		result := make([]byte, 0, len(eventJSON)+len(escapedMsg)+14)
-		result = append(result, eventJSON[:len(eventJSON)-1]...) // strip trailing '}'
-		result = append(result, `,"message":`...)
+		result = append(result, '{')
+		if len(inner) > 0 {
+			result = append(result, inner...)
+			result = append(result, ',')
+		}
+		result = append(result, `"message":`...)
 		result = append(result, escapedMsg...)
 		result = append(result, '}')
 		return result, nil
