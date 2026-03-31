@@ -1,4 +1,9 @@
-## [2.3.1] - 2026-03-28
+## [2.3.2] - 2026-03-30
+
+### 🐛 Bug Fixes
+
+- Clear all bypasses rate limiter and show-level preview displays correctly ([a880ba4](https://github.com/Ghent/capacitarr/commit/a880ba40cfdab8ddae10a459d66f9c6f30f72be7))
+## [2.3.1-rc.2] - 2026-03-28
 
 ### 🐛 Bug Fixes
 

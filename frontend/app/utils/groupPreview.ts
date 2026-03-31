@@ -66,10 +66,13 @@ export function groupEvaluatedItems(items: EvaluatedItem[]): PreviewGroup[] {
     // Shows already handled in pass 1
   }
 
-  // Filter out show-level entries with no seasons — they're only useful as grouping parents
-  // A show with 0 seasons in the preview has nothing actionable to display
+  // Filter out show-level entries that are redundant grouping parents.
+  // A show with 0 seasons is only removed when season entries exist elsewhere
+  // in the data (normal mode). When showLevelOnly is enabled on the backend,
+  // no seasons exist at all, so show entries ARE the actionable items.
+  const hasAnySeason = groups.some((g) => g.seasons.length > 0);
   return groups
-    .filter((g) => !(g.entry.item?.type === 'show' && g.seasons.length === 0))
+    .filter((g) => !(g.entry.item?.type === 'show' && g.seasons.length === 0 && hasAnySeason))
     .map((g) => {
       if (g.seasons.length <= 1) return g;
       // Sort seasons by title with numeric awareness so

@@ -451,9 +451,20 @@ drainLoop:
 				// Process this one job (processJob will cancel it via mode-change guard),
 				// then cancel all remaining jobs in bulk without rate limiting.
 				s.processJob(job, &deferredAuditEntries)
-				s.cancelRemainingOnModeChange(job.EnqueuedMode, &deferredAuditEntries)
+				s.cancelRemaining("mode_change", &deferredAuditEntries)
 				break drainLoop
 			}
+		}
+
+		// Early-exit: if this job is in the cancellation skip-list (user
+		// clicked "clear all" while drain was active), process it without
+		// rate limiting and then fast-drain all remaining items. This avoids
+		// wasting ~3s per item on the rate limiter for 300+ items that will
+		// all be immediately cancelled by processJob().
+		if s.IsCancelled(job.Item.Title, string(job.Item.Type)) {
+			s.processJob(job, &deferredAuditEntries)
+			s.cancelRemaining("clear_all", &deferredAuditEntries)
+			break drainLoop
 		}
 
 		if err := s.rateLimiter.Wait(s.stopCtx); err != nil {
@@ -476,24 +487,25 @@ drainLoop:
 	}
 }
 
-// cancelRemainingOnModeChange drains remaining queued items and marks them
-// as cancelled due to an execution mode change. Called by drainAll() when
-// it detects the mode changed mid-drain, to avoid wasting time on the
-// rate limiter for items that would all be cancelled by processJob() anyway.
-func (s *DeletionService) cancelRemainingOnModeChange(enqueuedMode string, deferredAuditEntries *[]db.AuditLogEntry) {
+// cancelRemaining drains all remaining queued items and processes them
+// without rate limiting. Each item's cancellation is handled by processJob()
+// which checks the cancellation skip-list and mode-change guards.
+// Called by drainAll() when it detects that remaining items should be
+// cancelled immediately instead of trickling through the rate limiter
+// (e.g., user clicked "clear all", or execution mode changed mid-drain).
+func (s *DeletionService) cancelRemaining(reason string, deferredAuditEntries *[]db.AuditLogEntry) {
 	var cancelled int
 	for {
 		job, ok := s.dequeueJob()
 		if !ok {
 			break
 		}
-		// processJob() will detect the mode mismatch and cancel the item
 		s.processJob(job, deferredAuditEntries)
 		cancelled++
 	}
 	if cancelled > 0 {
-		slog.Info("Cancelled remaining queued items due to mode change",
-			"component", "services", "enqueuedMode", enqueuedMode, "cancelled", cancelled)
+		slog.Info("Cancelled remaining queued items",
+			"component", "services", "reason", reason, "cancelled", cancelled)
 	}
 }
 
