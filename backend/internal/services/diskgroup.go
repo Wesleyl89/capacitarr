@@ -378,3 +378,37 @@ func (s *DiskGroupService) ListWithIntegrations() ([]DiskGroupWithIntegrations, 
 
 	return result, nil
 }
+
+// SunsetLinkedIntegrationIDs returns the set of integration IDs that are linked
+// to at least one disk group with mode = "sunset". Used for batch override
+// computation in API list endpoints to avoid N+1 queries.
+func (s *DiskGroupService) SunsetLinkedIntegrationIDs() (map[uint]bool, error) {
+	var ids []uint
+	err := s.db.Table("disk_group_integrations").
+		Joins("JOIN disk_groups ON disk_groups.id = disk_group_integrations.disk_group_id").
+		Where("disk_groups.mode = ?", db.ModeSunset).
+		Pluck("disk_group_integrations.integration_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sunset-linked integration IDs: %w", err)
+	}
+	result := make(map[uint]bool, len(ids))
+	for _, id := range ids {
+		result[id] = true
+	}
+	return result, nil
+}
+
+// HasSunsetModeForIntegration returns true if the given integration is linked
+// to at least one disk group with mode = "sunset". Used by IntegrationService
+// to compute the virtual ShowLevelOnly override.
+func (s *DiskGroupService) HasSunsetModeForIntegration(integrationID uint) (bool, error) {
+	var count int64
+	err := s.db.Table("disk_group_integrations").
+		Joins("JOIN disk_groups ON disk_groups.id = disk_group_integrations.disk_group_id").
+		Where("disk_group_integrations.integration_id = ? AND disk_groups.mode = ?", integrationID, db.ModeSunset).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("failed to check sunset-mode linkage for integration %d: %w", integrationID, err)
+	}
+	return count > 0, nil
+}

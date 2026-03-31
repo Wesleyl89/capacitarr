@@ -766,3 +766,233 @@ func TestIntegrationService_PartialUpdate_NotFound(t *testing.T) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
+
+func TestIntegrationService_IsShowLevelOnlyEffective_StoredTrue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: true,
+	})
+
+	effective, err := svc.IsShowLevelOnlyEffective(1)
+	if err != nil {
+		t.Fatalf("IsShowLevelOnlyEffective error: %v", err)
+	}
+	if !effective {
+		t.Error("expected true when ShowLevelOnly is stored as true")
+	}
+}
+
+func TestIntegrationService_IsShowLevelOnlyEffective_SunsetOverride(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	effective, err := svc.IsShowLevelOnlyEffective(1)
+	if err != nil {
+		t.Fatalf("IsShowLevelOnlyEffective error: %v", err)
+	}
+	if !effective {
+		t.Error("expected true when ShowLevelOnly=false but linked to sunset-mode disk group")
+	}
+}
+
+func TestIntegrationService_IsShowLevelOnlyEffective_NoOverride(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeDryRun,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	effective, err := svc.IsShowLevelOnlyEffective(1)
+	if err != nil {
+		t.Fatalf("IsShowLevelOnlyEffective error: %v", err)
+	}
+	if effective {
+		t.Error("expected false when ShowLevelOnly=false and no sunset-mode disk groups")
+	}
+}
+
+func TestIntegrationService_GetWithOverrideState_NoOverride(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+
+	resp, err := svc.GetWithOverrideState(1)
+	if err != nil {
+		t.Fatalf("GetWithOverrideState error: %v", err)
+	}
+	if resp.ShowLevelOnlyOverride {
+		t.Error("expected ShowLevelOnlyOverride=false when not linked to sunset group")
+	}
+	if resp.ShowLevelOnlyOverrideReason != "" {
+		t.Errorf("expected empty override reason, got %q", resp.ShowLevelOnlyOverrideReason)
+	}
+}
+
+func TestIntegrationService_GetWithOverrideState_SunsetOverride(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	resp, err := svc.GetWithOverrideState(1)
+	if err != nil {
+		t.Fatalf("GetWithOverrideState error: %v", err)
+	}
+	if !resp.ShowLevelOnlyOverride {
+		t.Error("expected ShowLevelOnlyOverride=true when linked to sunset group")
+	}
+	if resp.ShowLevelOnlyOverrideReason == "" {
+		t.Error("expected non-empty override reason")
+	}
+	// Stored value must remain unchanged
+	if resp.ShowLevelOnly {
+		t.Error("expected stored ShowLevelOnly to remain false")
+	}
+}
+
+func TestIntegrationService_GetWithOverrideState_Radarr(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Serenity Radarr", Type: "radarr", URL: "http://localhost:7878",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	resp, err := svc.GetWithOverrideState(1)
+	if err != nil {
+		t.Fatalf("GetWithOverrideState error: %v", err)
+	}
+	if resp.ShowLevelOnlyOverride {
+		t.Error("expected ShowLevelOnlyOverride=false for Radarr regardless of disk group mode")
+	}
+}
+
+func TestIntegrationService_ListWithOverrideState(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	database.Create(&db.IntegrationConfig{
+		Name: "Serenity Radarr", Type: "radarr", URL: "http://localhost:7878",
+		APIKey: "key2", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1, 2})
+
+	results, err := svc.ListWithOverrideState()
+	if err != nil {
+		t.Fatalf("ListWithOverrideState error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Sonarr integration should have override
+	if !results[0].ShowLevelOnlyOverride {
+		t.Error("expected Sonarr integration to have ShowLevelOnlyOverride=true")
+	}
+	if results[0].ShowLevelOnlyOverrideReason == "" {
+		t.Error("expected Sonarr integration to have non-empty override reason")
+	}
+
+	// Radarr integration should NOT have override
+	if results[1].ShowLevelOnlyOverride {
+		t.Error("expected Radarr integration to have ShowLevelOnlyOverride=false")
+	}
+}
+
+func TestIntegrationService_IsShowLevelOnlyEffective_NonSonarr(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Serenity Radarr", Type: "radarr", URL: "http://localhost:7878",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	effective, err := svc.IsShowLevelOnlyEffective(1)
+	if err != nil {
+		t.Fatalf("IsShowLevelOnlyEffective error: %v", err)
+	}
+	if effective {
+		t.Error("expected false for non-Sonarr integration regardless of disk group mode")
+	}
+}

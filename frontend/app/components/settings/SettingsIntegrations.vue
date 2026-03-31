@@ -123,17 +123,23 @@
           class="pt-2 space-y-2 border-t border-border mt-2"
         >
           <!-- Show-Level Evaluation (Sonarr only) -->
-          <div v-if="integration.type === 'sonarr'" class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1.5">
-              <TvIcon class="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span class="text-xs">Show-Level Only</span>
+          <div v-if="integration.type === 'sonarr'" class="space-y-1">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <TvIcon class="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <span class="text-xs">Show-Level Only</span>
+              </div>
+              <UiSwitch
+                :model-value="integration.showLevelOnlyOverride || integration.showLevelOnly"
+                :disabled="integration.showLevelOnlyOverride"
+                @update:model-value="
+                  (val: boolean) => toggleCardSetting(integration, 'showLevelOnly', val)
+                "
+              />
             </div>
-            <UiSwitch
-              :model-value="integration.showLevelOnly"
-              @update:model-value="
-                (val: boolean) => toggleCardSetting(integration, 'showLevelOnly', val)
-              "
-            />
+            <p v-if="integration.showLevelOnlyOverride" class="text-xs text-amber-500">
+              {{ integration.showLevelOnlyOverrideReason }}
+            </p>
           </div>
           <!-- Collection Deletion (supported types) -->
           <div
@@ -314,12 +320,22 @@
                 <TvIcon class="w-4 h-4 text-blue-500 shrink-0" />
                 <UiLabel class="cursor-pointer">Show-Level Evaluation</UiLabel>
               </div>
-              <p class="text-xs text-muted-foreground mt-1">
+              <p
+                v-if="editingIntegration?.showLevelOnlyOverride"
+                class="text-xs text-amber-500 mt-1"
+              >
+                {{ editingIntegration.showLevelOnlyOverrideReason }}
+              </p>
+              <p v-else class="text-xs text-muted-foreground mt-1">
                 Evaluate and delete entire shows instead of individual seasons. When a show is
                 selected for deletion, all seasons and episodes are removed.
               </p>
             </div>
-            <UiSwitch v-model="formState.showLevelOnly" />
+            <UiSwitch
+              :model-value="editingIntegration?.showLevelOnlyOverride || formState.showLevelOnly"
+              :disabled="!!editingIntegration?.showLevelOnlyOverride"
+              @update:model-value="(val: boolean) => (formState.showLevelOnly = val)"
+            />
           </div>
           <NuxtLink
             to="/help#show-level-evaluation"

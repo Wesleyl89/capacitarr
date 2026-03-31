@@ -401,3 +401,79 @@ func TestDiskGroupService_RemoveAll_ClearsJunctionTable(t *testing.T) {
 		t.Errorf("expected 0 junction rows after RemoveAll, got %d", count)
 	}
 }
+
+func TestDiskGroupService_HasSunsetModeForIntegration_NotLinked(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	database.Create(&db.IntegrationConfig{Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+
+	has, err := svc.HasSunsetModeForIntegration(1)
+	if err != nil {
+		t.Fatalf("HasSunsetModeForIntegration error: %v", err)
+	}
+	if has {
+		t.Error("expected false when integration is not linked to any disk group")
+	}
+}
+
+func TestDiskGroupService_HasSunsetModeForIntegration_DryRunMode(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500, Mode: db.ModeDryRun})
+	database.Create(&db.IntegrationConfig{Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+	_ = svc.SyncIntegrationLinks(1, []uint{1})
+
+	has, err := svc.HasSunsetModeForIntegration(1)
+	if err != nil {
+		t.Fatalf("HasSunsetModeForIntegration error: %v", err)
+	}
+	if has {
+		t.Error("expected false when linked disk group is in dry-run mode")
+	}
+}
+
+func TestDiskGroupService_HasSunsetModeForIntegration_SunsetMode(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500, Mode: db.ModeSunset, SunsetPct: &sunsetPct})
+	database.Create(&db.IntegrationConfig{Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+	_ = svc.SyncIntegrationLinks(1, []uint{1})
+
+	has, err := svc.HasSunsetModeForIntegration(1)
+	if err != nil {
+		t.Fatalf("HasSunsetModeForIntegration error: %v", err)
+	}
+	if !has {
+		t.Error("expected true when linked disk group is in sunset mode")
+	}
+}
+
+func TestDiskGroupService_HasSunsetModeForIntegration_MultipleGroups_OneSunset(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media1", TotalBytes: 1000, UsedBytes: 500, Mode: db.ModeDryRun})
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media2", TotalBytes: 2000, UsedBytes: 1000, Mode: db.ModeSunset, SunsetPct: &sunsetPct})
+	database.Create(&db.IntegrationConfig{Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+
+	// Link integration to both disk groups
+	_ = svc.SyncIntegrationLinks(1, []uint{1})
+	_ = svc.SyncIntegrationLinks(2, []uint{1})
+
+	has, err := svc.HasSunsetModeForIntegration(1)
+	if err != nil {
+		t.Fatalf("HasSunsetModeForIntegration error: %v", err)
+	}
+	if !has {
+		t.Error("expected true when at least one linked disk group is in sunset mode")
+	}
+}

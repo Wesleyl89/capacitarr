@@ -81,6 +81,8 @@ var genreSuggestions = []integrations.NameValue{
 type DiskGroupManager interface {
 	Upsert(disk integrations.DiskSpace) (*db.DiskGroup, error)
 	RemoveAll() (int64, error)
+	HasSunsetModeForIntegration(integrationID uint) (bool, error)
+	SunsetLinkedIntegrationIDs() (map[uint]bool, error)
 }
 
 // IntegrationService manages integration CRUD, connection testing, and
@@ -654,6 +656,89 @@ func (s *IntegrationService) GetByID(id uint) (*db.IntegrationConfig, error) {
 		return nil, fmt.Errorf("failed to get integration: %w", err)
 	}
 	return &config, nil
+}
+
+// IsShowLevelOnlyEffective returns true when the engine should treat the
+// integration as show-level-only. This is the case when either:
+//   - The stored ShowLevelOnly setting is true, OR
+//   - The integration is Sonarr and linked to at least one sunset-mode disk group.
+//
+// The stored DB value is never mutated — this is a virtual override.
+func (s *IntegrationService) IsShowLevelOnlyEffective(id uint) (bool, error) {
+	cfg, err := s.GetByID(id)
+	if err != nil {
+		return false, err
+	}
+
+	// If the user explicitly enabled ShowLevelOnly, that takes precedence.
+	if cfg.ShowLevelOnly {
+		return true, nil
+	}
+
+	// Only Sonarr integrations emit season-level items.
+	if cfg.Type != string(integrations.IntegrationTypeSonarr) {
+		return false, nil
+	}
+
+	// Check if any linked disk group is in sunset mode.
+	return s.diskGroups.HasSunsetModeForIntegration(id)
+}
+
+// IntegrationResponse wraps an IntegrationConfig with computed override fields
+// for the API layer. The stored ShowLevelOnly value is never mutated.
+type IntegrationResponse struct {
+	db.IntegrationConfig
+	ShowLevelOnlyOverride       bool   `json:"showLevelOnlyOverride"`
+	ShowLevelOnlyOverrideReason string `json:"showLevelOnlyOverrideReason"`
+}
+
+// showLevelOverrideReason is the standard explanation returned when the
+// virtual show-level-only override is active.
+const showLevelOverrideReason = "Linked to sunset-mode disk group"
+
+// GetWithOverrideState returns a single integration enriched with the
+// computed ShowLevelOnly override state.
+func (s *IntegrationService) GetWithOverrideState(id uint) (*IntegrationResponse, error) {
+	cfg, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &IntegrationResponse{IntegrationConfig: *cfg}
+	if cfg.Type == string(integrations.IntegrationTypeSonarr) && !cfg.ShowLevelOnly {
+		hasSunset, sunsetErr := s.diskGroups.HasSunsetModeForIntegration(id)
+		if sunsetErr == nil && hasSunset {
+			resp.ShowLevelOnlyOverride = true
+			resp.ShowLevelOnlyOverrideReason = showLevelOverrideReason
+		}
+	}
+	return resp, nil
+}
+
+// ListWithOverrideState returns all integrations enriched with the computed
+// ShowLevelOnly override state. Uses a single batch query to determine which
+// integrations are linked to sunset-mode disk groups.
+func (s *IntegrationService) ListWithOverrideState() ([]IntegrationResponse, error) {
+	configs, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+
+	sunsetLinked, sunsetErr := s.diskGroups.SunsetLinkedIntegrationIDs()
+	if sunsetErr != nil {
+		// Non-fatal: return configs without override info rather than failing the list.
+		sunsetLinked = nil
+	}
+
+	result := make([]IntegrationResponse, len(configs))
+	for i, cfg := range configs {
+		result[i] = IntegrationResponse{IntegrationConfig: cfg}
+		if cfg.Type == string(integrations.IntegrationTypeSonarr) && !cfg.ShowLevelOnly && sunsetLinked[cfg.ID] {
+			result[i].ShowLevelOnlyOverride = true
+			result[i].ShowLevelOnlyOverrideReason = showLevelOverrideReason
+		}
+	}
+	return result, nil
 }
 
 // ListEnabled returns all integration configs where enabled = true.

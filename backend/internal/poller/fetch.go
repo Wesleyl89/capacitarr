@@ -86,10 +86,12 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 			}
 		}
 
-		// When ShowLevelOnly is enabled for this integration, drop season-level
-		// items so only show-level entries are scored and queued.
-		cfg, cfgErr := integrationSvc.GetByID(id)
-		if cfgErr == nil && cfg.ShowLevelOnly {
+		// When ShowLevelOnly is effectively enabled for this integration,
+		// drop season-level items so only show-level entries are scored and
+		// queued. The effective check considers both the stored setting and
+		// virtual overrides (e.g., linked sunset-mode disk groups).
+		effective, effErr := integrationSvc.IsShowLevelOnlyEffective(id)
+		if effErr == nil && effective {
 			originalCount := len(items)
 			filtered := items[:0]
 			for _, item := range items {

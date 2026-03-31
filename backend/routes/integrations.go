@@ -17,7 +17,7 @@ import (
 func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 	// List all integrations
 	g.GET("/integrations", func(c echo.Context) error {
-		configs, err := reg.Integration.List()
+		configs, err := reg.Integration.ListWithOverrideState()
 		if err != nil {
 			return apiError(c, http.StatusInternalServerError, "Failed to fetch integrations")
 		}
@@ -37,7 +37,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusBadRequest, "Invalid ID")
 		}
 
-		config, err := reg.Integration.GetByID(uint(id))
+		config, err := reg.Integration.GetWithOverrideState(uint(id))
 		if err != nil {
 			if errors.Is(err, services.ErrNotFound) {
 				return apiError(c, http.StatusNotFound, "Integration not found")
@@ -81,9 +81,11 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusInternalServerError, "Failed to create integration")
 		}
 
-		// Mask API key in response
-		created.APIKey = db.MaskAPIKey(created.APIKey)
-		return c.JSON(http.StatusCreated, created)
+		// Return enriched response with override state (always false for new integrations
+		// since they are not yet linked to any disk group).
+		resp := services.IntegrationResponse{IntegrationConfig: *created}
+		resp.APIKey = db.MaskAPIKey(resp.APIKey)
+		return c.JSON(http.StatusCreated, resp)
 	})
 
 	// Update integration
@@ -114,7 +116,13 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 			return apiError(c, http.StatusInternalServerError, "Failed to update integration")
 		}
 
-		return c.JSON(http.StatusOK, updated)
+		// Return enriched response with override state.
+		resp, respErr := reg.Integration.GetWithOverrideState(updated.ID)
+		if respErr != nil {
+			// Fallback: return the update result without override metadata.
+			return c.JSON(http.StatusOK, updated)
+		}
+		return c.JSON(http.StatusOK, resp)
 	})
 
 	// Delete integration

@@ -1,6 +1,6 @@
 # Sunset Mode: Virtual Show-Level Override
 
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Priority:** Design Implementation  
 **Estimated Effort:** M (1 day)  
 **Branch:** `feature/sunset-virtual-show-level-override` (from `feature/3.0`)  
@@ -123,33 +123,33 @@ flowchart TD
 
 **File:** `backend/internal/services/diskgroup.go`
 
-- [ ] Add method `HasSunsetModeForIntegration(integrationID uint) (bool, error)` to `DiskGroupService`
-- [ ] Query the `disk_group_integrations` junction table joined with `disk_groups` where `mode = 'sunset'` and `integration_id = ?`
-- [ ] Return `true` if any matching row exists, `false` otherwise
-- [ ] Follow the join pattern established in `ListWithIntegrations()` (`diskgroup.go:350-354`)
+- [x] Add method `HasSunsetModeForIntegration(integrationID uint) (bool, error)` to `DiskGroupService`
+- [x] Query the `disk_group_integrations` junction table joined with `disk_groups` where `mode = 'sunset'` and `integration_id = ?`
+- [x] Return `true` if any matching row exists, `false` otherwise
+- [x] Follow the join pattern established in `ListWithIntegrations()` (`diskgroup.go:350-354`)
 
 #### Step 1.2 — Extend `DiskGroupManager` Interface
 
 **File:** `backend/internal/services/integration.go`
 
-- [ ] Add `HasSunsetModeForIntegration(integrationID uint) (bool, error)` to the `DiskGroupManager` interface (`integration.go:81-84`)
-- [ ] This allows `IntegrationService` to call the method through its existing `diskGroups` field without a direct dependency on `DiskGroupService`
+- [x] Add `HasSunsetModeForIntegration(integrationID uint) (bool, error)` to the `DiskGroupManager` interface (`integration.go:81-84`)
+- [x] This allows `IntegrationService` to call the method through its existing `diskGroups` field without a direct dependency on `DiskGroupService`
 
 #### Step 1.3 — Add `IsShowLevelOnlyEffective` to IntegrationService
 
 **File:** `backend/internal/services/integration.go`
 
-- [ ] Add method `IsShowLevelOnlyEffective(id uint) (bool, error)` to `IntegrationService`
-- [ ] Logic: call `GetByID(id)` — if `cfg.ShowLevelOnly` is `true`, return `true` immediately
-- [ ] If `cfg.Type` is not `"sonarr"`, return the stored value (only Sonarr emits season items)
-- [ ] Otherwise, delegate to `s.diskGroups.HasSunsetModeForIntegration(id)` to check for sunset-mode disk groups
-- [ ] This keeps the `fetchAllIntegrations` function signature unchanged — it already receives `*services.IntegrationService`
+- [x] Add method `IsShowLevelOnlyEffective(id uint) (bool, error)` to `IntegrationService`
+- [x] Logic: call `GetByID(id)` — if `cfg.ShowLevelOnly` is `true`, return `true` immediately
+- [x] If `cfg.Type` is not `"sonarr"`, return the stored value (only Sonarr emits season items)
+- [x] Otherwise, delegate to `s.diskGroups.HasSunsetModeForIntegration(id)` to check for sunset-mode disk groups
+- [x] This keeps the `fetchAllIntegrations` function signature unchanged — it already receives `*services.IntegrationService`
 
 #### Step 1.4 — Update `fetch.go` Filter Condition
 
 **File:** `backend/internal/poller/fetch.go`
 
-- [ ] Replace the current `ShowLevelOnly` check at `fetch.go:89-103`:
+- [x] Replace the current `ShowLevelOnly` check at `fetch.go:89-103`:
 
   **Before:**
   ```go
@@ -163,23 +163,23 @@ flowchart TD
   if effErr == nil && effective {
   ```
 
-- [ ] Update the `slog.Debug` message to indicate whether the filter was applied due to the stored setting or the sunset override
-- [ ] Remove the now-unnecessary `GetByID` call at this site (the effective check calls it internally)
+- [x] Update the `slog.Debug` message to indicate whether the filter was applied due to the stored setting or the sunset override
+- [x] Remove the now-unnecessary `GetByID` call at this site (the effective check calls it internally)
 
 #### Step 1.5 — Backend Unit Tests
 
 **Files:** `backend/internal/services/diskgroup_test.go`, `backend/internal/services/integration_test.go`, `backend/internal/poller/fetch_test.go`
 
-- [ ] Test `HasSunsetModeForIntegration` returns `false` when integration is not linked to any disk group
-- [ ] Test `HasSunsetModeForIntegration` returns `false` when linked disk group is in `dry-run` mode
-- [ ] Test `HasSunsetModeForIntegration` returns `true` when linked disk group is in `sunset` mode
-- [ ] Test `HasSunsetModeForIntegration` returns `true` when integration is linked to multiple groups and only one is in sunset mode
-- [ ] Test `IsShowLevelOnlyEffective` returns `true` when `ShowLevelOnly=true` (regardless of disk group mode)
-- [ ] Test `IsShowLevelOnlyEffective` returns `true` when `ShowLevelOnly=false` but linked to sunset group
-- [ ] Test `IsShowLevelOnlyEffective` returns `false` when `ShowLevelOnly=false` and no sunset groups
-- [ ] Test `IsShowLevelOnlyEffective` returns the stored value for non-Sonarr integrations regardless of disk group mode
-- [ ] Follow existing test patterns: `testutil.SetupTestDB(t)`, `services.NewRegistry(database, bus, cfg)` (see `fetch_test.go:13-24`)
-- [ ] Use canonical media names per project rules: "Firefly" for shows
+- [x] Test `HasSunsetModeForIntegration` returns `false` when integration is not linked to any disk group
+- [x] Test `HasSunsetModeForIntegration` returns `false` when linked disk group is in `dry-run` mode
+- [x] Test `HasSunsetModeForIntegration` returns `true` when linked disk group is in `sunset` mode
+- [x] Test `HasSunsetModeForIntegration` returns `true` when integration is linked to multiple groups and only one is in sunset mode
+- [x] Test `IsShowLevelOnlyEffective` returns `true` when `ShowLevelOnly=true` (regardless of disk group mode)
+- [x] Test `IsShowLevelOnlyEffective` returns `true` when `ShowLevelOnly=false` but linked to sunset group
+- [x] Test `IsShowLevelOnlyEffective` returns `false` when `ShowLevelOnly=false` and no sunset groups
+- [x] Test `IsShowLevelOnlyEffective` returns the stored value for non-Sonarr integrations regardless of disk group mode
+- [x] Follow existing test patterns: `testutil.SetupTestDB(t)`, `services.NewRegistry(database, bus, cfg)` (see `fetch_test.go:13-24`)
+- [x] Use canonical media names per project rules: "Firefly" for shows
 
 ---
 
@@ -189,7 +189,7 @@ flowchart TD
 
 **File:** `backend/internal/services/integration.go`
 
-- [ ] Add `IntegrationResponse` struct that embeds `db.IntegrationConfig` and adds override fields:
+- [x] Add `IntegrationResponse` struct that embeds `db.IntegrationConfig` and adds override fields:
 
   ```go
   type IntegrationResponse struct {
@@ -199,11 +199,11 @@ flowchart TD
   }
   ```
 
-- [ ] Add method `GetWithOverrideState(id uint) (*IntegrationResponse, error)` to `IntegrationService`
+- [x] Add method `GetWithOverrideState(id uint) (*IntegrationResponse, error)` to `IntegrationService`
   - Calls `GetByID(id)` for the stored config
   - Checks `HasSunsetModeForIntegration(id)` via `s.diskGroups`
   - Sets `ShowLevelOnlyOverride=true` and a reason string when the integration is Sonarr and linked to a sunset-mode disk group
-- [ ] Add method `ListWithOverrideState() ([]IntegrationResponse, error)` to `IntegrationService`
+- [x] Add method `ListWithOverrideState() ([]IntegrationResponse, error)` to `IntegrationService`
   - Calls `List()` for all integrations
   - Batch-checks sunset-mode linkage for all Sonarr integrations
   - Use a single query to fetch all sunset-linked integration IDs rather than N+1 per-integration queries
@@ -212,20 +212,20 @@ flowchart TD
 
 **File:** `backend/routes/integrations.go`
 
-- [ ] Update `GET /integrations` handler (line 19) to call `ListWithOverrideState()` instead of `List()`
-- [ ] Update `GET /integrations/:id` handler (line 34) to call `GetWithOverrideState(id)` instead of `GetByID(id)`
-- [ ] Ensure API key masking continues to work with the new response struct
-- [ ] `POST`, `PUT`, and `DELETE` handlers return the config after mutation — update these to also include override state
+- [x] Update `GET /integrations` handler (line 19) to call `ListWithOverrideState()` instead of `List()`
+- [x] Update `GET /integrations/:id` handler (line 34) to call `GetWithOverrideState(id)` instead of `GetByID(id)`
+- [x] Ensure API key masking continues to work with the new response struct
+- [x] `POST`, `PUT`, and `DELETE` handlers return the config after mutation — update these to also include override state
 
 #### Step 2.3 — API Unit Tests
 
 **File:** `backend/routes/integrations_test.go` (or `backend/internal/services/integration_test.go`)
 
-- [ ] Test `GET /integrations` returns `showLevelOnlyOverride: false` for Sonarr integration not linked to sunset group
-- [ ] Test `GET /integrations` returns `showLevelOnlyOverride: true` with reason for Sonarr integration linked to sunset group
-- [ ] Test `GET /integrations` returns `showLevelOnlyOverride: false` for Radarr integration regardless of disk group mode
-- [ ] Test `GET /integrations/:id` returns correct override state
-- [ ] Test that `PUT /integrations/:id` response includes override state after update
+- [x] Test `GET /integrations` returns `showLevelOnlyOverride: false` for Sonarr integration not linked to sunset group
+- [x] Test `GET /integrations` returns `showLevelOnlyOverride: true` with reason for Sonarr integration linked to sunset group
+- [x] Test `GET /integrations` returns `showLevelOnlyOverride: false` for Radarr integration regardless of disk group mode
+- [x] Test `GET /integrations/:id` returns correct override state
+- [x] Test that `PUT /integrations/:id` response includes override state after update
 
 ---
 
@@ -235,7 +235,7 @@ flowchart TD
 
 **File:** `frontend/app/types/api.ts`
 
-- [ ] Add `showLevelOnlyOverride` and `showLevelOnlyOverrideReason` to `IntegrationConfig` interface (`api.ts:10-25`):
+- [x] Add `showLevelOnlyOverride` and `showLevelOnlyOverrideReason` to `IntegrationConfig` interface (`api.ts:10-25`):
 
   ```typescript
   export interface IntegrationConfig {
@@ -251,11 +251,11 @@ flowchart TD
 
 **File:** `frontend/app/components/settings/SettingsIntegrations.vue`
 
-- [ ] Update the card-level `UiSwitch` for `showLevelOnly` (`SettingsIntegrations.vue:125-137`):
+- [x] Update the card-level `UiSwitch` for `showLevelOnly` (`SettingsIntegrations.vue:125-137`):
   - Add `:disabled="integration.showLevelOnlyOverride"` to the switch
   - When overridden, force the displayed checked state to `true` regardless of stored value
   - Prevent `toggleCardSetting` from firing when the override is active
-- [ ] Add amber warning text below the toggle following the `logLevelOverridden` pattern (`SettingsAdvanced.vue:127-143`):
+- [x] Add amber warning text below the toggle following the `logLevelOverridden` pattern (`SettingsAdvanced.vue:127-143`):
   - `v-if="integration.showLevelOnlyOverride"`: `<p class="text-xs text-amber-500">{{ integration.showLevelOnlyOverrideReason }}</p>`
   - `v-else`: existing description text with `text-xs text-muted-foreground/70`
 
@@ -263,11 +263,11 @@ flowchart TD
 
 **File:** `frontend/app/components/settings/SettingsIntegrations.vue`
 
-- [ ] Update the modal-level `UiSwitch` for `showLevelOnly` (`SettingsIntegrations.vue:308-331`):
+- [x] Update the modal-level `UiSwitch` for `showLevelOnly` (`SettingsIntegrations.vue:308-331`):
   - When editing an existing integration with an active override, disable the switch and show it as checked
   - Add the same amber warning text pattern as the card toggle
   - When adding a new integration, the toggle should always be unlocked (new integrations are not yet linked to any disk group)
-- [ ] Ensure the `formState.showLevelOnly` initialization (`SettingsIntegrations.vue:621`) preserves the stored value, not the effective value — the override is display-only
+- [x] Ensure the `formState.showLevelOnly` initialization (`SettingsIntegrations.vue:621`) preserves the stored value, not the effective value — the override is display-only
 
 ---
 
@@ -275,15 +275,15 @@ flowchart TD
 
 #### Step 4.1 — Run `make ci`
 
-- [ ] Run `make ci` and verify all lint, test, and security checks pass
-- [ ] Fix any issues before declaring work complete
+- [x] Run `make ci` and verify all lint, test, and security checks pass
+- [x] Fix any issues before declaring work complete
 
 ## Key Files
 
 | File | Change |
 |------|--------|
-| `backend/internal/services/diskgroup.go` | Add `HasSunsetModeForIntegration()` |
-| `backend/internal/services/integration.go` | Extend `DiskGroupManager` interface, add `IsShowLevelOnlyEffective()`, add `IntegrationResponse` DTO, add `GetWithOverrideState()`, add `ListWithOverrideState()` |
+| `backend/internal/services/diskgroup.go` | Add `HasSunsetModeForIntegration()`, add `SunsetLinkedIntegrationIDs()` for batch queries |
+| `backend/internal/services/integration.go` | Extend `DiskGroupManager` interface (add `HasSunsetModeForIntegration`, `SunsetLinkedIntegrationIDs`), add `IsShowLevelOnlyEffective()`, add `IntegrationResponse` DTO, add `GetWithOverrideState()`, add `ListWithOverrideState()` |
 | `backend/internal/poller/fetch.go` | Replace `ShowLevelOnly` check with `IsShowLevelOnlyEffective()` |
 | `backend/routes/integrations.go` | Use enriched response methods in GET handlers |
 | `frontend/app/types/api.ts` | Add override fields to `IntegrationConfig` |

@@ -16,6 +16,8 @@ export interface IntegrationConfig {
   enabled: boolean;
   collectionDeletion: boolean;
   showLevelOnly: boolean;
+  showLevelOnlyOverride: boolean;
+  showLevelOnlyOverrideReason: string;
   mediaSizeBytes: number;
   mediaCount: number;
   lastSync?: string | null;
