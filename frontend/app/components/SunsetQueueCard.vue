@@ -40,9 +40,15 @@ function formatDaysRemaining(days: number): string {
   return t('sunset.leavingInDays', { days });
 }
 
+const showClearAllDialog = ref(false);
+
 function confirmClearAll() {
-  if (!window.confirm(t('sunset.clearAllConfirm'))) return;
+  showClearAllDialog.value = true;
+}
+
+function executeClearAll() {
   clearAll();
+  showClearAllDialog.value = false;
 }
 
 /** Reschedule an item by adding days to its current deletion date. */
@@ -235,6 +241,33 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
       </div>
     </UiCardContent>
   </UiCard>
+
+  <!-- Clear All Confirmation Dialog -->
+  <UiDialog
+    :open="showClearAllDialog"
+    @update:open="
+      (val: boolean) => {
+        showClearAllDialog = val;
+      }
+    "
+  >
+    <UiDialogContent class="max-w-md">
+      <UiDialogHeader>
+        <UiDialogTitle>{{ t('sunset.clearAllDialogTitle') }}</UiDialogTitle>
+        <UiDialogDescription>
+          {{ t('sunset.clearAllConfirm') }}
+        </UiDialogDescription>
+      </UiDialogHeader>
+      <UiDialogFooter class="flex gap-2 justify-end">
+        <UiButton variant="outline" @click="showClearAllDialog = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton variant="destructive" @click="executeClearAll">
+          {{ t('sunset.clearAll') }}
+        </UiButton>
+      </UiDialogFooter>
+    </UiDialogContent>
+  </UiDialog>
 
   <!-- Score Detail Modal -->
   <ScoreDetailModal

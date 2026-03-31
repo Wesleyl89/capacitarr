@@ -413,6 +413,34 @@
       </div>
     </UiCardContent>
   </UiCard>
+
+  <!-- Restore All Posters Confirmation Dialog -->
+  <UiDialog
+    :open="showRestorePostersDialog"
+    @update:open="
+      (val: boolean) => {
+        showRestorePostersDialog = val;
+      }
+    "
+  >
+    <UiDialogContent class="max-w-md">
+      <UiDialogHeader>
+        <UiDialogTitle>{{ $t('settings.restoreAllPostersDialogTitle') }}</UiDialogTitle>
+        <UiDialogDescription>
+          {{ $t('settings.restoreAllPostersConfirm') }}
+        </UiDialogDescription>
+      </UiDialogHeader>
+      <UiDialogFooter class="flex gap-2 justify-end">
+        <UiButton variant="outline" @click="showRestorePostersDialog = false">
+          {{ $t('common.cancel') }}
+        </UiButton>
+        <UiButton variant="destructive" :disabled="restoringPosters" @click="restoreAllPosters">
+          <LoaderCircleIcon v-if="restoringPosters" class="w-3.5 h-3.5 mr-1.5 animate-spin" />
+          {{ $t('settings.restoreAllPosters') }}
+        </UiButton>
+      </UiDialogFooter>
+    </UiDialogContent>
+  </UiDialog>
 </template>
 
 <script setup lang="ts">
@@ -459,6 +487,7 @@ const savedLabel = ref('capacitarr-saved');
 // Poster action loading states
 const refreshingPosters = ref(false);
 const restoringPosters = ref(false);
+const showRestorePostersDialog = ref(false);
 
 // Watch tiebreaker — immediate save on select change
 watch(engineTiebreakerMethod, (newVal, oldVal) => {
@@ -515,8 +544,7 @@ async function refreshAllPosters() {
 }
 
 function confirmRestorePosters() {
-  if (!window.confirm(t('settings.restoreAllPostersConfirm'))) return;
-  restoreAllPosters();
+  showRestorePostersDialog.value = true;
 }
 
 async function restoreAllPosters() {
@@ -530,6 +558,7 @@ async function restoreAllPosters() {
     addToast(t('settings.restorePostersError'), 'error');
   } finally {
     restoringPosters.value = false;
+    showRestorePostersDialog.value = false;
   }
 }
 
