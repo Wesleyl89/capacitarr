@@ -100,8 +100,15 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 				}
 			}
 			items = filtered
+
+			// Log whether the filter was applied due to the stored setting
+			// or a virtual override from a sunset-mode disk group.
+			source := "stored"
+			if cfg, cfgErr := integrationSvc.GetByID(id); cfgErr == nil && !cfg.ShowLevelOnly {
+				source = "sunset-override"
+			}
 			slog.Debug("ShowLevelOnly filter applied", "component", "poller",
-				"integrationID", id, "removedSeasons", originalCount-len(items))
+				"integrationID", id, "removedSeasons", originalCount-len(items), "source", source)
 		}
 
 		result.allItems = append(result.allItems, items...)

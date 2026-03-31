@@ -970,6 +970,46 @@ func TestIntegrationService_ListWithOverrideState(t *testing.T) {
 	}
 }
 
+func TestIntegrationService_GetWithOverrideState_AfterUpdate(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	dgSvc := NewDiskGroupService(database, bus)
+	svc.SetDiskGroupService(dgSvc)
+
+	database.Create(&db.IntegrationConfig{
+		Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989",
+		APIKey: "key1", ShowLevelOnly: false,
+	})
+	sunsetPct := 60.0
+	database.Create(&db.DiskGroup{
+		MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500,
+		Mode: db.ModeSunset, SunsetPct: &sunsetPct,
+	})
+	_ = dgSvc.SyncIntegrationLinks(1, []uint{1})
+
+	// Update integration name (non-ShowLevelOnly field)
+	_, updateErr := svc.PartialUpdate(1, IntegrationUpdate{Name: "Firefly Sonarr Updated"})
+	if updateErr != nil {
+		t.Fatalf("PartialUpdate error: %v", updateErr)
+	}
+
+	// Override state should still be present after the update
+	resp, err := svc.GetWithOverrideState(1)
+	if err != nil {
+		t.Fatalf("GetWithOverrideState after update error: %v", err)
+	}
+	if resp.Name != "Firefly Sonarr Updated" {
+		t.Errorf("expected updated name, got %q", resp.Name)
+	}
+	if !resp.ShowLevelOnlyOverride {
+		t.Error("expected ShowLevelOnlyOverride=true after update")
+	}
+	if resp.ShowLevelOnly {
+		t.Error("expected stored ShowLevelOnly to remain false after update")
+	}
+}
+
 func TestIntegrationService_IsShowLevelOnlyEffective_NonSonarr(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)

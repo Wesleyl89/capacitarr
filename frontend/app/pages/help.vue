@@ -725,6 +725,74 @@
         </div>
       </details>
 
+      <!-- Show-Level Evaluation -->
+      <details
+        id="show-level-evaluation"
+        v-motion
+        :initial="{ opacity: 0, y: 12 }"
+        :enter="{
+          opacity: 1,
+          y: 0,
+          transition: { type: 'spring', stiffness: 260, damping: 24, delay: 580 },
+        }"
+        data-slot="card"
+        class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+      >
+        <summary
+          class="flex items-center gap-3 px-5 py-4 cursor-pointer select-none hover:bg-accent transition-colors"
+        >
+          <ChevronRightIcon
+            class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-90"
+          />
+          <h3 class="font-semibold text-primary">
+            {{ $t('help.showLevelEvaluation') }}
+          </h3>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-muted-foreground leading-relaxed space-y-4">
+          <p>
+            {{ $t('help.showLevelEvaluation.intro') }}
+          </p>
+
+          <div class="space-y-2">
+            <p class="font-medium text-foreground">
+              {{ $t('help.showLevelEvaluation.howItWorksTitle') }}
+            </p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>{{ $t('help.showLevelEvaluation.howItWorks1') }}</li>
+              <li>{{ $t('help.showLevelEvaluation.howItWorks2') }}</li>
+              <li>{{ $t('help.showLevelEvaluation.howItWorks3') }}</li>
+            </ul>
+          </div>
+
+          <div class="space-y-2">
+            <p class="font-medium text-foreground">
+              {{ $t('help.showLevelEvaluation.sunsetBehaviorTitle') }}
+            </p>
+            <div class="rounded-lg border border-border bg-muted/50 p-3">
+              <p>{{ $t('help.showLevelEvaluation.sunsetBehaviorDesc') }}</p>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="font-medium text-foreground">
+              {{ $t('help.showLevelEvaluation.scoringTitle') }}
+            </p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>{{ $t('help.showLevelEvaluation.scoring1') }}</li>
+              <li>{{ $t('help.showLevelEvaluation.scoring2') }}</li>
+              <li>{{ $t('help.showLevelEvaluation.scoring3') }}</li>
+            </ul>
+          </div>
+
+          <p>
+            <span class="font-medium text-foreground">{{
+              $t('help.showLevelEvaluation.howToEnableTitle')
+            }}</span>
+            {{ $t('help.showLevelEvaluation.howToEnableDesc') }}
+          </p>
+        </div>
+      </details>
+
       <!-- About Capacitarr -->
       <details
         v-motion
@@ -732,7 +800,7 @@
         :enter="{
           opacity: 1,
           y: 0,
-          transition: { type: 'spring', stiffness: 260, damping: 24, delay: 580 },
+          transition: { type: 'spring', stiffness: 260, damping: 24, delay: 620 },
         }"
         data-slot="card"
         class="group rounded-xl border border-border bg-card shadow-sm overflow-hidden"
