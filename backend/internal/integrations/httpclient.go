@@ -14,8 +14,45 @@ import (
 )
 
 // sharedHTTPClient is a package-level HTTP client with a 30-second timeout.
+//
+// IMPORTANT: The CheckRedirect policy preserves the original HTTP method and
+// headers across 301/302 redirects. Go's default behaviour silently converts
+// DELETE/POST/PUT to GET on 301/302, which causes destructive operations
+// (e.g., *arr delete-media calls) to degrade into reads when a reverse proxy
+// issues a redirect (trailing-slash, HTTP→HTTPS, path normalisation). The
+// redirect response still returns 200 (the GET succeeds), so the caller
+// believes the deletion succeeded while the item remains untouched.
 var sharedHTTPClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout:       30 * time.Second,
+	CheckRedirect: preserveMethodRedirect,
+}
+
+// preserveMethodRedirect is an http.Client CheckRedirect policy that
+// preserves the original HTTP method and headers across all redirects.
+//
+// Go's default policy changes POST/PUT/DELETE to GET on 301 (Moved
+// Permanently) and 302 (Found) redirects, matching legacy browser behaviour.
+// This is correct for browsers but catastrophic for API clients: a DELETE
+// silently becomes a GET, the GET succeeds with 200, and the caller reports
+// "deleted" while nothing was actually removed. Any user whose *arr instances
+// sit behind a reverse proxy that issues 301/302 redirects (trailing-slash
+// canonicalisation, HTTP→HTTPS upgrade, path normalisation) is affected.
+//
+// This policy makes 301/302 behave like 307/308 (method-preserving) and
+// copies all headers from the original request so authentication headers
+// (X-Api-Key, X-Plex-Token, etc.) survive the redirect.
+func preserveMethodRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after 10 redirects")
+	}
+	original := via[0]
+	req.Method = original.Method
+	for key, values := range original.Header {
+		if _, exists := req.Header[key]; !exists {
+			req.Header[key] = values
+		}
+	}
+	return nil
 }
 
 // maxResponseBytes is the maximum response body size we'll read from an
