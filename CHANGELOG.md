@@ -1,3 +1,10 @@
+## [3.0.1-beta] - 2026-03-31
+
+### 🐛 Bug Fixes
+
+- *(deps)* Add pnpm overrides for site/ transitive dependency vulnerabilities ([d1d95e7](https://github.com/Ghent/capacitarr/commit/d1d95e7107040e5116a6d1f38ea875e274afec3e))
+- *(integrations)* Handle Tautulli numeric rating_key fields ([2273684](https://github.com/Ghent/capacitarr/commit/227368405b6148477694bf292fbd492e2c7d9a82))
+- *(integrations)* Preserve HTTP method across redirects in *arr API calls ([2cefd57](https://github.com/Ghent/capacitarr/commit/2cefd57c24f9aed76a5dac90d1d0385ca17d6e60))
 ## [3.0.0-beta] - 2026-03-31
 
 ### 🚀 Features
