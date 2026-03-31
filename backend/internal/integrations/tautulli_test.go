@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -364,5 +365,131 @@ func TestTautulliClient_URLTrailingSlash(t *testing.T) {
 	client := NewTautulliClient(srv.URL+"/", testTautulliAPIKey)
 	if err := client.TestConnection(); err != nil {
 		t.Fatalf("TestConnection should succeed: %v", err)
+	}
+}
+
+func TestFlexString_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "string value", input: `"12345"`, want: "12345"},
+		{name: "integer value", input: `12345`, want: "12345"},
+		{name: "zero", input: `0`, want: "0"},
+		{name: "empty string", input: `""`, want: ""},
+		{name: "large integer", input: `9999999999`, want: "9999999999"},
+		{name: "null becomes empty", input: `null`, want: ""},
+		{name: "boolean rejects", input: `true`, wantErr: true},
+		{name: "object rejects", input: `{}`, wantErr: true},
+		{name: "array rejects", input: `[]`, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var fs flexString
+			err := json.Unmarshal([]byte(tt.input), &fs)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for input %s, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for input %s: %v", tt.input, err)
+			}
+			if string(fs) != tt.want {
+				t.Errorf("got %q, want %q", string(fs), tt.want)
+			}
+		})
+	}
+}
+
+func TestTautulliClient_GetWatchHistory_NumericRatingKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Tautulli returns rating_key fields as bare integers in some versions.
+		_, _ = w.Write([]byte(`{
+			"response": {
+				"result": "success",
+				"message": "",
+				"data": {
+					"recordsFiltered": 1,
+					"recordsTotal": 1,
+					"data": [
+						{
+							"date": 1703520000,
+							"duration": 7200,
+							"play_duration": 7100,
+							"paused_counter": 120,
+							"watched_status": 1,
+							"user": "alice",
+							"rating_key": 95295,
+							"parent_rating_key": 95200,
+							"grandparent_rating_key": 95000,
+							"title": "Serenity",
+							"media_type": "movie"
+						}
+					]
+				}
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
+	data, err := client.GetWatchHistory("95295")
+	if err != nil {
+		t.Fatalf("GetWatchHistory should succeed with numeric rating keys: %v", err)
+	}
+
+	if data.PlayCount != 1 {
+		t.Errorf("Expected PlayCount 1, got %d", data.PlayCount)
+	}
+	if data.TotalDuration != 7100 {
+		t.Errorf("Expected TotalDuration 7100, got %d", data.TotalDuration)
+	}
+}
+
+func TestTautulliClient_GetShowWatchHistory_NumericRatingKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"response": {
+				"result": "success",
+				"message": "",
+				"data": {
+					"recordsFiltered": 1,
+					"recordsTotal": 1,
+					"data": [
+						{
+							"date": 1704067200,
+							"play_duration": 2700,
+							"user": "carol",
+							"rating_key": 95296,
+							"parent_rating_key": 95200,
+							"grandparent_rating_key": 95000,
+							"title": "Firefly S01E01",
+							"media_type": "episode"
+						}
+					]
+				}
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	client := NewTautulliClient(srv.URL, testTautulliAPIKey)
+	data, err := client.GetShowWatchHistory("95000")
+	if err != nil {
+		t.Fatalf("GetShowWatchHistory should succeed with numeric rating keys: %v", err)
+	}
+
+	if data.PlayCount != 1 {
+		t.Errorf("Expected PlayCount 1, got %d", data.PlayCount)
+	}
+	if data.TotalDuration != 2700 {
+		t.Errorf("Expected TotalDuration 2700, got %d", data.TotalDuration)
 	}
 }

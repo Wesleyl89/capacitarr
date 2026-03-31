@@ -3,9 +3,33 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// flexString is a string type that can unmarshal from both JSON strings and
+// JSON numbers. Tautulli's API returns rating_key fields as integers in some
+// versions and strings in others; this type handles both transparently.
+type flexString string
+
+func (f *flexString) UnmarshalJSON(data []byte) error {
+	// Try string first (the common/expected case).
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = flexString(s)
+		return nil
+	}
+
+	// Fall back to number (Tautulli returns rating keys as integers).
+	var n json.Number
+	if err := json.Unmarshal(data, &n); err == nil {
+		*f = flexString(n.String())
+		return nil
+	}
+
+	return fmt.Errorf("flexString: cannot unmarshal %s", strconv.Quote(string(data)))
+}
 
 // TautulliClient provides access to the Tautulli API for enriched watch history.
 // Tautulli supplements Plex's binary watched/unwatched signal with detailed
@@ -58,17 +82,17 @@ type tautulliHistoryData struct {
 
 // tautulliHistoryEntry represents one play record from Tautulli history.
 type tautulliHistoryEntry struct {
-	Date                 int64  `json:"date"`           // Unix epoch of play start
-	Duration             int64  `json:"duration"`       // Duration of item (seconds)
-	PlayDuration         int64  `json:"play_duration"`  // Actual time played (seconds)
-	PausedCounter        int64  `json:"paused_counter"` // Time spent paused (seconds)
-	WatchedStatus        int    `json:"watched_status"` // 0=unwatched, 0.5=partial, 1=watched
-	User                 string `json:"user"`           // Username
-	RatingKey            string `json:"rating_key"`     // Plex rating key
-	ParentRatingKey      string `json:"parent_rating_key"`
-	GrandparentRatingKey string `json:"grandparent_rating_key"`
-	Title                string `json:"title"`
-	MediaType            string `json:"media_type"` // movie, episode, track
+	Date                 int64      `json:"date"`           // Unix epoch of play start
+	Duration             int64      `json:"duration"`       // Duration of item (seconds)
+	PlayDuration         int64      `json:"play_duration"`  // Actual time played (seconds)
+	PausedCounter        int64      `json:"paused_counter"` // Time spent paused (seconds)
+	WatchedStatus        int        `json:"watched_status"` // 0=unwatched, 0.5=partial, 1=watched
+	User                 string     `json:"user"`           // Username
+	RatingKey            flexString `json:"rating_key"`     // Plex rating key
+	ParentRatingKey      flexString `json:"parent_rating_key"`
+	GrandparentRatingKey flexString `json:"grandparent_rating_key"`
+	Title                string     `json:"title"`
+	MediaType            string     `json:"media_type"` // movie, episode, track
 }
 
 // TestConnection verifies the Tautulli URL and API key are valid
