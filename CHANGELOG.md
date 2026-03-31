@@ -1,7 +1,28 @@
-## [2.3.2] - 2026-03-30
+## [3.0.0-beta] - 2026-03-31
+
+### 🚀 Features
+
+- *(sunset)* Add virtual show-level-only override for sunset mode ([78d321a](https://github.com/Ghent/capacitarr/commit/78d321a7d22014c4a3f0a6e89447e9ed5c9a8f85))
+- *(help)* Add show-level evaluation help section and fix sunset details ([b78f343](https://github.com/Ghent/capacitarr/commit/b78f343a44966d1936bc0ec9326c37415020b9e5))
+- *(ui)* Show integration instance names in disk group pill badges ([e21e7f0](https://github.com/Ghent/capacitarr/commit/e21e7f096c6440c5f44c209c9a7ed3c7b620d7b8))
 
 ### 🐛 Bug Fixes
 
+- *(ui)* Sunset mode UI polish and i18n fixes ([5b4b33e](https://github.com/Ghent/capacitarr/commit/5b4b33eea98fd42bfd19c3b735ec8e890e351687))
+- *(ui)* Rearrange sunset settings card into logical groups ([7656a5b](https://github.com/Ghent/capacitarr/commit/7656a5b8f99b5fcfe94387b80ced4ba8d5ea332b))
+- *(ui)* Replace browser confirm dialogs with UiDialog ([f0dff0b](https://github.com/Ghent/capacitarr/commit/f0dff0b588e33622014eb2a0fda70a054978bd6d))
+- *(rules)* Show-level-only hides TV shows from deletion priority ([7534a67](https://github.com/Ghent/capacitarr/commit/7534a67a506ecfe9a9fe545735756a4600c4ebca))
+- *(rules)* Restore score-based sort order in deletion priority view ([53d55ab](https://github.com/Ghent/capacitarr/commit/53d55ab3a23337364022711d9a81fe5cacf15923))
+## [2.3.2] - 2026-03-30
+
+### 🚀 Features
+
+- Add sunset mode with per-disk-group execution, media server labels, and poster overlays ([169af52](https://github.com/Ghent/capacitarr/commit/169af5224a1f9651dce65cf97dc60dbc4902b5e9))
+- Multi-feature improvements — PATCH settings, sunset saved mode, poster overlays, and bug fixes ([f19fc81](https://github.com/Ghent/capacitarr/commit/f19fc814381baf8ce73518a01d13f90105f10b07))
+
+### 🐛 Bug Fixes
+
+- *(sunset)* Resolve queue persistence, label ID resolution, poster overlays, and settings race condition ([d641ab2](https://github.com/Ghent/capacitarr/commit/d641ab27d4f46f64a7ce4224a26944558a992e13))
 - Clear all bypasses rate limiter and show-level preview displays correctly ([a880ba4](https://github.com/Ghent/capacitarr/commit/a880ba40cfdab8ddae10a459d66f9c6f30f72be7))
 ## [2.3.1-rc.2] - 2026-03-28
 
