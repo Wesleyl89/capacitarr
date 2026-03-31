@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -715,8 +716,6 @@ func (e *EmbyClient) updateItem(itemID string, item *embyItem) error {
 	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", e.APIKey)
 }
 
-var _ Connectable = (*EmbyClient)(nil)
-
 // GetPosterImage downloads the current primary poster for an Emby item.
 func (e *EmbyClient) GetPosterImage(itemID string) ([]byte, string, error) {
 	endpoint := fmt.Sprintf("/Items/%s/Images/Primary", itemID)
@@ -792,6 +791,44 @@ func (e *EmbyClient) GetTMDbToItemIDMap() (map[int]string, error) {
 	return result, nil
 }
 
+// SearchByTMDbID searches Emby for an item matching the given TMDb ID.
+// Uses title to narrow the search space, then verifies the TMDb ID in
+// ProviderIds. Returns the Emby item ID.
+func (e *EmbyClient) SearchByTMDbID(title string, tmdbID int) (string, error) {
+	if title == "" || tmdbID <= 0 {
+		return "", fmt.Errorf("title and tmdbID are required for Emby search")
+	}
+
+	adminID, err := e.GetAdminUserID()
+	if err != nil {
+		return "", fmt.Errorf("emby search: get admin user: %w", err)
+	}
+
+	endpoint := fmt.Sprintf(
+		"/Users/%s/Items?SearchTerm=%s&Fields=ProviderIds&IncludeItemTypes=Movie,Series&Recursive=true&Limit=25",
+		adminID, url.QueryEscape(title),
+	)
+	body, err := e.doRequest(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("emby search: %w", err)
+	}
+
+	var resp struct {
+		Items []embyItem `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("emby search unmarshal: %w", err)
+	}
+
+	for _, item := range resp.Items {
+		if extractTMDbID(item.ProviderIDs) == tmdbID {
+			return item.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("emby search: no item found with TMDb ID %d", tmdbID)
+}
+
 var _ Connectable = (*EmbyClient)(nil)
 var _ WatchDataProvider = (*EmbyClient)(nil)
 var _ WatchlistProvider = (*EmbyClient)(nil)
@@ -799,3 +836,4 @@ var _ CollectionDataProvider = (*EmbyClient)(nil)
 var _ LabelDataProvider = (*EmbyClient)(nil)
 var _ LabelManager = (*EmbyClient)(nil)
 var _ PosterManager = (*EmbyClient)(nil)
+var _ NativeIDSearcher = (*EmbyClient)(nil)

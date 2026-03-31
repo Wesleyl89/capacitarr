@@ -546,6 +546,44 @@ func (p *PlexClient) RestorePosterImage(itemID string) error {
 	return p.doRequestWithMethod("PUT", endpoint)
 }
 
+// SearchByTMDbID searches Plex for an item matching the given TMDb ID.
+// Uses title to narrow the search space via /hubs/search, then verifies
+// the TMDb ID in the Guid array of each result. Returns the ratingKey
+// of the matched item.
+func (p *PlexClient) SearchByTMDbID(title string, tmdbID int) (string, error) {
+	if title == "" || tmdbID <= 0 {
+		return "", fmt.Errorf("title and tmdbID are required for Plex search")
+	}
+
+	endpoint := fmt.Sprintf("/hubs/search?query=%s&includeGuids=1&limit=25", url.QueryEscape(title))
+	body, err := p.doRequest(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("plex search: %w", err)
+	}
+
+	// Plex search returns hubs containing metadata arrays
+	var resp struct {
+		MediaContainer struct {
+			Hub []struct {
+				Metadata []plexMetadata `json:"Metadata"`
+			} `json:"Hub"`
+		} `json:"MediaContainer"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("plex search unmarshal: %w", err)
+	}
+
+	for _, hub := range resp.MediaContainer.Hub {
+		for _, m := range hub.Metadata {
+			if plexExtractTMDbID(m.GUIDs) == tmdbID {
+				return m.RatingKey, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("plex search: no item found with TMDb ID %d", tmdbID)
+}
+
 // Verify PlexClient satisfies capability interfaces at compile time.
 // Note: PlexClient intentionally does NOT implement MediaSource — only *arr integrations should.
 var _ Connectable = (*PlexClient)(nil)
@@ -555,3 +593,4 @@ var _ CollectionDataProvider = (*PlexClient)(nil)
 var _ LabelDataProvider = (*PlexClient)(nil)
 var _ LabelManager = (*PlexClient)(nil)
 var _ PosterManager = (*PlexClient)(nil)
+var _ NativeIDSearcher = (*PlexClient)(nil)

@@ -97,18 +97,13 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 				"component", "routes", "error", registryErr)
 		}
 
-		var tmdbMap map[uint]map[int]string
-		if registry != nil {
-			tmdbMap = registry.BuildTMDbToNativeIDMaps()
-		}
-
 		if err := reg.Sunset.Cancel(uint(id), services.SunsetDeps{
-			Registry:       registry,
-			Deletion:       reg.Deletion,
-			Engine:         reg.Engine,
-			Settings:       reg.Settings,
-			PosterOverlay:  reg.PosterOverlay,
-			TMDbToNativeID: tmdbMap,
+			Registry:      registry,
+			Deletion:      reg.Deletion,
+			Engine:        reg.Engine,
+			Settings:      reg.Settings,
+			PosterOverlay: reg.PosterOverlay,
+			Mapping:       reg.Mapping,
 		}); err != nil {
 			slog.Error("Failed to cancel sunset item", "component", "routes", "id", id, "error", err)
 			return apiError(c, http.StatusNotFound, "Sunset item not found")
@@ -162,18 +157,13 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 				"component", "routes", "error", registryErr)
 		}
 
-		var tmdbMap map[uint]map[int]string
-		if registry != nil {
-			tmdbMap = registry.BuildTMDbToNativeIDMaps()
-		}
-
 		count, err := reg.Sunset.CancelAll(services.SunsetDeps{
-			Registry:       registry,
-			Deletion:       reg.Deletion,
-			Engine:         reg.Engine,
-			Settings:       reg.Settings,
-			PosterOverlay:  reg.PosterOverlay,
-			TMDbToNativeID: tmdbMap,
+			Registry:      registry,
+			Deletion:      reg.Deletion,
+			Engine:        reg.Engine,
+			Settings:      reg.Settings,
+			PosterOverlay: reg.PosterOverlay,
+			Mapping:       reg.Mapping,
 		})
 		if err != nil {
 			slog.Error("Failed to clear sunset queue", "component", "routes", "error", err)
@@ -221,14 +211,9 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 				"component", "routes", "error", registryErr)
 		}
 
-		var tmdbMap map[uint]map[int]string
-		if registry != nil {
-			tmdbMap = registry.BuildTMDbToNativeIDMaps()
-		}
-
 		updated, err := reg.PosterOverlay.UpdateAll(reg.Sunset, services.PosterDeps{
-			Registry:       registry,
-			TMDbToNativeID: tmdbMap,
+			Registry: registry,
+			Mapping:  reg.Mapping,
 		})
 		if err != nil {
 			slog.Error("Failed to refresh posters", "component", "routes", "error", err)
@@ -253,14 +238,9 @@ func RegisterSunsetRoutes(g *echo.Group, reg *services.Registry) {
 				"component", "routes", "error", registryErr)
 		}
 
-		var posterTmdbMap map[uint]map[int]string
-		if registry != nil {
-			posterTmdbMap = registry.BuildTMDbToNativeIDMaps()
-		}
-
 		restored, err := reg.PosterOverlay.RestoreAll(reg.Sunset, services.PosterDeps{
-			Registry:       registry,
-			TMDbToNativeID: posterTmdbMap,
+			Registry: registry,
+			Mapping:  reg.Mapping,
 		})
 		if err != nil {
 			slog.Error("Failed to restore posters", "component", "routes", "error", err)

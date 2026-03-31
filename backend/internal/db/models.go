@@ -382,3 +382,23 @@ type MediaCache struct {
 func (MediaCache) TableName() string {
 	return "media_cache"
 }
+
+// MediaServerMapping stores a resolved TMDb ID → media server native ID mapping.
+// Populated during engine poll cycles from media server library scans.
+// Used by PosterOverlayService and SunsetService to translate TMDb IDs into
+// per-server identifiers (Plex ratingKey, Jellyfin/Emby item ID) for label
+// and poster operations. Survives media server downtime (stale data is better
+// than no data).
+type MediaServerMapping struct {
+	TmdbID        int       `gorm:"primaryKey;column:tmdb_id" json:"tmdbId"`
+	IntegrationID uint      `gorm:"primaryKey;column:integration_id" json:"integrationId"`
+	NativeID      string    `gorm:"not null;column:native_id" json:"nativeId"`
+	MediaType     string    `gorm:"not null;default:'movie';column:media_type" json:"mediaType"`
+	Title         string    `gorm:"not null;default:'';column:title" json:"title"`
+	UpdatedAt     time.Time `gorm:"not null;column:updated_at" json:"updatedAt"`
+}
+
+// TableName returns the database table name for MediaServerMapping.
+func (MediaServerMapping) TableName() string {
+	return "media_server_mappings"
+}

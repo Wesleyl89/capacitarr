@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -733,8 +734,6 @@ func (j *JellyfinClient) updateItem(itemID string, item *jellyfinItem) error {
 	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", j.APIKey)
 }
 
-var _ Connectable = (*JellyfinClient)(nil)
-
 // GetPosterImage downloads the current primary poster for a Jellyfin item.
 func (j *JellyfinClient) GetPosterImage(itemID string) ([]byte, string, error) {
 	endpoint := fmt.Sprintf("/Items/%s/Images/Primary", itemID)
@@ -810,6 +809,44 @@ func (j *JellyfinClient) GetTMDbToItemIDMap() (map[int]string, error) {
 	return result, nil
 }
 
+// SearchByTMDbID searches Jellyfin for an item matching the given TMDb ID.
+// Uses title to narrow the search space, then verifies the TMDb ID in
+// ProviderIds. Returns the Jellyfin item ID.
+func (j *JellyfinClient) SearchByTMDbID(title string, tmdbID int) (string, error) {
+	if title == "" || tmdbID <= 0 {
+		return "", fmt.Errorf("title and tmdbID are required for Jellyfin search")
+	}
+
+	adminID, err := j.GetAdminUserID()
+	if err != nil {
+		return "", fmt.Errorf("jellyfin search: get admin user: %w", err)
+	}
+
+	endpoint := fmt.Sprintf(
+		"/Users/%s/Items?searchTerm=%s&Fields=ProviderIds&IncludeItemTypes=Movie,Series&Recursive=true&Limit=25",
+		adminID, url.QueryEscape(title),
+	)
+	body, err := j.doRequest(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("jellyfin search: %w", err)
+	}
+
+	var resp struct {
+		Items []jellyfinItem `json:"Items"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("jellyfin search unmarshal: %w", err)
+	}
+
+	for _, item := range resp.Items {
+		if extractTMDbID(item.ProviderIDs) == tmdbID {
+			return item.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("jellyfin search: no item found with TMDb ID %d", tmdbID)
+}
+
 var _ Connectable = (*JellyfinClient)(nil)
 var _ WatchDataProvider = (*JellyfinClient)(nil)
 var _ WatchlistProvider = (*JellyfinClient)(nil)
@@ -817,3 +854,4 @@ var _ CollectionDataProvider = (*JellyfinClient)(nil)
 var _ LabelDataProvider = (*JellyfinClient)(nil)
 var _ LabelManager = (*JellyfinClient)(nil)
 var _ PosterManager = (*JellyfinClient)(nil)
+var _ NativeIDSearcher = (*JellyfinClient)(nil)

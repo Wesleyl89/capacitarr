@@ -182,6 +182,13 @@ type CollectionResolver interface {
 	ResolveCollectionMembers(item MediaItem) ([]MediaItem, error)
 }
 
+// NativeIDSearcher can search for a media item's native ID by TMDb ID.
+// Uses title to narrow the search space, then verifies the TMDb ID in the
+// response metadata. Implemented by PlexClient, JellyfinClient, EmbyClient.
+type NativeIDSearcher interface {
+	SearchByTMDbID(title string, tmdbID int) (string, error)
+}
+
 // DiskSpace represents disk usage reported by a service
 type DiskSpace struct {
 	Path       string `json:"path"`

@@ -24,12 +24,6 @@ type RunAccumulator struct {
 	Protected   int64
 	FreedBytes  int64
 	Collections int64 // distinct collection group expansions
-
-	// tmdbMap caches the per-integration TMDb→NativeID maps for sunset label
-	// and poster operations. Built lazily on first use per poll cycle, shared
-	// across all sunset disk group evaluations to avoid redundant API calls.
-	tmdbMap     map[uint]map[int]string
-	tmdbMapInit bool
 }
 
 // Poller orchestrates periodic media library polling and capacity evaluation.
@@ -236,6 +230,14 @@ func (p *Poller) poll() {
 		})
 	}
 
+	// Populate persistent media server ID mapping table from this cycle's
+	// library scan results. This replaces per-request full-library-scan map
+	// building with a once-per-cycle bulk population. Route handlers and cron
+	// jobs now use MappingService.Resolve() instead of building ephemeral maps.
+	if fetched.registry != nil && p.reg.Mapping != nil {
+		p.populateMediaServerMappings(fetched.registry, fetched.allItems)
+	}
+
 	// Build EvaluationContext AFTER fetch + enrichment so it includes:
 	// - Active integration types (from enabled configs)
 	// - Broken integration types (from connection test failures in fetch)
@@ -401,6 +403,70 @@ func (p *Poller) poll() {
 		"evaluated", evaluated,
 		"candidates", candidates,
 		"protected", protected)
+}
+
+// populateMediaServerMappings extracts TMDb→NativeID mappings from all media
+// server integrations and persists them via MappingService.BulkUpsert(). Title
+// and media type are cross-referenced from the *arr-sourced allItems to enrich
+// the mapping records for targeted search fallback (Phase 2).
+//
+// This runs once per poll cycle, replacing the per-request full-library-scan
+// pattern that previously existed in 8 separate call sites.
+func (p *Poller) populateMediaServerMappings(registry *integrations.IntegrationRegistry, allItems []integrations.MediaItem) {
+	// Build title/type index from *arr items for enriching mapping records
+	type itemInfo struct {
+		Title     string
+		MediaType string
+	}
+	infoByTMDbID := make(map[int]itemInfo, len(allItems))
+	for _, item := range allItems {
+		if item.TMDbID > 0 {
+			infoByTMDbID[item.TMDbID] = itemInfo{
+				Title:     item.Title,
+				MediaType: string(item.Type),
+			}
+		}
+	}
+
+	// Get TMDb→NativeID maps from all media server integrations.
+	// This calls the existing per-client map builders (GetTMDbToRatingKeyMap,
+	// GetTMDbToItemIDMap) which will be removed in Phase 4 when the mapping
+	// table becomes the sole source of truth.
+	rawMaps := registry.BuildTMDbToNativeIDMaps()
+
+	cycleStart := time.Now().UTC()
+
+	for integrationID, idMap := range rawMaps {
+		mappings := make([]db.MediaServerMapping, 0, len(idMap))
+		for tmdbID, nativeID := range idMap {
+			info := infoByTMDbID[tmdbID]
+			mediaType := info.MediaType
+			if mediaType == "" {
+				mediaType = string(integrations.MediaTypeMovie)
+			}
+			mappings = append(mappings, db.MediaServerMapping{
+				TmdbID:        tmdbID,
+				IntegrationID: integrationID,
+				NativeID:      nativeID,
+				MediaType:     mediaType,
+				Title:         info.Title,
+			})
+		}
+
+		if err := p.reg.Mapping.BulkUpsert(mappings); err != nil {
+			slog.Error("Failed to populate media server mappings",
+				"component", "poller", "integrationID", integrationID, "error", err)
+			continue
+		}
+
+		// Layer 2: Log stale mappings not seen in this poll cycle.
+		// Mappings whose updated_at was not touched by BulkUpsert represent
+		// items no longer present on this media server.
+		if stale, err := p.reg.Mapping.TouchedBefore(integrationID, cycleStart); err == nil && stale > 0 {
+			slog.Debug("Stale media server mappings detected (not seen in this poll cycle)",
+				"component", "poller", "integrationID", integrationID, "staleCount", stale)
+		}
+	}
 }
 
 // normalizePath converts backslash path separators to forward slashes for

@@ -138,12 +138,6 @@ func Start(reg *services.Registry) *cron.Cron {
 			slog.Error("Failed to build integration registry for sunset cron", "component", "jobs", "error", registryErr)
 		}
 
-		// Build TMDb→NativeID map once for the entire cron cycle
-		var tmdbMap map[uint]map[int]string
-		if registry != nil {
-			tmdbMap = registry.BuildTMDbToNativeIDMaps()
-		}
-
 		// Load preferences and weights early — needed by rescore + poster overlay steps
 		prefs, prefsErr := reg.Settings.GetPreferences()
 		if prefsErr != nil {
@@ -155,12 +149,12 @@ func Start(reg *services.Registry) *cron.Cron {
 		}
 
 		sunsetDeps := services.SunsetDeps{
-			Registry:       registry,
-			Deletion:       reg.Deletion,
-			Engine:         reg.Engine,
-			Settings:       reg.Settings,
-			PosterOverlay:  reg.PosterOverlay,
-			TMDbToNativeID: tmdbMap,
+			Registry:      registry,
+			Deletion:      reg.Deletion,
+			Engine:        reg.Engine,
+			Settings:      reg.Settings,
+			PosterOverlay: reg.PosterOverlay,
+			Mapping:       reg.Mapping,
 		}
 
 		// 1. Process expired sunset items → DeletionService
@@ -193,11 +187,22 @@ func Start(reg *services.Registry) *cron.Cron {
 		if reg.PosterOverlay != nil {
 			if prefsErr == nil && prefs.PosterOverlayEnabled {
 				if _, overlayErr := reg.PosterOverlay.UpdateAll(reg.Sunset, services.PosterDeps{
-					Registry:       registry,
-					TMDbToNativeID: tmdbMap,
+					Registry: registry,
+					Mapping:  reg.Mapping,
 				}); overlayErr != nil {
 					slog.Error("Failed to update poster overlays", "component", "jobs", "error", overlayErr)
 				}
+			}
+		}
+
+		// 5. Garbage collect stale media server ID mappings (Layer 3)
+		if reg.Mapping != nil {
+			if cleaned, gcErr := reg.Mapping.GarbageCollect(7 * 24 * time.Hour); gcErr != nil {
+				slog.Error("Failed to garbage collect media server mappings",
+					"component", "jobs", "error", gcErr)
+			} else if cleaned > 0 {
+				slog.Info("Garbage collected stale media server mappings",
+					"component", "jobs", "removed", cleaned)
 			}
 		}
 	})

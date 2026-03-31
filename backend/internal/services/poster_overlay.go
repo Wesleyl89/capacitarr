@@ -29,8 +29,8 @@ type PosterOverlayService struct {
 
 // PosterDeps holds dependencies for poster overlay operations.
 type PosterDeps struct {
-	Registry       *integrations.IntegrationRegistry
-	TMDbToNativeID map[uint]map[int]string // integrationID → (TMDb ID → native ID); built via IntegrationRegistry.BuildTMDbToNativeIDMaps()
+	Registry *integrations.IntegrationRegistry
+	Mapping  *MappingService // Persistent TMDb→NativeID mapping; replaces ephemeral BuildTMDbToNativeIDMaps()
 }
 
 // NewPosterOverlayService creates a new poster overlay service with a filesystem
@@ -92,17 +92,28 @@ func (s *PosterOverlayService) UpdateOverlay(item db.SunsetQueueItem, daysRemain
 
 	// ── Upload to all media servers (write-only) ─────────────────────────
 	managers := deps.Registry.PosterManagers()
+	searchers := deps.Registry.NativeIDSearchers()
 	for integrationID, mgr := range managers {
-		idMap := deps.TMDbToNativeID[integrationID]
-		if idMap == nil {
-			continue
-		}
-		nativeID, ok := idMap[*item.TmdbID]
-		if !ok {
+		nativeID, resolveErr := deps.Mapping.Resolve(*item.TmdbID, integrationID)
+		if resolveErr != nil {
 			continue
 		}
 
 		if err := mgr.UploadPosterImage(nativeID, overlayData, "image/jpeg"); err != nil {
+			// Layer 1: 404 recovery — native ID may be stale
+			if integrations.IsNotFoundError(err) {
+				if searcher, ok := searchers[integrationID]; ok {
+					if newID, reErr := deps.Mapping.InvalidateAndResolve(*item.TmdbID, integrationID, item.MediaName, searcher); reErr == nil {
+						if retryErr := mgr.UploadPosterImage(newID, overlayData, "image/jpeg"); retryErr == nil {
+							s.bus.Publish(events.PosterOverlayAppliedEvent{
+								MediaName: item.MediaName, IntegrationID: integrationID,
+								DaysRemaining: daysRemaining,
+							})
+							continue
+						}
+					}
+				}
+			}
 			slog.Error("Failed to upload poster overlay",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -149,19 +160,29 @@ func (s *PosterOverlayService) RestoreOriginal(item db.SunsetQueueItem, deps Pos
 	}
 
 	managers := deps.Registry.PosterManagers()
+	searchers := deps.Registry.NativeIDSearchers()
 	for integrationID, mgr := range managers {
-		idMap := deps.TMDbToNativeID[integrationID]
-		if idMap == nil {
-			continue
-		}
-		nativeID, ok := idMap[*item.TmdbID]
-		if !ok {
+		nativeID, resolveErr := deps.Mapping.Resolve(*item.TmdbID, integrationID)
+		if resolveErr != nil {
 			continue
 		}
 
 		if found && originalData != nil {
 			// Upload the clean original back
 			if err := mgr.UploadPosterImage(nativeID, originalData, "image/jpeg"); err != nil {
+				// Layer 1: 404 recovery — native ID may be stale
+				if integrations.IsNotFoundError(err) {
+					if searcher, ok := searchers[integrationID]; ok {
+						if newID, reErr := deps.Mapping.InvalidateAndResolve(*item.TmdbID, integrationID, item.MediaName, searcher); reErr == nil {
+							if mgr.UploadPosterImage(newID, originalData, "image/jpeg") == nil {
+								s.bus.Publish(events.PosterOverlayRestoredEvent{
+									MediaName: item.MediaName, IntegrationID: integrationID,
+								})
+								continue
+							}
+						}
+					}
+				}
 				slog.Error("Failed to upload original poster for restore",
 					"component", "services", "mediaName", item.MediaName,
 					"integrationID", integrationID, "error", err)
@@ -226,17 +247,24 @@ func (s *PosterOverlayService) UpdateSavedOverlay(item db.SunsetQueueItem, deps 
 	}
 
 	managers := deps.Registry.PosterManagers()
+	searchers := deps.Registry.NativeIDSearchers()
 	for integrationID, mgr := range managers {
-		idMap := deps.TMDbToNativeID[integrationID]
-		if idMap == nil {
-			continue
-		}
-		nativeID, ok := idMap[*item.TmdbID]
-		if !ok {
+		nativeID, resolveErr := deps.Mapping.Resolve(*item.TmdbID, integrationID)
+		if resolveErr != nil {
 			continue
 		}
 
 		if uploadErr := mgr.UploadPosterImage(nativeID, savedOverlay, "image/jpeg"); uploadErr != nil {
+			// Layer 1: 404 recovery — native ID may be stale
+			if integrations.IsNotFoundError(uploadErr) {
+				if searcher, ok := searchers[integrationID]; ok {
+					if newID, reErr := deps.Mapping.InvalidateAndResolve(*item.TmdbID, integrationID, item.MediaName, searcher); reErr == nil {
+						if mgr.UploadPosterImage(newID, savedOverlay, "image/jpeg") == nil {
+							continue
+						}
+					}
+				}
+			}
 			slog.Error("Failed to upload saved poster overlay",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", uploadErr)

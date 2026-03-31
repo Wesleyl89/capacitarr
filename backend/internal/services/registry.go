@@ -45,6 +45,7 @@ type Registry struct {
 	Migration            *MigrationService
 	Sunset               *SunsetService
 	PosterOverlay        *PosterOverlayService
+	Mapping              *MappingService
 }
 
 // NewRegistry creates a fully wired Registry with all services.
@@ -92,6 +93,7 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 		WatchAnalytics:       NewWatchAnalyticsService(previewSvc),
 		Migration:            NewMigrationService(database, bus, filepath.Dir(cfg.Database)),
 		Sunset:               sunsetSvc,
+		Mapping:              NewMappingService(database, bus),
 	}
 
 	// Initialize PosterOverlayService — cache dir is alongside the database file

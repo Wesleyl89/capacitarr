@@ -25,6 +25,7 @@ type IntegrationRegistry struct {
 	labelDataProviders      map[uint]LabelDataProvider
 	labelManagers           map[uint]LabelManager
 	posterManagers          map[uint]PosterManager
+	nativeIDSearchers       map[uint]NativeIDSearcher
 }
 
 // NewIntegrationRegistry creates an empty registry.
@@ -43,6 +44,7 @@ func NewIntegrationRegistry() *IntegrationRegistry {
 		labelDataProviders:      make(map[uint]LabelDataProvider),
 		labelManagers:           make(map[uint]LabelManager),
 		posterManagers:          make(map[uint]PosterManager),
+		nativeIDSearchers:       make(map[uint]NativeIDSearcher),
 	}
 }
 
@@ -114,6 +116,10 @@ func (r *IntegrationRegistry) Register(integrationID uint, client interface{}) {
 	}
 	if c, ok := client.(PosterManager); ok {
 		r.posterManagers[integrationID] = c
+		registered++
+	}
+	if c, ok := client.(NativeIDSearcher); ok {
+		r.nativeIDSearchers[integrationID] = c
 		registered++
 	}
 
@@ -344,6 +350,19 @@ func (r *IntegrationRegistry) BuildTMDbToNativeIDMaps() map[uint]map[int]string 
 	}
 
 	return result
+}
+
+// NativeIDSearchers returns all registered NativeIDSearcher implementations
+// with their integration IDs. Returns a defensive copy. Used by MappingService
+// for targeted search fallback when a mapping is not found in the database.
+func (r *IntegrationRegistry) NativeIDSearchers() map[uint]NativeIDSearcher {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[uint]NativeIDSearcher, len(r.nativeIDSearchers))
+	for k, v := range r.nativeIDSearchers {
+		out[k] = v
+	}
+	return out
 }
 
 // PosterManagers returns all registered PosterManager implementations with their IDs.

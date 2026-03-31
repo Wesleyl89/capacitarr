@@ -27,12 +27,12 @@ type SunsetService struct {
 // Follows the same pattern as ExecuteApprovalDeps in approval.go.
 // SettingsReader is the existing interface defined in deletion.go — reuse it.
 type SunsetDeps struct {
-	Registry       *integrations.IntegrationRegistry
-	Deletion       *DeletionService
-	Engine         *EngineService
-	Settings       SettingsReader
-	PosterOverlay  *PosterOverlayService   // Optional: if set, posters are restored on cancel/expire/escalate
-	TMDbToNativeID map[uint]map[int]string // integrationID → (TMDb ID → native ID); built once per cycle via IntegrationRegistry.BuildTMDbToNativeIDMaps()
+	Registry      *integrations.IntegrationRegistry
+	Deletion      *DeletionService
+	Engine        *EngineService
+	Settings      SettingsReader
+	PosterOverlay *PosterOverlayService // Optional: if set, posters are restored on cancel/expire/escalate
+	Mapping       *MappingService       // Persistent TMDb→NativeID mapping; replaces ephemeral BuildMappingMaps()
 }
 
 // NewSunsetService creates a new sunset queue service.
@@ -50,7 +50,7 @@ func (s *SunsetService) QueueSunset(item db.SunsetQueueItem, deps SunsetDeps) er
 	// Apply label to media servers
 	if deps.Registry != nil && deps.Settings != nil {
 		if prefs, err := deps.Settings.GetPreferences(); err == nil && prefs.SunsetLabel != "" {
-			if s.applyLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID) {
+			if s.applyLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping) {
 				item.LabelApplied = true
 				s.db.Model(&item).Update("label_applied", true)
 			}
@@ -102,7 +102,7 @@ func (s *SunsetService) BulkQueueSunset(items []db.SunsetQueueItem, deps SunsetD
 	// Apply labels outside the transaction (media server calls shouldn't block DB)
 	if deps.Registry != nil && prefs.SunsetLabel != "" {
 		for i := range items {
-			if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID) {
+			if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, deps.Mapping) {
 				items[i].LabelApplied = true
 				s.db.Model(&items[i]).Update("label_applied", true)
 			}
@@ -133,7 +133,7 @@ func (s *SunsetService) Cancel(entryID uint, deps SunsetDeps) error {
 
 	// Restore poster overlay
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, Mapping: deps.Mapping}); err != nil {
 			slog.Error("Failed to restore poster on cancel",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
@@ -142,7 +142,7 @@ func (s *SunsetService) Cancel(entryID uint, deps SunsetDeps) error {
 	// Remove label from media servers
 	if item.LabelApplied && deps.Registry != nil && deps.Settings != nil {
 		if prefs, err := deps.Settings.GetPreferences(); err == nil && prefs.SunsetLabel != "" {
-			s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
+			s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping)
 		}
 	}
 
@@ -295,14 +295,14 @@ func (s *SunsetService) RescoreAndSave(deps SunsetDeps, prefs db.PreferenceSet, 
 
 			// Replace sunset label with saved label
 			if item.LabelApplied && deps.Registry != nil {
-				s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
-				s.applyLabel(item, prefs.SavedLabel, deps.Registry, deps.TMDbToNativeID)
+				s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping)
+				s.applyLabel(item, prefs.SavedLabel, deps.Registry, deps.Mapping)
 			}
 
 			// Restore poster overlay (saved items show the original poster)
 			if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 				if overlayErr := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{
-					Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID,
+					Registry: deps.Registry, Mapping: deps.Mapping,
 				}); overlayErr != nil {
 					slog.Error("Failed to restore poster for saved item",
 						"component", "services", "mediaName", item.MediaName, "error", overlayErr)
@@ -350,7 +350,7 @@ func (s *SunsetService) CleanupSaved(deps SunsetDeps) (int, error) {
 		// Restore original poster
 		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
 			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{
-				Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID,
+				Registry: deps.Registry, Mapping: deps.Mapping,
 			}); err != nil {
 				slog.Error("Failed to restore poster during saved cleanup",
 					"component", "services", "mediaName", item.MediaName, "error", err)
@@ -359,7 +359,7 @@ func (s *SunsetService) CleanupSaved(deps SunsetDeps) (int, error) {
 
 		// Remove saved label
 		if item.LabelApplied && deps.Registry != nil {
-			s.removeLabel(item, prefs.SavedLabel, deps.Registry, deps.TMDbToNativeID)
+			s.removeLabel(item, prefs.SavedLabel, deps.Registry, deps.Mapping)
 		}
 
 		// Hard-delete the record
@@ -446,7 +446,7 @@ func (s *SunsetService) CancelAll(deps SunsetDeps) (int, error) {
 	for _, item := range items {
 		// Restore poster overlays before clearing
 		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, Mapping: deps.Mapping}); err != nil {
 				slog.Error("Failed to restore poster during clear-all",
 					"component", "services", "mediaName", item.MediaName, "error", err)
 			}
@@ -457,7 +457,7 @@ func (s *SunsetService) CancelAll(deps SunsetDeps) (int, error) {
 		if prefs, prefsErr := deps.Settings.GetPreferences(); prefsErr == nil && prefs.SunsetLabel != "" {
 			for _, item := range items {
 				if item.LabelApplied {
-					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
+					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping)
 				}
 			}
 		}
@@ -480,7 +480,7 @@ func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps)
 	for _, item := range items {
 		// Restore poster overlays before clearing
 		if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+			if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, Mapping: deps.Mapping}); err != nil {
 				slog.Error("Failed to restore poster during disk-group clear",
 					"component", "services", "mediaName", item.MediaName, "error", err)
 			}
@@ -491,7 +491,7 @@ func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps)
 		if prefs, prefsErr := deps.Settings.GetPreferences(); prefsErr == nil && prefs.SunsetLabel != "" {
 			for _, item := range items {
 				if item.LabelApplied {
-					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
+					s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping)
 				}
 			}
 		}
@@ -554,14 +554,9 @@ func (s *SunsetService) RefreshLabels(deps SunsetDeps) (int, error) {
 		return 0, fmt.Errorf("load preferences for label refresh: %w", prefsErr)
 	}
 
-	var tmdbMaps map[uint]map[int]string
-	if deps.Registry != nil {
-		tmdbMaps = deps.Registry.BuildTMDbToNativeIDMaps()
-	}
-
 	applied := 0
 	for i := range items {
-		if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, tmdbMaps) {
+		if s.applyLabel(items[i], prefs.SunsetLabel, deps.Registry, deps.Mapping) {
 			items[i].LabelApplied = true
 			s.db.Model(&items[i]).Update("label_applied", true)
 			applied++
@@ -578,20 +573,15 @@ func (s *SunsetService) RefreshLabels(deps SunsetDeps) (int, error) {
 // MigrateLabel removes the old label and applies the new label across all
 // queued items in all enabled media servers. Called from the settings save
 // handler when the user changes SunsetLabel.
-func (s *SunsetService) MigrateLabel(oldLabel, newLabel string, registry *integrations.IntegrationRegistry) error {
+func (s *SunsetService) MigrateLabel(oldLabel, newLabel string, registry *integrations.IntegrationRegistry, mapping *MappingService) error {
 	var items []db.SunsetQueueItem
 	if err := s.db.Where("label_applied = ?", true).Find(&items).Error; err != nil {
 		return fmt.Errorf("list labeled items: %w", err)
 	}
 
-	var tmdbMaps map[uint]map[int]string
-	if registry != nil {
-		tmdbMaps = registry.BuildTMDbToNativeIDMaps()
-	}
-
 	for _, item := range items {
-		s.removeLabel(item, oldLabel, registry, tmdbMaps)
-		s.applyLabel(item, newLabel, registry, tmdbMaps)
+		s.removeLabel(item, oldLabel, registry, mapping)
+		s.applyLabel(item, newLabel, registry, mapping)
 	}
 
 	slog.Info("Migrated sunset labels", "component", "services",
@@ -604,21 +594,32 @@ func (s *SunsetService) MigrateLabel(oldLabel, newLabel string, registry *integr
 // applyLabel applies the sunset label to an item across all LabelManager-capable
 // media servers. Returns true if at least one media server succeeded.
 // Errors are logged but not propagated (label is best-effort).
-func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, tmdbMaps map[uint]map[int]string) bool {
-	if registry == nil || item.TmdbID == nil {
+func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, mapping *MappingService) bool {
+	if registry == nil || item.TmdbID == nil || mapping == nil {
 		return false
 	}
 	anySuccess := false
+	searchers := registry.NativeIDSearchers()
 	for integrationID, mgr := range registry.LabelManagers() {
-		idMap := tmdbMaps[integrationID]
-		if idMap == nil {
-			continue
-		}
-		nativeID, ok := idMap[*item.TmdbID]
-		if !ok {
+		nativeID, err := mapping.Resolve(*item.TmdbID, integrationID)
+		if err != nil {
 			continue
 		}
 		if err := mgr.AddLabel(nativeID, label); err != nil {
+			// Layer 1: 404 recovery — native ID may be stale
+			if integrations.IsNotFoundError(err) {
+				if searcher, ok := searchers[integrationID]; ok {
+					if newID, reErr := mapping.InvalidateAndResolve(*item.TmdbID, integrationID, item.MediaName, searcher); reErr == nil {
+						if mgr.AddLabel(newID, label) == nil {
+							anySuccess = true
+							s.bus.Publish(events.SunsetLabelAppliedEvent{
+								MediaName: item.MediaName, IntegrationID: integrationID, Label: label,
+							})
+							continue
+						}
+					}
+				}
+			}
 			slog.Error("Failed to apply sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -638,20 +639,30 @@ func (s *SunsetService) applyLabel(item db.SunsetQueueItem, label string, regist
 
 // removeLabel removes the sunset label from an item across all LabelManager-capable
 // media servers.
-func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, tmdbMaps map[uint]map[int]string) {
-	if registry == nil || item.TmdbID == nil {
+func (s *SunsetService) removeLabel(item db.SunsetQueueItem, label string, registry *integrations.IntegrationRegistry, mapping *MappingService) {
+	if registry == nil || item.TmdbID == nil || mapping == nil {
 		return
 	}
+	searchers := registry.NativeIDSearchers()
 	for integrationID, mgr := range registry.LabelManagers() {
-		idMap := tmdbMaps[integrationID]
-		if idMap == nil {
-			continue
-		}
-		nativeID, ok := idMap[*item.TmdbID]
-		if !ok {
+		nativeID, err := mapping.Resolve(*item.TmdbID, integrationID)
+		if err != nil {
 			continue
 		}
 		if err := mgr.RemoveLabel(nativeID, label); err != nil {
+			// Layer 1: 404 recovery — native ID may be stale
+			if integrations.IsNotFoundError(err) {
+				if searcher, ok := searchers[integrationID]; ok {
+					if newID, reErr := mapping.InvalidateAndResolve(*item.TmdbID, integrationID, item.MediaName, searcher); reErr == nil {
+						if mgr.RemoveLabel(newID, label) == nil {
+							s.bus.Publish(events.SunsetLabelRemovedEvent{
+								MediaName: item.MediaName, IntegrationID: integrationID, Label: label,
+							})
+							continue
+						}
+					}
+				}
+			}
 			slog.Error("Failed to remove sunset label",
 				"component", "services", "mediaName", item.MediaName,
 				"integrationID", integrationID, "error", err)
@@ -683,7 +694,7 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 
 	// Restore poster overlay before deletion
 	if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, TMDbToNativeID: deps.TMDbToNativeID}); err != nil {
+		if err := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{Registry: deps.Registry, Mapping: deps.Mapping}); err != nil {
 			slog.Error("Failed to restore poster before expiry/escalation",
 				"component", "services", "mediaName", item.MediaName, "error", err)
 		}
@@ -691,7 +702,7 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 
 	// Remove label
 	if item.LabelApplied && deps.Registry != nil && prefs.SunsetLabel != "" {
-		s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.TMDbToNativeID)
+		s.removeLabel(item, prefs.SunsetLabel, deps.Registry, deps.Mapping)
 	}
 
 	// Hand off to DeletionService — if this fails, keep item in queue for retry

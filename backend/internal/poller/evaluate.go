@@ -518,19 +518,13 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 
 	sunsetPct := *group.SunsetPct
 
-	// Lazy-build TMDb→NativeID map once per poll cycle (cached on accumulator)
-	if !acc.tmdbMapInit && registry != nil {
-		acc.tmdbMap = registry.BuildTMDbToNativeIDMaps()
-		acc.tmdbMapInit = true
-	}
-
 	sunsetDeps := services.SunsetDeps{
-		Registry:       registry,
-		Deletion:       p.reg.Deletion,
-		Engine:         p.reg.Engine,
-		Settings:       p.reg.Settings,
-		PosterOverlay:  p.reg.PosterOverlay,
-		TMDbToNativeID: acc.tmdbMap,
+		Registry:      registry,
+		Deletion:      p.reg.Deletion,
+		Engine:        p.reg.Engine,
+		Settings:      p.reg.Settings,
+		PosterOverlay: p.reg.PosterOverlay,
+		Mapping:       p.reg.Mapping,
 	}
 
 	// Step 1: Queue items to sunset if sunsetPct is breached
