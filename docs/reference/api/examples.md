@@ -1089,14 +1089,7 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "name": "My Discord",
     "webhookUrl": "https://discord.com/api/webhooks/...",
     "enabled": true,
-    "onThresholdBreach": true,
-    "onCycleDigest": true,
-    "onError": true,
-    "onModeChanged": true,
-    "onServerStarted": true,
-    "onUpdateAvailable": true,
-    "onApprovalActivity": true,
-    "onIntegrationStatus": true
+    "notificationLevel": "all"
   }' | jq
 ```
 
@@ -1112,13 +1105,11 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "webhookUrl": "http://apprise:8000",
     "appriseTags": "telegram",
     "enabled": true,
-    "onThresholdBreach": true,
-    "onCycleDigest": true,
-    "onError": true
+    "notificationLevel": "important"
   }' | jq
 ```
 
-### Update a notification channel
+### Update a notification channel (with per-event override)
 
 ```bash
 curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
@@ -1127,7 +1118,8 @@ curl -s -X PUT -H "X-Api-Key: $CAPACITARR_API_KEY" \
   -d '{
     "name": "My Discord (updated)",
     "enabled": true,
-    "onCycleDigest": false
+    "notificationLevel": "normal",
+    "overrideCycleDigest": false
   }' | jq
 ```
 

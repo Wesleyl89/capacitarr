@@ -285,11 +285,19 @@ func (s *PosterOverlayService) UpdateAll(sunset *SunsetService, deps PosterDeps)
 
 	updated := 0
 	for _, item := range items {
-		daysRemaining := sunset.DaysRemaining(item)
-		if err := s.UpdateOverlay(item, daysRemaining, deps); err != nil {
-			slog.Error("Failed to update poster overlay",
-				"component", "services", "mediaName", item.MediaName, "error", err)
-			continue
+		if item.Status == db.SunsetStatusSaved {
+			if err := s.UpdateSavedOverlay(item, deps); err != nil {
+				slog.Error("Failed to update saved poster overlay",
+					"component", "services", "mediaName", item.MediaName, "error", err)
+				continue
+			}
+		} else {
+			daysRemaining := sunset.DaysRemaining(item)
+			if err := s.UpdateOverlay(item, daysRemaining, deps); err != nil {
+				slog.Error("Failed to update poster overlay",
+					"component", "services", "mediaName", item.MediaName, "error", err)
+				continue
+			}
 		}
 		updated++
 	}

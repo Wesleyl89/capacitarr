@@ -213,8 +213,6 @@ func (p *Poller) poll() {
 	}
 
 	// Create engine run stats row via service
-	// TODO(sunset): Step 1.12 — with per-disk-group modes, a single run may span multiple modes.
-	// For now, record the default mode; the engine refactor will handle per-group mode tracking.
 	runStats, err := p.reg.Engine.CreateRunStats(prefs.DefaultDiskGroupMode)
 	if err != nil {
 		slog.Error("Failed to create engine run stats", "component", "poller", "operation", "create_stats", "error", err)
@@ -386,6 +384,18 @@ func (p *Poller) poll() {
 
 	// Read per-run stats from the accumulator (aggregated across all groups)
 	evaluated, candidates, protected, _, freedBytes := acc.Totals()
+
+	// Store per-disk-group modes on the engine run stats row
+	if runStatsID > 0 {
+		dgModes := make(map[uint]string, len(acc.Groups))
+		for groupID, ga := range acc.Groups {
+			dgModes[groupID] = ga.Mode
+		}
+		if modesErr := p.reg.Engine.SetDiskGroupModes(runStatsID, dgModes); modesErr != nil {
+			slog.Error("Failed to set disk group modes on run stats",
+				"component", "poller", "error", modesErr)
+		}
+	}
 
 	// Build per-group digest data from the accumulator.
 	var groups []notifications.GroupDigest

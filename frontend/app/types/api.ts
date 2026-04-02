@@ -206,19 +206,6 @@ export interface DeletionProgress {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard Stats
-// ---------------------------------------------------------------------------
-
-export interface DashboardStats {
-  totalBytesReclaimed: number;
-  totalItemsRemoved: number;
-  totalEngineRuns: number;
-  protectedCount: number;
-  growthBytesPerWeek: number;
-  hasGrowthData: boolean;
-}
-
-// ---------------------------------------------------------------------------
 // Media / Scoring (Preview)
 // ---------------------------------------------------------------------------
 
@@ -289,27 +276,6 @@ export interface DiskContext {
   targetPct: number;
   thresholdPct: number;
   bytesToFree: number;
-}
-
-// ---------------------------------------------------------------------------
-// Metrics History
-// ---------------------------------------------------------------------------
-
-export interface LibraryHistoryRow {
-  id: number;
-  timestamp: string;
-  totalCapacity: number;
-  usedCapacity: number;
-  resolution: string;
-  diskGroupId?: number | null;
-  createdAt: string;
-}
-// Note: Named "LibraryHistoryRow" for backward compatibility with the
-// library_histories DB table. This tracks disk group capacity history.
-
-export interface MetricsHistoryResponse {
-  status: string;
-  data: LibraryHistoryRow[];
 }
 
 // ---------------------------------------------------------------------------

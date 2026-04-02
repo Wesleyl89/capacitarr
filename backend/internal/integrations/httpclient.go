@@ -72,7 +72,7 @@ func DoAPIRequest(url, headerKey, headerValue string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create request for %s: %w", sanitizedURL, err)
 	}
 	if headerKey != "" {
 		req.Header.Set(headerKey, headerValue)
@@ -125,7 +125,7 @@ func DoAPIRequestWithBody(method, url string, body []byte, headerKey, headerValu
 
 	req, err := http.NewRequestWithContext(context.Background(), method, url, bodyReader)
 	if err != nil {
-		return err
+		return fmt.Errorf("create %s request for %s: %w", method, sanitizedURL, err)
 	}
 	if body != nil && req.Header.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
@@ -178,7 +178,7 @@ func DoMultipartUpload(url string, imageData []byte, fieldName, fileName string,
 
 	req, err := http.NewRequestWithContext(context.Background(), "POST", url, &buf)
 	if err != nil {
-		return err
+		return fmt.Errorf("create multipart request: %w", err)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	for k, v := range extraHeaders {

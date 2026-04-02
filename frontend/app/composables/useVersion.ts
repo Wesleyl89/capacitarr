@@ -12,7 +12,6 @@ export function useVersion() {
   const uiBuildDate = (config.public.appBuildDate as string) || '';
 
   const apiVersion = ref('');
-  const apiCommit = ref('');
   const apiBuildDate = ref('');
 
   const updateAvailable = ref(false);
@@ -31,7 +30,6 @@ export function useVersion() {
         buildDate?: string;
       };
       apiVersion.value = data.version || '';
-      apiCommit.value = data.commit || '';
       apiBuildDate.value = data.buildDate || '';
     } catch (e) {
       // API version endpoint may not exist yet — graceful degradation
@@ -95,7 +93,6 @@ export function useVersion() {
     uiVersion,
     uiBuildDate,
     apiVersion: readonly(apiVersion),
-    apiCommit: readonly(apiCommit),
     apiBuildDate: readonly(apiBuildDate),
     updateAvailable: readonly(updateAvailable),
     latestVersion: readonly(latestVersion),

@@ -414,6 +414,83 @@
     </UiCardContent>
   </UiCard>
 
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- Content Analytics Card                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <UiCard>
+    <UiCardHeader class="flex flex-row items-center gap-3">
+      <MonitorIcon class="h-5 w-5 text-primary" />
+      <div>
+        <UiCardTitle class="text-base">{{ $t('settings.contentAnalytics') }}</UiCardTitle>
+        <UiCardDescription>{{ $t('settings.contentAnalyticsDesc') }}</UiCardDescription>
+      </div>
+    </UiCardHeader>
+    <UiCardContent class="space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.deadContentMinDays') }}</UiLabel>
+            <SaveIndicator :status="saveStatus.deadContentMinDays ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.deadContentMinDaysDesc') }}
+          </p>
+          <UiSelect
+            :model-value="String(deadContentMinDays)"
+            @update:model-value="
+              (v: AcceptableValue) => {
+                deadContentMinDays = Number(v);
+                patchPreference('deadContentMinDays', 'content', 'deadContentMinDays', Number(v));
+              }
+            "
+          >
+            <UiSelectTrigger class="w-full">
+              <UiSelectValue :placeholder="$t('settings.selectDuration')" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem value="30">{{ $t('settings.nDays', { n: 30 }) }}</UiSelectItem>
+              <UiSelectItem value="60">{{ $t('settings.nDays', { n: 60 }) }}</UiSelectItem>
+              <UiSelectItem value="90">{{ $t('settings.nDays', { n: 90 }) }}</UiSelectItem>
+              <UiSelectItem value="120">{{ $t('settings.nDays', { n: 120 }) }}</UiSelectItem>
+              <UiSelectItem value="180">{{ $t('settings.nDays', { n: 180 }) }}</UiSelectItem>
+              <UiSelectItem value="365">{{ $t('settings.nDays', { n: 365 }) }}</UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.staleContentDays') }}</UiLabel>
+            <SaveIndicator :status="saveStatus.staleContentDays ?? 'idle'" />
+          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.staleContentDaysDesc') }}
+          </p>
+          <UiSelect
+            :model-value="String(staleContentDays)"
+            @update:model-value="
+              (v: AcceptableValue) => {
+                staleContentDays = Number(v);
+                patchPreference('staleContentDays', 'content', 'staleContentDays', Number(v));
+              }
+            "
+          >
+            <UiSelectTrigger class="w-full">
+              <UiSelectValue :placeholder="$t('settings.selectDuration')" />
+            </UiSelectTrigger>
+            <UiSelectContent>
+              <UiSelectItem value="60">{{ $t('settings.nDays', { n: 60 }) }}</UiSelectItem>
+              <UiSelectItem value="90">{{ $t('settings.nDays', { n: 90 }) }}</UiSelectItem>
+              <UiSelectItem value="120">{{ $t('settings.nDays', { n: 120 }) }}</UiSelectItem>
+              <UiSelectItem value="180">{{ $t('settings.nDays', { n: 180 }) }}</UiSelectItem>
+              <UiSelectItem value="270">{{ $t('settings.nDays', { n: 270 }) }}</UiSelectItem>
+              <UiSelectItem value="365">{{ $t('settings.nDays', { n: 365 }) }}</UiSelectItem>
+            </UiSelectContent>
+          </UiSelect>
+        </div>
+      </div>
+    </UiCardContent>
+  </UiCard>
+
   <!-- Restore All Posters Confirmation Dialog -->
   <UiDialog
     :open="showRestorePostersDialog"
@@ -471,6 +548,8 @@ initFields([
   'sunsetRescore',
   'savedDuration',
   'savedLabel',
+  'deadContentMinDays',
+  'staleContentDays',
 ]);
 const { addToast } = useToast();
 
@@ -483,6 +562,10 @@ const sunsetDays = ref(30);
 const sunsetRescoreEnabled = ref(true);
 const savedDurationDays = ref(7);
 const savedLabel = ref('capacitarr-saved');
+
+// Content analytics state
+const deadContentMinDays = ref(90);
+const staleContentDays = ref(180);
 
 // Poster action loading states
 const refreshingPosters = ref(false);
@@ -523,6 +606,12 @@ async function fetchPreferences() {
     }
     if (prefs?.savedLabel) {
       savedLabel.value = prefs.savedLabel;
+    }
+    if (prefs?.deadContentMinDays !== undefined) {
+      deadContentMinDays.value = prefs.deadContentMinDays;
+    }
+    if (prefs?.staleContentDays !== undefined) {
+      staleContentDays.value = prefs.staleContentDays;
     }
   } catch (err) {
     console.warn('[SettingsGeneral] fetchPreferences failed:', err);

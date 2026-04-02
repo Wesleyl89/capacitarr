@@ -25,6 +25,7 @@ hideTitle: true
 | [Deployment Guide](getting-started/deployment.md) | Reverse proxy configuration, SSE proxy notes, subdirectory deployments, and authentication |
 | [Configuration Reference](getting-started/configuration.md) | All environment variables with defaults and descriptions |
 | [Scoring Algorithm](guides/scoring.md) | How items are ranked for deletion — factors, weights, rules, and tiebreakers |
+| [Notifications](guides/notifications.md) | Discord and Apprise notification setup, event tiers, and channel overrides |
 | [API Documentation](reference/api/README.md) | REST API reference, examples, and workflows |
 | [Release Workflow](releasing.md) | Semantic versioning, git-cliff changelog, and CI/CD release pipeline |
 

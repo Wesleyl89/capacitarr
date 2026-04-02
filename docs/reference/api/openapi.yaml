@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Capacitarr API
-  version: 2.0.0
+  version: 3.0.0
   description: |
     Capacitarr is a capacity management tool for media servers. It monitors disk
     usage across Sonarr, Radarr, Lidarr, Readarr, Plex, Jellyfin, Emby, Tautulli,
@@ -73,6 +73,8 @@ tags:
     description: Settings export/import with section-level granularity
   - name: Version Check
     description: Update check with cache
+  - name: Sunset Queue
+    description: Sunset queue management (countdown tracking, label and poster operations)
   - name: Data
     description: Data reset / clear operations
 
@@ -936,7 +938,7 @@ paths:
   /settings/export:
     get:
       operationId: exportSettings
-      tags: [Settings]
+      tags: [Settings Backup]
       summary: Export application settings as portable JSON
       description: |
         Returns application settings in a portable JSON format suitable for
@@ -975,7 +977,7 @@ paths:
   /settings/import:
     post:
       operationId: importSettings
-      tags: [Settings]
+      tags: [Settings Backup]
       summary: Import application settings from a portable export
       description: |
         Imports settings from a previously exported envelope. Supports
@@ -1019,7 +1021,7 @@ paths:
   /settings/import/preview:
     post:
       operationId: previewImportSettings
-      tags: [Settings]
+      tags: [Settings Backup]
       summary: Preview settings import without applying changes
       description: |
         Analyzes the export file against the current database and reports
@@ -1056,7 +1058,7 @@ paths:
   /settings/import/commit:
     post:
       operationId: commitImportSettings
-      tags: [Settings]
+      tags: [Settings Backup]
       summary: Commit settings import with user-provided overrides
       description: |
         Executes the import using user-provided overrides for rule
@@ -1130,6 +1132,13 @@ paths:
         along with disk context information. Items are sorted by score
         descending (highest deletion priority first) with the configured
         tiebreaker method applied.
+      parameters:
+        - name: force
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: When true, bypasses the preview cache and forces a fresh evaluation
       responses:
         "200":
           description: Preview of scored items with disk context
@@ -2223,6 +2232,215 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /integrations/health:
+    get:
+      operationId: getIntegrationsHealth
+      tags: [Integrations]
+      summary: Get health status for all enabled integrations
+      responses:
+        "200":
+          description: Health check results per integration
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /approval-queue/group/approve:
+    post:
+      operationId: groupApproveApprovalQueue
+      tags: [Approval Queue]
+      summary: Approve multiple items by disk group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diskGroupId:
+                  type: integer
+      responses:
+        "200":
+          description: Items approved
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /approval-queue/group/reject:
+    post:
+      operationId: groupRejectApprovalQueue
+      tags: [Approval Queue]
+      summary: Reject multiple items by disk group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                diskGroupId:
+                  type: integer
+      responses:
+        "200":
+          description: Items rejected
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /preferences/engine:
+    patch:
+      operationId: patchEnginePreferences
+      tags: [Preferences]
+      summary: Partially update engine behavior preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tiebreakerMethod:
+                  type: string
+                snoozeDurationHours:
+                  type: integer
+                defaultDiskGroupMode:
+                  type: string
+                deletionsEnabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /preferences/sunset:
+    patch:
+      operationId: patchSunsetPreferences
+      tags: [Preferences]
+      summary: Partially update sunset behavior preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sunsetDays:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+                sunsetLabel:
+                  type: string
+                posterOverlayEnabled:
+                  type: boolean
+                sunsetRescoreEnabled:
+                  type: boolean
+                savedDurationDays:
+                  type: integer
+                savedLabel:
+                  type: string
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /preferences/content:
+    patch:
+      operationId: patchContentPreferences
+      tags: [Preferences]
+      summary: Partially update content analytics preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deadContentMinDays:
+                  type: integer
+                  minimum: 1
+                staleContentDays:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /preferences/advanced:
+    patch:
+      operationId: patchAdvancedPreferences
+      tags: [Preferences]
+      summary: Partially update advanced preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                logLevel:
+                  type: string
+                  enum: [debug, info, warn, error]
+                auditLogRetentionDays:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sunset-queue/refresh-labels:
+    post:
+      operationId: refreshSunsetLabels
+      tags: [Sunset Queue]
+      summary: Re-apply sunset labels to all queued items
+      responses:
+        "200":
+          description: Labels refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /sunset-queue/refresh-posters:
+    post:
+      operationId: refreshSunsetPosters
+      tags: [Sunset Queue]
+      summary: Re-apply poster overlays to all sunset queue items
+      responses:
+        "200":
+          description: Posters refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -3160,31 +3378,29 @@ components:
     # ---- Metrics History ----
     LibraryHistory:
       type: object
-      description: |
-        Historical capacity snapshot. Note: field names use Go's default
-        capitalized JSON serialization (no json tags on this struct).
+      description: Historical capacity snapshot.
       properties:
-        ID:
+        id:
           type: integer
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
-        TotalCapacity:
+        totalCapacity:
           type: integer
           format: int64
-        UsedCapacity:
+        usedCapacity:
           type: integer
           format: int64
-        Resolution:
+        resolution:
           type: string
           enum: [raw, hourly, daily, weekly]
-        DiskGroupID:
+        diskGroupId:
           type: ["integer", "null"]
           description: Optional FK to DiskGroup
-        CreatedAt:
+        createdAt:
           type: string
           format: date-time
-      required: [ID, Timestamp, TotalCapacity, UsedCapacity, Resolution]
+      required: [id, timestamp, totalCapacity, usedCapacity, resolution]
 
     MetricsHistoryResponse:
       type: object
@@ -3352,17 +3568,13 @@ components:
         mediaType:
           type: string
           example: season
-        reason:
-          type: string
-          description: Human-readable score summary
-          example: "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
         scoreDetails:
           type: string
           description: JSON-encoded array of ScoreFactor objects
           example: '[{"name":"Watch History","rawScore":1.0,"weight":10,"contribution":0.4,"type":"weight"}]'
         action:
           type: string
-          enum: [deleted, dry_run, dry_delete]
+          enum: [deleted, dry_delete]
           example: deleted
         sizeBytes:
           type: integer
@@ -3376,7 +3588,7 @@ components:
         createdAt:
           type: string
           format: date-time
-      required: [id, mediaName, mediaType, reason, action, sizeBytes, createdAt]
+      required: [id, mediaName, mediaType, action, sizeBytes, createdAt]
 
     AuditLogResponse:
       type: object
@@ -3411,10 +3623,6 @@ components:
           type: string
           enum: [movie, show, season, episode, artist, album, book]
           example: season
-        reason:
-          type: string
-          description: Human-readable score summary
-          example: "Score: 0.85 (WatchHistory: 1.0, Size: 0.5)"
         scoreDetails:
           type: string
           description: JSON-encoded array of ScoreFactor objects
@@ -3558,22 +3766,34 @@ components:
           description: Comma-separated Apprise tags for routing (Apprise channels only)
         enabled:
           type: boolean
-        onCycleDigest:
-          type: boolean
-        onError:
-          type: boolean
-        onModeChanged:
-          type: boolean
-        onServerStarted:
-          type: boolean
-        onThresholdBreach:
-          type: boolean
-        onUpdateAvailable:
-          type: boolean
-        onApprovalActivity:
-          type: boolean
-        onIntegrationStatus:
-          type: boolean
+        notificationLevel:
+          type: string
+          enum: [all, normal, important, minimal]
+          description: Controls which event tiers trigger this channel
+        overrideCycleDigest:
+          type: ["boolean", "null"]
+          description: Force cycle digest on/off regardless of level
+        overrideError:
+          type: ["boolean", "null"]
+          description: Force error notifications on/off regardless of level
+        overrideModeChanged:
+          type: ["boolean", "null"]
+          description: Force mode change notifications on/off regardless of level
+        overrideServerStarted:
+          type: ["boolean", "null"]
+          description: Force server started notifications on/off regardless of level
+        overrideThresholdBreach:
+          type: ["boolean", "null"]
+          description: Force threshold breach notifications on/off regardless of level
+        overrideUpdateAvailable:
+          type: ["boolean", "null"]
+          description: Force update available notifications on/off regardless of level
+        overrideApprovalActivity:
+          type: ["boolean", "null"]
+          description: Force approval activity notifications on/off regardless of level
+        overrideIntegrationStatus:
+          type: ["boolean", "null"]
+          description: Force integration status notifications on/off regardless of level
         createdAt:
           type: string
           format: date-time
@@ -3597,22 +3817,26 @@ components:
           description: Comma-separated Apprise tags for routing (optional, Apprise channels only)
         enabled:
           type: boolean
-        onCycleDigest:
-          type: boolean
-        onError:
-          type: boolean
-        onModeChanged:
-          type: boolean
-        onServerStarted:
-          type: boolean
-        onThresholdBreach:
-          type: boolean
-        onUpdateAvailable:
-          type: boolean
-        onApprovalActivity:
-          type: boolean
-        onIntegrationStatus:
-          type: boolean
+        notificationLevel:
+          type: string
+          enum: [all, normal, important, minimal]
+          description: Controls which event tiers trigger this channel
+        overrideCycleDigest:
+          type: ["boolean", "null"]
+        overrideError:
+          type: ["boolean", "null"]
+        overrideModeChanged:
+          type: ["boolean", "null"]
+        overrideServerStarted:
+          type: ["boolean", "null"]
+        overrideThresholdBreach:
+          type: ["boolean", "null"]
+        overrideUpdateAvailable:
+          type: ["boolean", "null"]
+        overrideApprovalActivity:
+          type: ["boolean", "null"]
+        overrideIntegrationStatus:
+          type: ["boolean", "null"]
 
     VersionCheckResult:
       type: object

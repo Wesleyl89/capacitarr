@@ -102,14 +102,20 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 		if cr.err != nil {
 			slog.Error("Integration connection failed", "component", "poller",
 				"integrationID", cr.id, "error", cr.err)
-			_ = integrationSvc.UpdateSyncStatus(cr.id, nil, cr.err.Error())
+			if syncErr := integrationSvc.UpdateSyncStatus(cr.id, nil, cr.err.Error()); syncErr != nil {
+				slog.Warn("Failed to update sync status after connection failure",
+					"component", "poller", "integrationID", cr.id, "error", syncErr)
+			}
 			if cr.intType != "" {
 				brokenSet[cr.intType] = true
 			}
 			continue
 		}
 		integrationSvc.PublishRecoveryIfNeeded(cr.id)
-		_ = integrationSvc.UpdateSyncStatus(cr.id, &cr.testTime, "")
+		if syncErr := integrationSvc.UpdateSyncStatus(cr.id, &cr.testTime, ""); syncErr != nil {
+			slog.Warn("Failed to update sync status after successful connection",
+				"component", "poller", "integrationID", cr.id, "error", syncErr)
+		}
 	}
 	for t := range brokenSet {
 		result.brokenTypes = append(result.brokenTypes, t)
@@ -212,7 +218,10 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 				totalSize += item.SizeBytes
 			}
 		}
-		_ = integrationSvc.UpdateMediaStats(mr.id, totalSize, mediaCount)
+		if statsErr := integrationSvc.UpdateMediaStats(mr.id, totalSize, mediaCount); statsErr != nil {
+			slog.Warn("Failed to update media stats",
+				"component", "poller", "integrationID", mr.id, "error", statsErr)
+		}
 		slog.Debug("Media items fetched", "component", "poller",
 			"integrationID", mr.id, "itemCount", len(items),
 			"duration", mr.fetchTime.String())

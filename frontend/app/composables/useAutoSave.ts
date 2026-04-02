@@ -82,5 +82,5 @@ export function useAutoSave() {
     }
   }
 
-  return { saveStatus, initFields, showSaveStatus, autoSavePreference, patchPreference };
+  return { saveStatus, initFields, autoSavePreference, patchPreference };
 }

@@ -288,6 +288,7 @@ flowchart TD
     NOTIFY["Dry Run<br/>Notification only"]
     APPROVE["Approval<br/>User reviews queue"]
     AUTO["Auto<br/>Execute deletions"]
+    SUNSET["Sunset<br/>Countdown period before deletion"]
 
     POLL --> GROUP
     GROUP --> THRESHOLD
@@ -299,4 +300,5 @@ flowchart TD
     MODE -.->|"Dry Run"| NOTIFY
     MODE -->|"Approval"| APPROVE
     MODE ==>|"Auto"| AUTO
+    MODE -->|"Sunset"| SUNSET
 ```

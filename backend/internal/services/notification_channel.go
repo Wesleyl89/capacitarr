@@ -37,7 +37,8 @@ func (s *NotificationChannelService) Create(config db.NotificationConfig) (*db.N
 	return &config, nil
 }
 
-// Update modifies an existing notification channel config.
+// Update modifies an existing notification channel config (full-replace).
+// Production code uses PartialUpdate; this method exists for test convenience.
 func (s *NotificationChannelService) Update(id uint, config db.NotificationConfig) (*db.NotificationConfig, error) {
 	var existing db.NotificationConfig
 	if err := s.db.First(&existing, id).Error; err != nil {

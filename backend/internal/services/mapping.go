@@ -145,7 +145,8 @@ func (s *MappingService) TouchedBefore(integrationID uint, before time.Time) (in
 }
 
 // DeleteStale removes mappings for an integration whose updated_at is before
-// the given time. Returns the number of deleted rows.
+// the given time. Returns the number of deleted rows. Production code uses
+// GarbageCollect (called from the daily cron); this method exists for test convenience.
 func (s *MappingService) DeleteStale(integrationID uint, before time.Time) (int64, error) {
 	result := s.db.Where("integration_id = ? AND updated_at < ?", integrationID, before).
 		Delete(&db.MediaServerMapping{})

@@ -117,7 +117,7 @@ func mapAppriseType(t AlertType) string {
 		return "warning"
 	case AlertServerStarted:
 		return "success"
-	case AlertUpdateAvailable, AlertApprovalActivity, AlertIntegrationStatus, AlertSunsetActivity, AlertTest:
+	case AlertUpdateAvailable, AlertApprovalActivity, AlertIntegrationStatus, AlertTest:
 		return "info"
 	default:
 		return "info"

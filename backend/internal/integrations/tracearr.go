@@ -80,6 +80,7 @@ type TracearrHistoryItem struct {
 	Year       flexInt64 `json:"year"`       // Release year
 	Watched    bool      `json:"watched"`    // Whether session completed
 	DurationMs flexInt64 `json:"durationMs"` // Watch duration in ms
+	Date       string    `json:"date"`       // ISO 8601 session timestamp (e.g. "2026-03-15T14:30:00Z")
 	User       struct {
 		Username string `json:"username"`
 	} `json:"user"`

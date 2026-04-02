@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -109,6 +110,23 @@ func (s *EngineService) UpdateRunStats(id uint, evaluated, candidates, queued in
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update engine run stats: %w", result.Error)
+	}
+	return nil
+}
+
+// SetDiskGroupModes stores the per-disk-group mode map on an engine run stats
+// entry. The modes map is keyed by disk group ID. Called by the poller after
+// all disk groups have been evaluated.
+func (s *EngineService) SetDiskGroupModes(id uint, modes map[uint]string) error {
+	if len(modes) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(modes)
+	if err != nil {
+		return fmt.Errorf("marshal disk group modes: %w", err)
+	}
+	if err := s.db.Model(&db.EngineRunStats{}).Where("id = ?", id).Update("disk_group_modes", string(data)).Error; err != nil {
+		return fmt.Errorf("update disk group modes: %w", err)
 	}
 	return nil
 }

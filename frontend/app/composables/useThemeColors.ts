@@ -23,6 +23,9 @@ interface ChartColors {
 /**
  * Hand-picked hex chart palettes per theme. Each palette uses
  * complementary/analogous hue relationships for maximum visual contrast.
+ * All four chart slots are populated even if only chart1/chart3 are
+ * currently consumed — the full palette is available for any future
+ * multi-series chart that needs 3+ colors.
  */
 const THEME_COLORS: Record<ThemeId, ChartColors> = {
   violet: {
@@ -102,7 +105,5 @@ export function useThemeColors() {
     chart2Color,
     chart3Color,
     chart4Color,
-    /** @deprecated No-op — colors are now static per theme. Kept for API compatibility. */
-    refresh: () => {},
   };
 }

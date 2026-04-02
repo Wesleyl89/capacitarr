@@ -36,27 +36,9 @@ export function useMotionPresets() {
     enter: { opacity: 1, scale: 1, y: 0, transition: spring },
   };
 
-  /** Slide from left + fade. */
-  const slideInLeft = {
-    initial: { opacity: 0, x: -8 },
-    enter: { opacity: 1, x: 0, transition: spring },
-  };
-
-  /** Slide from right + fade. */
-  const slideInRight = {
-    initial: { opacity: 0, x: 8 },
-    enter: { opacity: 1, x: 0, transition: spring },
-  };
-
   /** Slide up from bottom (for toolbars, footers). */
   const slideUpFromBottom = {
     initial: { opacity: 0, y: 16 },
-    enter: { opacity: 1, y: 0, transition: spring },
-  };
-
-  /** Banner slide in from top. */
-  const slideDownFromTop = {
-    initial: { opacity: 0, y: -8 },
     enter: { opacity: 1, y: 0, transition: spring },
   };
 
@@ -102,10 +84,7 @@ export function useMotionPresets() {
     cardEntrance,
     fadeIn,
     scaleIn,
-    slideInLeft,
-    slideInRight,
     slideUpFromBottom,
-    slideDownFromTop,
     listItem,
     gridItem,
   };

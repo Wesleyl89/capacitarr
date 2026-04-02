@@ -48,14 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { MODE_DRY_RUN, TIEBREAKER_SIZE_DESC } from '~/constants';
-import type {
-  DiskGroup,
-  IntegrationConfig,
-  CustomRule,
-  PreferenceSet,
-  ScoringFactorWeight,
-} from '~/types/api';
+import type { DiskGroup, IntegrationConfig, CustomRule, ScoringFactorWeight } from '~/types/api';
 
 const api = useApi();
 const { addToast } = useToast();
@@ -87,27 +80,6 @@ function onDiskGroupUpdated(updated: DiskGroup) {
   const idx = diskGroups.value.findIndex((g) => g.id === updated.id);
   if (idx !== -1) {
     diskGroups.value[idx] = updated;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Preferences (non-weight settings — still used for execution mode, etc.)
-// ---------------------------------------------------------------------------
-const prefs = reactive({
-  defaultDiskGroupMode: MODE_DRY_RUN,
-  tiebreakerMethod: TIEBREAKER_SIZE_DESC,
-  logLevel: 'info',
-  auditLogRetentionDays: 30,
-});
-
-async function fetchPreferences() {
-  try {
-    const data = (await api('/api/v1/preferences')) as PreferenceSet;
-    if (data?.id) {
-      Object.assign(prefs, data);
-    }
-  } catch (err) {
-    console.warn('[Rules] fetchPreferences failed:', err);
   }
 }
 
@@ -263,7 +235,6 @@ async function reorderRules(order: number[]) {
 // ---------------------------------------------------------------------------
 onMounted(async () => {
   await Promise.all([
-    fetchPreferences(),
     fetchFactorWeights(),
     fetchRules(),
     previewRefresh(),

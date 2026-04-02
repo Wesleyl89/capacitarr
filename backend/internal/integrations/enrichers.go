@@ -68,7 +68,7 @@ func (e *BulkWatchEnricher) EnrichmentCapability() string { return EnrichCapWatc
 func (e *BulkWatchEnricher) Enrich(items []MediaItem) error {
 	watchMap, err := e.provider.GetBulkWatchData()
 	if err != nil {
-		return err
+		return fmt.Errorf("bulk watch enricher: %w", err)
 	}
 	matched := 0
 	for i := range items {
@@ -264,7 +264,7 @@ func (e *JellystatEnricher) Enrich(items []MediaItem) error {
 
 	watchMap, err := e.client.GetBulkWatchStats(e.jellyfinIDToTMDbID)
 	if err != nil {
-		return err
+		return fmt.Errorf("jellystat enricher: %w", err)
 	}
 
 	matched := 0
@@ -326,7 +326,7 @@ func (e *RequestEnricher) EnrichmentCapability() string { return EnrichCapReques
 func (e *RequestEnricher) Enrich(items []MediaItem) error {
 	requests, err := e.provider.GetRequestedMedia()
 	if err != nil {
-		return err
+		return fmt.Errorf("request enricher: %w", err)
 	}
 	// Build aggregated lookup by TMDb ID — count requests and keep first requestor
 	requestMap := make(map[int]requestAgg)
@@ -386,7 +386,7 @@ func (e *WatchlistEnricher) EnrichmentCapability() string { return EnrichCapWatc
 func (e *WatchlistEnricher) Enrich(items []MediaItem) error {
 	watchlistSet, err := e.provider.GetWatchlistItems()
 	if err != nil {
-		return err
+		return fmt.Errorf("watchlist enricher: %w", err)
 	}
 	if len(watchlistSet) == 0 {
 		return nil
@@ -445,7 +445,7 @@ func (e *CollectionEnricher) Priority() int { return e.priority }
 func (e *CollectionEnricher) Enrich(items []MediaItem) error {
 	collectionMap, err := e.provider.GetCollectionMemberships()
 	if err != nil {
-		return err
+		return fmt.Errorf("collection enricher: %w", err)
 	}
 	if len(collectionMap) == 0 {
 		return nil
@@ -522,7 +522,7 @@ func (e *LabelEnricher) Priority() int { return e.priority }
 func (e *LabelEnricher) Enrich(items []MediaItem) error {
 	labelMap, err := e.provider.GetLabelMemberships()
 	if err != nil {
-		return err
+		return fmt.Errorf("label enricher: %w", err)
 	}
 	if len(labelMap) == 0 {
 		return nil
@@ -712,14 +712,16 @@ func (e *TracearrEnricher) EnrichmentCapability() string { return EnrichCapWatch
 func (e *TracearrEnricher) Enrich(items []MediaItem) error {
 	history, err := e.client.GetWatchHistory()
 	if err != nil {
-		return err
+		return fmt.Errorf("tracearr enricher: %w", err)
 	}
 
-	// Aggregate sessions into per-title play counts and user lists.
-	// Key: normalized "title|year" for movies, "showtitle" for episodes.
+	// Aggregate sessions into per-title play counts, user lists, and most
+	// recent session date. Key: normalized "title|year" for movies,
+	// "showtitle" for episodes.
 	type watchAgg struct {
-		playCount int
-		users     map[string]bool
+		playCount  int
+		users      map[string]bool
+		lastPlayed time.Time // most recent session timestamp
 	}
 	titleMap := make(map[string]*watchAgg)
 
@@ -743,6 +745,16 @@ func (e *TracearrEnricher) Enrich(items []MediaItem) error {
 		if session.User.Username != "" {
 			agg.users[session.User.Username] = true
 		}
+		// Track the most recent session date for LastPlayed.
+		// Tracearr may return ISO 8601 timestamps; gracefully ignore
+		// unparseable or missing date fields (older Tracearr versions).
+		if session.Date != "" {
+			if t, err := time.Parse(time.RFC3339, session.Date); err == nil {
+				if t.After(agg.lastPlayed) {
+					agg.lastPlayed = t
+				}
+			}
+		}
 	}
 
 	// Match against *arr items by normalized title
@@ -759,6 +771,10 @@ func (e *TracearrEnricher) Enrich(items []MediaItem) error {
 
 		if agg, ok := titleMap[key]; ok {
 			item.PlayCount = agg.playCount
+			if !agg.lastPlayed.IsZero() {
+				t := agg.lastPlayed
+				item.LastPlayed = &t
+			}
 			users := make([]string, 0, len(agg.users))
 			for u := range agg.users {
 				users = append(users, u)

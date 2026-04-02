@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   formatBytes,
-  formatTime,
   diskUsageStatus,
   diskStatusBgClass,
   diskStatusTextClass,
@@ -80,30 +79,6 @@ describe('formatBytes', () => {
     // 99.5 KB ≈ 101888 bytes
     const result = formatBytes(101888);
     expect(result).toMatch(/^\d+\.\d KB$/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatTime
-// ---------------------------------------------------------------------------
-describe('formatTime', () => {
-  it('returns "Never" for null', () => {
-    expect(formatTime(null)).toBe('Never');
-  });
-
-  it('returns "Never" for undefined', () => {
-    expect(formatTime(undefined)).toBe('Never');
-  });
-
-  it('returns "Never" for empty string', () => {
-    expect(formatTime('')).toBe('Never');
-  });
-
-  it('formats a valid ISO date string', () => {
-    const result = formatTime('2025-01-15T10:30:00Z');
-    // toLocaleString output varies by environment, just verify it's not "Never"
-    expect(result).not.toBe('Never');
-    expect(result.length).toBeGreaterThan(0);
   });
 });
 

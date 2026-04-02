@@ -10,6 +10,14 @@
  * is shared between components on the same page.
  */
 import type { ApprovalQueueItem } from '~/types/api';
+import {
+  EVENT_APPROVAL_REJECTED,
+  EVENT_APPROVAL_UNSNOOZED,
+  EVENT_APPROVAL_BULK_UNSNOOZED,
+  EVENT_APPROVAL_QUEUE_CLEARED,
+  EVENT_APPROVAL_DISMISSED,
+  EVENT_ENGINE_COMPLETE,
+} from '~/constants';
 
 export interface SnoozedItem {
   id: number;
@@ -91,14 +99,14 @@ export function useSnoozedItems() {
     _snoozedSseRegistered = true;
 
     // Refresh when snooze state changes
-    on('approval_rejected', () => fetchSnoozedItems());
-    on('approval_unsnoozed', () => fetchSnoozedItems());
-    on('approval_bulk_unsnoozed', () => fetchSnoozedItems());
-    on('approval_queue_cleared', () => {
+    on(EVENT_APPROVAL_REJECTED, () => fetchSnoozedItems());
+    on(EVENT_APPROVAL_UNSNOOZED, () => fetchSnoozedItems());
+    on(EVENT_APPROVAL_BULK_UNSNOOZED, () => fetchSnoozedItems());
+    on(EVENT_APPROVAL_QUEUE_CLEARED, () => {
       snoozedItems.value = [];
     });
-    on('approval_dismissed', () => fetchSnoozedItems());
-    on('engine_complete', () => fetchSnoozedItems());
+    on(EVENT_APPROVAL_DISMISSED, () => fetchSnoozedItems());
+    on(EVENT_ENGINE_COMPLETE, () => fetchSnoozedItems());
   }
 
   return {

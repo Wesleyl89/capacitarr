@@ -8,7 +8,7 @@ The Capacitarr REST API provides programmatic access to capacity management for 
 http://localhost:2187/api/v1
 ```
 
-All requests and responses use `Content-Type: application/json` unless noted otherwise (the `/health` endpoint returns plain text).
+All requests and responses use `Content-Type: application/json`.
 
 ## Authentication
 

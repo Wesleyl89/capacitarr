@@ -322,14 +322,14 @@ flowchart LR
 
 See [notifications.md](../guides/notifications.md) for the full user-facing guide.
 
-### Event Types (67 total)
+### Event Types (68 total)
 
 | Category | Events |
 |----------|--------|
 | **Engine** | `engine_start`, `engine_complete`, `engine_error`, `manual_run_triggered`, `enrichment_complete` |
 | **Settings** | `engine_mode_changed`, `settings_changed`, `threshold_changed`, `threshold_breached`, `settings_exported`, `settings_imported` |
 | **Auth** | `login`, `password_changed`, `username_changed`, `api_key_generated` |
-| **Integration** | `integration_added`, `integration_updated`, `integration_removed`, `integration_test`, `integration_test_failed`, `integration_recovered` |
+| **Integration** | `integration_added`, `integration_updated`, `integration_removed`, `integration_test`, `integration_test_failed`, `integration_recovered`, `integration_recovery_attempt` |
 | **Approval** | `approval_approved`, `approval_rejected`, `approval_unsnoozed`, `approval_bulk_unsnoozed`, `approval_orphans_recovered`, `approval_queue_cleared`, `approval_dismissed`, `approval_queue_reconciled`, `approval_returned_to_pending` |
 | **Deletion** | `deletion_success`, `deletion_failed`, `deletion_dry_run`, `deletion_batch_complete`, `deletion_progress`, `deletion_queued`, `deletion_cancelled`, `deletion_grace_period` |
 | **Rules** | `rule_created`, `rule_updated`, `rule_deleted` |

@@ -113,6 +113,10 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 	// jobs from executing under the wrong mode).
 	settingsSvc.SetDeletionClearer(deletionSvc)
 
+	// Wire SettingsService's cross-service dependency on SunsetService
+	// so changing the sunset label preference migrates labels on media servers.
+	settingsSvc.SetLabelMigrator(NewSunsetLabelMigrator(sunsetSvc, reg.Integration, reg.Mapping))
+
 	// Wire IntegrationService's cross-service dependency on DiskGroupService
 	reg.Integration.SetDiskGroupService(diskGroupSvc)
 

@@ -258,6 +258,7 @@ type EnrichmentPresence struct {
 	HasMedia     bool
 	HasSonarr    bool
 	HasJellystat bool
+	HasTracearr  bool
 }
 
 // GetFieldDefinitions returns available rule fields based on the service type
@@ -310,7 +311,7 @@ func (s *RulesService) GetFieldDefinitions(serviceType string, enrichment Enrich
 // appendEnrichmentFieldDefs adds enrichment-dependent rule fields based on
 // which enrichment integrations are enabled.
 func appendEnrichmentFieldDefs(fields []FieldDef, p EnrichmentPresence) []FieldDef {
-	if p.HasTautulli || p.HasMedia {
+	if p.HasTautulli || p.HasMedia || p.HasTracearr {
 		fields = append(fields,
 			FieldDef{Field: "playcount", Label: "Play Count", Type: "number", Operators: []string{"==", "!=", ">", ">=", "<", "<="}},
 			FieldDef{Field: "lastplayed", Label: "Last Watched", Type: "date", Operators: []string{"in_last", "over_ago", "never"}},
@@ -332,7 +333,7 @@ func appendEnrichmentFieldDefs(fields []FieldDef, p EnrichmentPresence) []FieldD
 			FieldDef{Field: "label", Label: "Media Server Label", Type: "string", Operators: []string{"==", "!=", "contains", "!contains"}},
 		)
 	}
-	if p.HasSeerr && (p.HasTautulli || p.HasMedia) {
+	if p.HasSeerr && (p.HasTautulli || p.HasMedia || p.HasTracearr) {
 		fields = append(fields,
 			FieldDef{Field: "watchedbyreq", Label: "Watched by Requestor", Type: "boolean", Operators: []string{"=="}},
 		)

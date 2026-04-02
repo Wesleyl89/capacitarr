@@ -11,11 +11,6 @@ export function formatBytes(bytes: number): string {
   return `${val.toFixed(val >= 100 ? 0 : 1)} ${units[i]}`;
 }
 
-export function formatTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'Never';
-  return new Date(dateStr).toLocaleString();
-}
-
 // ---------------------------------------------------------------------------
 // Disk usage color helpers
 // ---------------------------------------------------------------------------

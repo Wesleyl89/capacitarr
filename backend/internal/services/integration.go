@@ -164,7 +164,7 @@ func (s *IntegrationService) FetchCollectionValues() ([]integrations.NameValue, 
 		names, fetchErr := fetcher.GetCollectionNames()
 		if fetchErr != nil {
 			slog.Error("Failed to fetch collection names",
-				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
+				"component", "services", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
 			continue
 		}
 		for _, name := range names {
@@ -219,7 +219,7 @@ func (s *IntegrationService) FetchLabelValues() ([]integrations.NameValue, error
 		names, fetchErr := fetcher.GetLabelNames()
 		if fetchErr != nil {
 			slog.Error("Failed to fetch label names",
-				"component", "integration_service", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
+				"component", "services", "integrationId", cfg.ID, "type", cfg.Type, "error", fetchErr)
 			continue
 		}
 		for _, name := range names {
@@ -298,10 +298,16 @@ func (s *IntegrationService) TestConnection(intType, url, apiKey string, integra
 		if result.Success {
 			s.PublishRecoveryIfNeeded(id)
 			now := time.Now()
-			_ = s.UpdateSyncStatus(id, &now, "")
+			if syncErr := s.UpdateSyncStatus(id, &now, ""); syncErr != nil {
+				slog.Warn("Failed to update sync status after successful test",
+					"component", "services", "integrationID", id, "error", syncErr)
+			}
 			s.InvalidateRuleValueCache(*integrationID)
 		} else {
-			_ = s.UpdateSyncStatus(id, nil, result.Error)
+			if syncErr := s.UpdateSyncStatus(id, nil, result.Error); syncErr != nil {
+				slog.Warn("Failed to update sync status after failed test",
+					"component", "services", "integrationID", id, "error", syncErr)
+			}
 		}
 	}
 
@@ -506,7 +512,8 @@ func (s *IntegrationService) Create(config db.IntegrationConfig) (*db.Integratio
 	return &config, nil
 }
 
-// Update modifies an existing integration config.
+// Update modifies an existing integration config (full-replace). Production
+// code uses PartialUpdate; this method exists for test convenience.
 func (s *IntegrationService) Update(id uint, config db.IntegrationConfig) (*db.IntegrationConfig, error) {
 	var existing db.IntegrationConfig
 	if err := s.db.First(&existing, id).Error; err != nil {
@@ -608,16 +615,16 @@ func (s *IntegrationService) Delete(id uint) error {
 	remaining, err := s.ListEnabled()
 	if err != nil {
 		slog.Error("Failed to check remaining integrations after delete",
-			"component", "integration_service", "error", err)
+			"component", "services", "error", err)
 		return nil // Integration was deleted, don't fail the request
 	}
 	if len(remaining) == 0 && s.diskGroups != nil {
 		if removed, rmErr := s.diskGroups.RemoveAll(); rmErr != nil {
 			slog.Error("Failed to remove disk groups after last integration deleted",
-				"component", "integration_service", "error", rmErr)
+				"component", "services", "error", rmErr)
 		} else if removed > 0 {
 			slog.Info("Removed all disk groups after last integration deleted",
-				"component", "integration_service", "count", removed)
+				"component", "services", "count", removed)
 		}
 	}
 
@@ -775,6 +782,8 @@ func (s *IntegrationService) DetectEnrichment() EnrichmentPresence {
 			p.HasSonarr = true
 		case string(integrations.IntegrationTypeJellystat):
 			p.HasJellystat = true
+		case string(integrations.IntegrationTypeTracearr):
+			p.HasTracearr = true
 		}
 	}
 	return p

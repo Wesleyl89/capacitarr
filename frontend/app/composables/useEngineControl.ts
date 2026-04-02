@@ -7,7 +7,18 @@
  * on mount and after explicit user actions (mode change).
  */
 import type { WorkerStats, PreferenceSet, DeletionProgress } from '~/types/api';
-import { MODE_DRY_RUN, MODE_AUTO, MODE_APPROVAL, MODE_SUNSET } from '~/constants';
+import {
+  MODE_DRY_RUN,
+  MODE_AUTO,
+  MODE_APPROVAL,
+  MODE_SUNSET,
+  EVENT_ENGINE_START,
+  EVENT_ENGINE_COMPLETE,
+  EVENT_ENGINE_ERROR,
+  EVENT_ENGINE_MODE_CHANGED,
+  EVENT_DELETION_PROGRESS,
+  EVENT_DELETION_BATCH_COMPLETE,
+} from '~/constants';
 
 // Module-level flag: SSE handlers are registered once globally.
 let _sseRegistered = false;
@@ -76,7 +87,7 @@ export function useEngineControl() {
   if (import.meta.client && !_sseRegistered) {
     _sseRegistered = true;
 
-    on('engine_start', (data: unknown) => {
+    on(EVENT_ENGINE_START, (data: unknown) => {
       const event = data as { executionMode?: string };
       if (workerStats.value) {
         workerStats.value = {
@@ -90,7 +101,7 @@ export function useEngineControl() {
       prevIsRunning.value = true;
     });
 
-    on('engine_complete', (data: unknown) => {
+    on(EVENT_ENGINE_COMPLETE, (data: unknown) => {
       const event = data as {
         evaluated?: number;
         candidates?: number;
@@ -139,7 +150,7 @@ export function useEngineControl() {
       runCompletionCounter.value++;
     });
 
-    on('engine_error', (data: unknown) => {
+    on(EVENT_ENGINE_ERROR, (data: unknown) => {
       const event = data as { error?: string };
       if (workerStats.value) {
         workerStats.value = {
@@ -152,7 +163,7 @@ export function useEngineControl() {
       addToast(t('engine.errorToast', { error: event.error || 'Unknown error' }), 'error');
     });
 
-    on('engine_mode_changed', (data: unknown) => {
+    on(EVENT_ENGINE_MODE_CHANGED, (data: unknown) => {
       const event = data as { newMode?: string };
       if (workerStats.value && event.newMode) {
         workerStats.value = {
@@ -162,7 +173,7 @@ export function useEngineControl() {
       }
     });
 
-    on('deletion_progress', (data: unknown) => {
+    on(EVENT_DELETION_PROGRESS, (data: unknown) => {
       const event = data as DeletionProgress;
       deletionProgress.value = event;
       // Sync relevant fields into workerStats for the existing dashboard cards
@@ -177,7 +188,7 @@ export function useEngineControl() {
       }
     });
 
-    on('deletion_batch_complete', () => {
+    on(EVENT_DELETION_BATCH_COMPLETE, () => {
       // Clear the progress indicator — batch is done
       deletionProgress.value = null;
       if (workerStats.value) {

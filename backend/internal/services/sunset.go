@@ -311,12 +311,12 @@ func (s *SunsetService) RescoreAndSave(deps SunsetDeps, prefs db.PreferenceSet, 
 				s.applyLabel(item, prefs.SavedLabel, deps.Registry, deps.Mapping)
 			}
 
-			// Restore poster overlay (saved items show the original poster)
+			// Replace countdown overlay with the green "Saved" badge
 			if item.PosterOverlayActive && deps.PosterOverlay != nil && deps.Registry != nil {
-				if overlayErr := deps.PosterOverlay.RestoreOriginal(item, PosterDeps{
+				if overlayErr := deps.PosterOverlay.UpdateSavedOverlay(item, PosterDeps{
 					Registry: deps.Registry, Mapping: deps.Mapping,
 				}); overlayErr != nil {
-					slog.Error("Failed to restore poster for saved item",
+					slog.Error("Failed to update poster with saved overlay",
 						"component", "services", "mediaName", item.MediaName, "error", overlayErr)
 				}
 			}
@@ -492,6 +492,8 @@ func (s *SunsetService) CancelAll(deps SunsetDeps) (int, error) {
 }
 
 // CancelAllForDiskGroup cancels all sunset items for a specific disk group.
+// Production code uses CancelAll (all groups); this per-group variant exists
+// for test convenience.
 func (s *SunsetService) CancelAllForDiskGroup(diskGroupID uint, deps SunsetDeps) (int, error) {
 	items, err := s.ListForDiskGroup(diskGroupID)
 	if err != nil {

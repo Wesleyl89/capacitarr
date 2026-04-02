@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // ─── Mock CollectionDataProvider ────────────────────────────────────────────
@@ -409,8 +410,8 @@ func newTracearrHistoryServer(t *testing.T, movieResp, episodeResp string) *Trac
 
 func TestTracearrEnricher_EnrichMovies(t *testing.T) {
 	movieResp := `{"data": [
-		{"mediaTitle": "Serenity", "showTitle": "", "mediaType": "movie", "year": 2005, "watched": true, "durationMs": 7200000, "user": {"username": "mal"}},
-		{"mediaTitle": "Serenity", "showTitle": "", "mediaType": "movie", "year": 2005, "watched": true, "durationMs": 7200000, "user": {"username": "wash"}}
+		{"mediaTitle": "Serenity", "showTitle": "", "mediaType": "movie", "year": 2005, "watched": true, "durationMs": 7200000, "date": "2026-03-10T14:00:00Z", "user": {"username": "mal"}},
+		{"mediaTitle": "Serenity", "showTitle": "", "mediaType": "movie", "year": 2005, "watched": true, "durationMs": 7200000, "date": "2026-03-15T20:30:00Z", "user": {"username": "wash"}}
 	], "pagination": {"page": 1, "pageSize": 100, "total": 2}}`
 	episodeResp := `{"data": [], "pagination": {"page": 1, "pageSize": 100, "total": 0}}`
 
@@ -431,6 +432,13 @@ func TestTracearrEnricher_EnrichMovies(t *testing.T) {
 	}
 	if len(items[0].WatchedByUsers) != 2 {
 		t.Errorf("Expected 2 users for Serenity, got %d", len(items[0].WatchedByUsers))
+	}
+	if items[0].LastPlayed == nil {
+		t.Fatal("Expected LastPlayed to be set for Serenity")
+	}
+	expectedDate := time.Date(2026, 3, 15, 20, 30, 0, 0, time.UTC)
+	if !items[0].LastPlayed.Equal(expectedDate) {
+		t.Errorf("Expected LastPlayed %v, got %v", expectedDate, *items[0].LastPlayed)
 	}
 	if items[1].PlayCount != 0 {
 		t.Errorf("Expected PlayCount 0 for Firefly (no match — no episodes), got %d", items[1].PlayCount)

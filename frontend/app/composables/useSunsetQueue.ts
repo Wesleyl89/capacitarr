@@ -1,4 +1,13 @@
 import type { SunsetQueueItem } from '~/types/api';
+import {
+  EVENT_SUNSET_CREATED,
+  EVENT_SUNSET_CANCELLED,
+  EVENT_SUNSET_EXPIRED,
+  EVENT_SUNSET_RESCHEDULED,
+  EVENT_SUNSET_ESCALATED,
+  EVENT_SUNSET_SAVED,
+  EVENT_SUNSET_SAVED_CLEANED,
+} from '~/constants';
 
 // Module-level flag — SSE handlers are registered once globally,
 // not per component instance. Same pattern as useSnoozedItems.ts.
@@ -83,13 +92,13 @@ export function useSunsetQueue() {
   if (import.meta.client && !_sseRegistered) {
     _sseRegistered = true;
 
-    on('sunset_created', () => fetchSunsetItems());
-    on('sunset_cancelled', () => fetchSunsetItems());
-    on('sunset_expired', () => fetchSunsetItems());
-    on('sunset_rescheduled', () => fetchSunsetItems());
-    on('sunset_escalated', () => fetchSunsetItems());
-    on('sunset_saved', () => fetchSunsetItems());
-    on('sunset_saved_cleaned', () => fetchSunsetItems());
+    on(EVENT_SUNSET_CREATED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_CANCELLED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_EXPIRED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_RESCHEDULED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_ESCALATED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_SAVED, () => fetchSunsetItems());
+    on(EVENT_SUNSET_SAVED_CLEANED, () => fetchSunsetItems());
   }
 
   return {

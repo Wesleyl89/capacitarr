@@ -299,17 +299,19 @@ func (AuditLogEntry) TableName() string {
 // EngineRunStats stores one row per engine evaluation cycle, persisting metrics
 // across container restarts so the UI always shows the latest run's stats.
 type EngineRunStats struct {
-	ID            uint       `gorm:"primarykey" json:"id"`
-	RunAt         time.Time  `gorm:"index;not null" json:"runAt"`
-	CompletedAt   *time.Time `json:"completedAt,omitempty"`
-	Evaluated     int        `gorm:"not null;default:0" json:"evaluated"`
-	Candidates    int        `gorm:"not null;default:0" json:"candidates"`
-	Queued        int        `gorm:"not null;default:0" json:"queued"`
-	Deleted       int        `gorm:"not null;default:0" json:"deleted"`
-	FreedBytes    int64      `gorm:"not null;default:0" json:"freedBytes"`
-	ExecutionMode string     `gorm:"not null;default:'dry-run'" json:"executionMode"`
-	DurationMs    int64      `gorm:"not null;default:0" json:"durationMs"`
-	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	ID             uint       `gorm:"primarykey" json:"id"`
+	RunAt          time.Time  `gorm:"index;not null" json:"runAt"`
+	CompletedAt    *time.Time `json:"completedAt,omitempty"`
+	Evaluated      int        `gorm:"not null;default:0" json:"evaluated"`
+	Candidates     int        `gorm:"not null;default:0" json:"candidates"`
+	Queued         int        `gorm:"not null;default:0" json:"queued"`
+	Deleted        int        `gorm:"not null;default:0" json:"deleted"`
+	FreedBytes     int64      `gorm:"not null;default:0" json:"freedBytes"`
+	ExecutionMode  string     `gorm:"not null;default:'dry-run'" json:"executionMode"`
+	DiskGroupModes string     `gorm:"type:text" json:"diskGroupModes,omitempty"` // JSON map of diskGroupID → mode (e.g. {"1":"auto","2":"sunset"})
+	DurationMs     int64      `gorm:"not null;default:0" json:"durationMs"`
+	ErrorMessage   string     `json:"errorMessage,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"` // SQLite DEFAULT CURRENT_TIMESTAMP; mirrors RunAt
 }
 
 // LifetimeStats stores cumulative counters that persist across container restarts

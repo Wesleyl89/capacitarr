@@ -773,29 +773,31 @@ func (s *ApprovalService) ReconcileQueue(diskGroupID uint, neededKeys map[string
 		return 0, err
 	}
 
-	var dismissed int
+	// Collect IDs of stale items (not in the current scoring result) for batch deletion.
+	var staleIDs []uint
 	for _, item := range pending {
 		key := db.MediaKey(item.MediaName, item.MediaType)
-		if neededKeys[key] {
-			continue
+		if !neededKeys[key] {
+			staleIDs = append(staleIDs, item.ID)
 		}
-
-		if delErr := s.db.Delete(&item).Error; delErr != nil {
-			slog.Error("Failed to dismiss stale approval item during reconciliation",
-				"component", "services", "id", item.ID, "media", item.MediaName, "error", delErr)
-			continue
-		}
-		dismissed++
 	}
 
-	if dismissed > 0 {
-		s.bus.Publish(events.ApprovalQueueReconciledEvent{
-			DiskGroupID: diskGroupID,
-			Dismissed:   dismissed,
-		})
-		slog.Info("Approval queue reconciled — stale items dismissed",
-			"component", "services", "diskGroupID", diskGroupID, "dismissed", dismissed)
+	if len(staleIDs) == 0 {
+		return 0, nil
 	}
+
+	// Batch delete in a single query instead of per-item DELETE.
+	if delErr := s.db.Where("id IN ?", staleIDs).Delete(&db.ApprovalQueueItem{}).Error; delErr != nil {
+		return 0, fmt.Errorf("batch dismiss stale approval items: %w", delErr)
+	}
+
+	dismissed := len(staleIDs)
+	s.bus.Publish(events.ApprovalQueueReconciledEvent{
+		DiskGroupID: diskGroupID,
+		Dismissed:   dismissed,
+	})
+	slog.Info("Approval queue reconciled — stale items dismissed",
+		"component", "services", "diskGroupID", diskGroupID, "dismissed", dismissed)
 
 	return dismissed, nil
 }

@@ -1,7 +1,7 @@
 # Unwired & Partial Implementation Audit
 
 **Created:** 2026-04-02T17:28Z
-**Status:** Pending
+**Status:** Complete (29 of 29 findings remediated)
 **Type:** Audit
 **Scope:** Full codebase — backend, frontend, integrations, events, notifications, database, OpenAPI
 
@@ -497,38 +497,47 @@ Settings export/import endpoints reference a `Settings` tag that is not defined 
 
 ## Remediation Priority
 
-### Immediate (bugs and broken features)
+### Immediate (bugs and broken features) — COMPLETE
 
-| Finding | Action |
-|---------|--------|
-| F-04 | Add `nativeIDSearchers` cleanup to `Unregister()` and `Clear()` |
-| F-01 | Wire `UpdateSavedOverlay()` into the sunset save flow |
-| F-02 | Wire `MigrateLabel()` into the sunset preferences save path |
+| Finding | Action | Status |
+|---------|--------|--------|
+| F-04 | Add `nativeIDSearchers` cleanup to `Unregister()` and `Clear()` | Done |
+| F-01 | Wire `UpdateSavedOverlay()` into the sunset save flow; also updated `UpdateAll()` to route saved items through `UpdateSavedOverlay()` | Done |
+| F-02 | Wire `MigrateLabel()` into the sunset preferences save path via `SunsetLabelMigrator` interface + adapter pattern | Done |
 
-### Near-term (functional gaps)
+### Near-term (functional gaps) — COMPLETE
 
-| Finding | Action |
-|---------|--------|
-| F-05 + F-06 | Add Tracearr to enrichment detection; investigate LastPlayed availability in Tracearr API |
-| F-03 | Decide: wire `AlertSunsetActivity` dispatch or remove dead code |
-| F-13 | Add frontend handler for `approval_returned_to_pending` |
-| F-14 | Add frontend handler for `data_reset` to trigger page refresh |
-| F-15 | Add frontend handler for `settings_imported` to trigger settings refresh |
-| F-17 | Add settings UI for `deadContentMinDays` and `staleContentDays` |
+| Finding | Action | Status |
+|---------|--------|--------|
+| F-05 + F-06 | Added `Date` field to `TracearrHistoryItem`, `LastPlayed` tracking in enricher, `HasTracearr` to `EnrichmentPresence`, Tracearr case in `DetectEnrichment()`, and updated rule field gating | Done |
+| F-03 | Removed dead `AlertSunsetActivity` constant and all rendering code (trigger label, color, Apprise priority). Sunset events stay in generic categories per notification tiers design. | Done |
+| F-13 | Added `approval_returned_to_pending` handler in approval queue composable + dashboard activity feed | Done |
+| F-14 | Added `data_reset` SSE handler on dashboard to trigger full refresh | Done |
+| F-15 | Added `settings_imported` to dashboard activity feed with icon/color mapping + SSE handler for full refresh | Done |
+| F-17 | Added Content Analytics card in SettingsGeneral.vue with select dropdowns for `deadContentMinDays` and `staleContentDays` | Done |
 
-### OpenAPI spec update (batch)
+### OpenAPI spec update (batch) — COMPLETE
 
-| Findings | Action |
-|----------|--------|
-| F-07 through F-12, F-29 | Comprehensive OpenAPI specification update — update notification schemas, fix field names, add missing endpoints, remove ghost fields, update version and enums |
+| Findings | Action | Status |
+|----------|--------|--------|
+| F-07 | Updated `NotificationChannel` and `NotificationChannelInput` schemas to use `notificationLevel` + 8 `override*` nullable bool fields | Done |
+| F-08 | Fixed `LibraryHistory` field names from capitalized to camelCase | Done |
+| F-09 | Removed ghost `reason` field from both `AuditLogEntry` and `ApprovalQueueItem` | Done |
+| F-10 | Added 10 missing endpoint definitions (integrations health, group approve/reject, preference patches, sunset label/poster refresh) | Done |
+| F-11 | Updated `info.version` from `2.0.0` to `3.0.0` | Done |
+| F-12 | Removed nonexistent `dry_run` from action enum, leaving only `deleted` and `dry_delete` | Done |
+| F-29 | Fixed Settings tag references from `[Settings]` to `[Settings Backup]` | Done |
 
-### Backlog (cleanup)
+### Backlog (cleanup) — MOSTLY COMPLETE
 
-| Finding | Action |
-|---------|--------|
-| F-16 | Consider wiring `analytics_updated` to frontend Library page for real-time refresh |
-| F-18 | Implement per-disk-group mode tracking in engine run stats |
-| F-19 through F-22 | Evaluate test-only methods: keep for test convenience or remove |
-| F-23 through F-26 | Frontend dead code cleanup pass |
-| F-27 | Consider removing `album` from CHECK constraint or implementing album-level tracking |
-| F-28 | Add `CreatedAt` field to `EngineRunStats` or remove SQL column |
+| Finding | Action | Status |
+|---------|--------|--------|
+| F-16 | Wired `analytics_updated` SSE event to library page `fetchFilterData()` | Done |
+| F-18 | Added `DiskGroupModes` JSON field to `EngineRunStats` + migration 00011 + poller wiring via `SetDiskGroupModes()` | Done |
+| F-19 through F-22 | Annotated test-only methods with doc comments clarifying production code uses alternative methods | Done |
+| F-23 | Removed stale `prefs` reactive object, `fetchPreferences()`, and unused imports from `rules.vue` | Done |
+| F-24 | Removed 3 unused type definitions from `api.ts`: `DashboardStats`, `LibraryHistoryRow`, `MetricsHistoryResponse` | Done |
+| F-25 | Removed 10 unused exports: `formatTime`, `generatePalette`, `chart2Color`, `chart4Color`, `refresh`, `apiCommit`, `showSaveStatus`, `slideInLeft`, `slideInRight`, `slideDownFromTop`. Also removed dead helpers `hexToHSL`, `hslToHex`, and associated `formatTime` tests. | Done |
+| F-26 | Removed 7 orphaned locale keys: `nav.notifications`, `nav.noNotifications`, `nav.markAllRead`, `nav.clearAll`, `settings.deletionSafetyDesc`, `settings.clearDataDesc`, `settings.typeDeleteToConfirm` | Done |
+| F-27 | Removed unused `album` from `approval_queue` CHECK constraint via migration 00012 + baseline update | Done |
+| F-28 | Added `CreatedAt time.Time` field to `EngineRunStats` Go struct to expose the SQL `created_at` column | Done |

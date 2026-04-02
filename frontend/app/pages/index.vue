@@ -400,6 +400,20 @@ import {
   EVENT_DELETION_QUEUED,
   EVENT_DELETION_PROGRESS,
   EVENT_DELETION_BATCH_COMPLETE,
+  EVENT_APPROVAL_APPROVED,
+  EVENT_APPROVAL_REJECTED,
+  EVENT_APPROVAL_UNSNOOZED,
+  EVENT_APPROVAL_BULK_UNSNOOZED,
+  EVENT_APPROVAL_ORPHANS_RECOVERED,
+  EVENT_APPROVAL_RETURNED_TO_PENDING,
+  EVENT_INTEGRATION_ADDED,
+  EVENT_INTEGRATION_UPDATED,
+  EVENT_INTEGRATION_REMOVED,
+  EVENT_INTEGRATION_RECOVERED,
+  EVENT_INTEGRATION_RECOVERY_ATTEMPT,
+  EVENT_SETTINGS_CHANGED,
+  EVENT_SETTINGS_IMPORTED,
+  EVENT_DATA_RESET,
 } from '~/constants';
 import { STORAGE_KEYS } from '~/utils/storageKeys';
 
@@ -514,6 +528,7 @@ function eventIcon(eventType: string) {
       return PlayIcon;
     // Settings
     case 'settings_changed':
+    case 'settings_imported':
       return SettingsIcon;
     case 'threshold_changed':
       return SlidersHorizontalIcon;
@@ -544,6 +559,7 @@ function eventIcon(eventType: string) {
     case 'approval_bulk_unsnoozed':
       return AlarmClockOffIcon;
     case 'approval_orphans_recovered':
+    case 'approval_returned_to_pending':
       return RefreshCwIcon;
     // Deletion
     case EVENT_DELETION_QUEUED:
@@ -627,6 +643,7 @@ function eventIconClass(eventType: string): string {
     case EVENT_DELETION_DRY_RUN:
     case EVENT_DELETION_PROGRESS:
     case 'approval_orphans_recovered':
+    case 'approval_returned_to_pending':
     case 'integration_recovery_attempt':
       return 'text-warning';
     case 'rule_updated':
@@ -635,6 +652,7 @@ function eventIconClass(eventType: string): string {
     case 'api_key_generated':
     case 'login':
     case 'settings_changed':
+    case 'settings_imported':
     case 'integration_updated':
     case 'notification_channel_updated':
       return 'text-muted-foreground';
@@ -751,6 +769,7 @@ const activityEventTypes = [
   'approval_unsnoozed',
   'approval_bulk_unsnoozed',
   'approval_orphans_recovered',
+  'approval_returned_to_pending',
   EVENT_DELETION_QUEUED,
   EVENT_DELETION_SUCCESS,
   EVENT_DELETION_FAILED,
@@ -768,6 +787,7 @@ const activityEventTypes = [
   'notification_sent',
   'notification_delivery_failed',
   'data_reset',
+  'settings_imported',
   'server_started',
 ] as const;
 
@@ -805,6 +825,13 @@ function handleIntegrationChange() {
     .catch((err) => console.warn('[Dashboard] integration refresh failed:', err));
 }
 
+// Handler: data reset — full dashboard refresh since all scraped data was wiped
+function handleDataReset() {
+  fetchDashboardData(true);
+  fetchEngineHistory();
+  fetchRecentActivity();
+}
+
 // Handler: settings changes — refresh disk groups (threshold may have changed)
 function handleSettingsChange() {
   api('/api/v1/disk-groups')
@@ -837,11 +864,12 @@ onMounted(async () => {
   }
 
   // Subscribe to approval-related events to refresh the queue
-  sseOn('approval_approved', handleApprovalChange, scope);
-  sseOn('approval_rejected', handleApprovalChange, scope);
-  sseOn('approval_unsnoozed', handleApprovalChange, scope);
-  sseOn('approval_bulk_unsnoozed', handleApprovalChange, scope);
-  sseOn('approval_orphans_recovered', handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_APPROVED, handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_REJECTED, handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_UNSNOOZED, handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_BULK_UNSNOOZED, handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_ORPHANS_RECOVERED, handleApprovalChange, scope);
+  sseOn(EVENT_APPROVAL_RETURNED_TO_PENDING, handleApprovalChange, scope);
   sseOn(EVENT_DELETION_SUCCESS, handleApprovalChange, scope);
 
   // When a deletion completes, patch the most recent sparkline data point in real-time
@@ -851,12 +879,14 @@ onMounted(async () => {
   sseOn(EVENT_DELETION_BATCH_COMPLETE, handleDeletionBatchCompleteRefresh, scope);
 
   // SSE-driven data refresh: integration and settings changes
-  sseOn('integration_added', handleIntegrationChange, scope);
-  sseOn('integration_updated', handleIntegrationChange, scope);
-  sseOn('integration_removed', handleIntegrationChange, scope);
-  sseOn('integration_recovered', handleIntegrationChange, scope);
-  sseOn('integration_recovery_attempt', handleIntegrationChange, scope);
-  sseOn('settings_changed', handleSettingsChange, scope);
+  sseOn(EVENT_INTEGRATION_ADDED, handleIntegrationChange, scope);
+  sseOn(EVENT_INTEGRATION_UPDATED, handleIntegrationChange, scope);
+  sseOn(EVENT_INTEGRATION_REMOVED, handleIntegrationChange, scope);
+  sseOn(EVENT_INTEGRATION_RECOVERED, handleIntegrationChange, scope);
+  sseOn(EVENT_INTEGRATION_RECOVERY_ATTEMPT, handleIntegrationChange, scope);
+  sseOn(EVENT_SETTINGS_CHANGED, handleSettingsChange, scope);
+  sseOn(EVENT_SETTINGS_IMPORTED, handleDataReset, scope); // Full refresh — import may change everything
+  sseOn(EVENT_DATA_RESET, handleDataReset, scope);
 });
 
 async function fetchDashboardData(silent = false) {

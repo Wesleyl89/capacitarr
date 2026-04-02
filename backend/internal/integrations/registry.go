@@ -145,6 +145,7 @@ func (r *IntegrationRegistry) Unregister(integrationID uint) {
 	delete(r.labelDataProviders, integrationID)
 	delete(r.labelManagers, integrationID)
 	delete(r.posterManagers, integrationID)
+	delete(r.nativeIDSearchers, integrationID)
 }
 
 // Clear removes all registrations.
@@ -165,6 +166,7 @@ func (r *IntegrationRegistry) Clear() {
 	r.labelDataProviders = make(map[uint]LabelDataProvider)
 	r.labelManagers = make(map[uint]LabelManager)
 	r.posterManagers = make(map[uint]PosterManager)
+	r.nativeIDSearchers = make(map[uint]NativeIDSearcher)
 }
 
 // ─── Accessor methods ───────────────────────────────────────────────────────

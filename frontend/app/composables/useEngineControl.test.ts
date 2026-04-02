@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, computed, readonly, type Ref } from 'vue';
+import { EVENT_ENGINE_COMPLETE, EVENT_ENGINE_MODE_CHANGED } from '~/constants';
 
 // Now import the composable under test (after all stubs are in place)
 import { useEngineControl, _resetSSERegistration } from './useEngineControl';
@@ -197,19 +198,18 @@ describe('useEngineControl', () => {
       const prevIsRunningState = stateStore.get('enginePrevIsRunning');
       if (prevIsRunningState) prevIsRunningState.value = true;
 
-      // Invoke the engine_complete handler directly if captured by mock,
-      // otherwise verify the handler pattern works via direct invocation
-      const handler = sseHandlers.get('engine_complete');
-      if (handler) {
-        handler({ evaluated: 200, flagged: 10 });
-      } else {
-        // SSE handlers not registered (import.meta.client is false in test env).
-        // Verify the composable's SSE integration pattern by checking on() was
-        // attempted (it would be called if import.meta.client were true).
-        // This is a known limitation of testing SSE-driven composables.
-        // Skip the assertion — the SSE handler is tested via integration tests.
+      // Invoke the engine_complete handler directly via mock capture.
+      // SSE handlers are registered inside the composable when import.meta.client
+      // is true. In some test environments the define may not propagate; fall back
+      // to invoking mockSseOn's captured handler directly.
+      const handler = sseHandlers.get(EVENT_ENGINE_COMPLETE);
+      if (!handler) {
+        // Handler was not registered — import.meta.client evaluated to false in
+        // the Docker test container. This test cannot exercise the SSE code path.
+        expect(mockSseOn).not.toHaveBeenCalled();
         return;
       }
+      handler({ evaluated: 200, flagged: 10 });
 
       expect(addToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('engine.runCompleteToast'),
@@ -308,12 +308,13 @@ describe('useEngineControl', () => {
       expect(ctrl.executionMode.value).toBe('dry-run');
 
       // Invoke the engine_mode_changed SSE handler
-      const handler = sseHandlers.get('engine_mode_changed');
-      if (handler) {
-        handler({ oldMode: 'dry-run', newMode: 'approval' });
-        expect(ctrl.executionMode.value).toBe('approval');
+      const handler = sseHandlers.get(EVENT_ENGINE_MODE_CHANGED);
+      if (!handler) {
+        expect(mockSseOn).not.toHaveBeenCalled();
+        return;
       }
-      // If handler not registered (import.meta.client false), the test still passes
+      handler({ oldMode: 'dry-run', newMode: 'approval' });
+      expect(ctrl.executionMode.value).toBe('approval');
     });
 
     it('does not update if newMode is missing from event', async () => {
@@ -324,11 +325,13 @@ describe('useEngineControl', () => {
       const ctrl = useEngineControl();
       await ctrl.fetchStats();
 
-      const handler = sseHandlers.get('engine_mode_changed');
-      if (handler) {
-        handler({ oldMode: 'auto' }); // no newMode
-        expect(ctrl.executionMode.value).toBe('auto'); // unchanged
+      const handler = sseHandlers.get(EVENT_ENGINE_MODE_CHANGED);
+      if (!handler) {
+        expect(mockSseOn).not.toHaveBeenCalled();
+        return;
       }
+      handler({ oldMode: 'auto' }); // no newMode
+      expect(ctrl.executionMode.value).toBe('auto'); // unchanged
     });
   });
 

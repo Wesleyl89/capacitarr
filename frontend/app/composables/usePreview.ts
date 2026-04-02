@@ -4,6 +4,8 @@ import {
   EVENT_DELETION_DRY_RUN,
   EVENT_DELETION_PROGRESS,
   EVENT_DELETION_BATCH_COMPLETE,
+  EVENT_PREVIEW_UPDATED,
+  EVENT_PREVIEW_INVALIDATED,
 } from '~/constants';
 
 /**
@@ -117,8 +119,8 @@ export function usePreview() {
 
   onMounted(() => {
     const scope = { onUnmounted };
-    on('preview_updated', handlePreviewUpdated, scope);
-    on('preview_invalidated', handlePreviewInvalidated, scope);
+    on(EVENT_PREVIEW_UPDATED, handlePreviewUpdated, scope);
+    on(EVENT_PREVIEW_INVALIDATED, handlePreviewInvalidated, scope);
     on(EVENT_DELETION_SUCCESS, handleDeletionSuccess, scope);
     on(EVENT_DELETION_DRY_RUN, handleDeletionDryRun, scope);
     on(EVENT_DELETION_PROGRESS, handleDeletionProgress, scope);

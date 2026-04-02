@@ -24,6 +24,11 @@
 import type { IntegrationConfig } from '~/types/api';
 import { runStorageCleanup } from '~/composables/useStorageCleanup';
 import { useAnnouncements } from '~/composables/useAnnouncements';
+import {
+  EVENT_INTEGRATION_ADDED,
+  EVENT_INTEGRATION_UPDATED,
+  EVENT_INTEGRATION_REMOVED,
+} from '~/constants';
 
 const authenticated = useAuthCookie();
 const isAuthenticated = computed(() => !!authenticated.value);
@@ -59,7 +64,11 @@ const { connect: connectSSE, disconnect: disconnectSSE, on: sseOn } = useEventSt
 
 // Re-fetch integrations when any integration is added, updated, or removed
 // so the error banner and integration cards reflect the current state.
-const integrationEventTypes = ['integration_added', 'integration_updated', 'integration_removed'];
+const integrationEventTypes = [
+  EVENT_INTEGRATION_ADDED,
+  EVENT_INTEGRATION_UPDATED,
+  EVENT_INTEGRATION_REMOVED,
+];
 onMounted(() => {
   for (const evt of integrationEventTypes) {
     sseOn(evt, fetchAppIntegrations, { onUnmounted });

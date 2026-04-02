@@ -18,11 +18,18 @@ type DeletionQueueClearer interface {
 	ClearQueue() int
 }
 
+// SunsetLabelMigrator allows SettingsService to trigger sunset label migration
+// when the user changes the sunset label, without importing SunsetService directly.
+type SunsetLabelMigrator interface {
+	MigrateSunsetLabel(oldLabel, newLabel string) error
+}
+
 // SettingsService manages application preferences and activity events.
 type SettingsService struct {
 	db              *gorm.DB
 	bus             *events.EventBus
 	deletionClearer DeletionQueueClearer // injected after construction via SetDeletionClearer()
+	labelMigrator   SunsetLabelMigrator  // injected after construction via SetLabelMigrator()
 }
 
 // NewSettingsService creates a new SettingsService.
@@ -33,13 +40,43 @@ func NewSettingsService(database *gorm.DB, bus *events.EventBus) *SettingsServic
 // Wired returns true when all lazily-injected dependencies are non-nil.
 // Used by Registry.Validate() to catch missing wiring at startup.
 func (s *SettingsService) Wired() bool {
-	return s.deletionClearer != nil
+	return s.deletionClearer != nil && s.labelMigrator != nil
 }
 
 // SetDeletionClearer wires the cross-service dependency that allows
 // SettingsService to clear the deletion queue on execution mode changes.
 func (s *SettingsService) SetDeletionClearer(clearer DeletionQueueClearer) {
 	s.deletionClearer = clearer
+}
+
+// SetLabelMigrator wires the cross-service dependency that allows
+// SettingsService to trigger sunset label migration when the sunset
+// label preference changes.
+func (s *SettingsService) SetLabelMigrator(migrator SunsetLabelMigrator) {
+	s.labelMigrator = migrator
+}
+
+// sunsetLabelMigratorAdapter implements SunsetLabelMigrator by building a
+// fresh integration registry and delegating to SunsetService.MigrateLabel.
+type sunsetLabelMigratorAdapter struct {
+	sunset      *SunsetService
+	integration *IntegrationService
+	mapping     *MappingService
+}
+
+// MigrateSunsetLabel builds a fresh integration registry and migrates labels.
+func (a *sunsetLabelMigratorAdapter) MigrateSunsetLabel(oldLabel, newLabel string) error {
+	registry, err := a.integration.BuildIntegrationRegistry()
+	if err != nil {
+		return fmt.Errorf("build registry for label migration: %w", err)
+	}
+	return a.sunset.MigrateLabel(oldLabel, newLabel, registry, a.mapping)
+}
+
+// NewSunsetLabelMigrator creates a SunsetLabelMigrator that delegates to the
+// given services. Used to wire SettingsService without a direct SunsetService import.
+func NewSunsetLabelMigrator(sunset *SunsetService, integration *IntegrationService, mapping *MappingService) SunsetLabelMigrator {
+	return &sunsetLabelMigratorAdapter{sunset: sunset, integration: integration, mapping: mapping}
 }
 
 // GetPreferences returns the current preferences (singleton row).
@@ -207,6 +244,11 @@ func (s *SettingsService) PatchEnginePreferences(patch EnginePreferencePatch) (d
 
 // PatchSunsetPreferences updates only the provided sunset behavior fields.
 func (s *SettingsService) PatchSunsetPreferences(patch SunsetPreferencePatch) (db.PreferenceSet, error) {
+	// Snapshot the current sunset label before applying updates so we can
+	// detect changes and trigger label migration.
+	var oldPrefs db.PreferenceSet
+	s.db.FirstOrCreate(&oldPrefs, db.PreferenceSet{ID: 1})
+
 	updates := make(map[string]any)
 	if patch.SunsetDays != nil {
 		updates["sunset_days"] = *patch.SunsetDays
@@ -228,9 +270,7 @@ func (s *SettingsService) PatchSunsetPreferences(patch SunsetPreferencePatch) (d
 	}
 
 	if len(updates) == 0 {
-		var pref db.PreferenceSet
-		s.db.FirstOrCreate(&pref, db.PreferenceSet{ID: 1})
-		return pref, nil
+		return oldPrefs, nil
 	}
 
 	if err := s.db.Model(&db.PreferenceSet{}).Where("id = ?", 1).Updates(updates).Error; err != nil {
@@ -239,6 +279,15 @@ func (s *SettingsService) PatchSunsetPreferences(patch SunsetPreferencePatch) (d
 
 	var pref db.PreferenceSet
 	s.db.First(&pref, 1)
+
+	// Migrate sunset labels on media server items if the label changed
+	if patch.SunsetLabel != nil && *patch.SunsetLabel != oldPrefs.SunsetLabel && s.labelMigrator != nil {
+		if err := s.labelMigrator.MigrateSunsetLabel(oldPrefs.SunsetLabel, *patch.SunsetLabel); err != nil {
+			slog.Error("Failed to migrate sunset labels",
+				"component", "services", "oldLabel", oldPrefs.SunsetLabel,
+				"newLabel", *patch.SunsetLabel, "error", err)
+		}
+	}
 
 	s.bus.Publish(events.SettingsChangedEvent{})
 	return pref, nil

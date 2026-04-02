@@ -7,6 +7,15 @@
  * shared between components on the same page.
  */
 import type { DeletionQueueItem, DeletionCompletedItem } from '~/types/api';
+import {
+  EVENT_DELETION_QUEUED,
+  EVENT_DELETION_PROGRESS,
+  EVENT_DELETION_SUCCESS,
+  EVENT_DELETION_FAILED,
+  EVENT_DELETION_CANCELLED,
+  EVENT_DELETION_GRACE_PERIOD,
+  EVENT_DELETION_BATCH_COMPLETE,
+} from '~/constants';
 
 // Module-level flag: SSE handlers are registered once globally.
 let _sseRegistered = false;
@@ -118,17 +127,17 @@ export function useDeletionQueue() {
   if (!_sseRegistered) {
     _sseRegistered = true;
 
-    on('deletion_queued', () => {
+    on(EVENT_DELETION_QUEUED, () => {
       // New item entered the deletion queue (e.g. approved in approval mode) — refresh
       fetchQueue();
     });
 
-    on('deletion_progress', () => {
+    on(EVENT_DELETION_PROGRESS, () => {
       // Queue shrinks as items are processed — refresh
       fetchQueue();
     });
 
-    on('deletion_success', (raw: unknown) => {
+    on(EVENT_DELETION_SUCCESS, (raw: unknown) => {
       const data = raw as { mediaName: string; mediaType: string; sizeBytes: number };
       completedItems.value.push({
         mediaName: data.mediaName,
@@ -139,7 +148,7 @@ export function useDeletionQueue() {
       });
     });
 
-    on('deletion_failed', (raw: unknown) => {
+    on(EVENT_DELETION_FAILED, (raw: unknown) => {
       const data = raw as { mediaName: string; mediaType: string };
       completedItems.value.push({
         mediaName: data.mediaName,
@@ -150,7 +159,7 @@ export function useDeletionQueue() {
       });
     });
 
-    on('deletion_cancelled', (raw: unknown) => {
+    on(EVENT_DELETION_CANCELLED, (raw: unknown) => {
       const data = raw as { mediaName: string; mediaType: string; sizeBytes: number };
       completedItems.value.push({
         mediaName: data.mediaName,
@@ -165,14 +174,14 @@ export function useDeletionQueue() {
       );
     });
 
-    on('deletion_batch_complete', () => {
+    on(EVENT_DELETION_BATCH_COMPLETE, () => {
       // Clear completed items and queue after batch finishes
       completedItems.value = [];
       queuedItems.value = [];
       stopCountdown();
     });
 
-    on('deletion_grace_period', (raw: unknown) => {
+    on(EVENT_DELETION_GRACE_PERIOD, (raw: unknown) => {
       const data = raw as GracePeriodState;
       gracePeriod.value = { ...data };
       if (data.active) {

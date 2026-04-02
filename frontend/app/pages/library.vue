@@ -113,7 +113,7 @@ import {
   XIcon,
 } from 'lucide-vue-next';
 import type { IntegrationConfig, EvaluatedItem } from '~/types/api';
-import { MODE_DRY_RUN } from '~/constants';
+import { MODE_DRY_RUN, EVENT_ANALYTICS_UPDATED } from '~/constants';
 
 const api = useApi();
 const { addToast } = useToast();
@@ -326,6 +326,12 @@ async function handleDelete(selectedItems: EvaluatedItem[]) {
     libraryTableRef.value?.onDeleteComplete();
   }
 }
+
+// ---------------------------------------------------------------------------
+// SSE subscriptions — refresh analytics when backend pushes updated data
+// ---------------------------------------------------------------------------
+const { on: sseOn } = useEventStream();
+sseOn(EVENT_ANALYTICS_UPDATED, () => fetchFilterData(), { onUnmounted });
 
 // ---------------------------------------------------------------------------
 // Init

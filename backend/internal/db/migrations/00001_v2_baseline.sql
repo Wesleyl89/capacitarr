@@ -173,7 +173,7 @@ CREATE INDEX idx_custom_rules_library_id ON custom_rules(library_id);
 CREATE TABLE approval_queue (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     media_name     TEXT    NOT NULL,
-    media_type     TEXT    NOT NULL CHECK(media_type IN ('movie','show','season','episode','artist','album','book')),
+    media_type     TEXT    NOT NULL CHECK(media_type IN ('movie','show','season','episode','artist','book')),
     score_details  TEXT,                                   -- JSON-encoded []ScoreFactor
     size_bytes     INTEGER NOT NULL DEFAULT 0,
     score          REAL    NOT NULL DEFAULT 0,

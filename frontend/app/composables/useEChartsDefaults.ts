@@ -1,100 +1,12 @@
 /**
  * Shared ECharts styling utilities providing glow lines, gradient fills,
- * frosted-glass tooltips, and palette generation.
+ * and frosted-glass tooltips.
  *
  * Uses theme-aware chart colors from `useThemeColors()` and dark-mode
  * detection from `useAppColorMode()`.
  */
 
 /* ---------- private color-space helpers ---------- */
-
-interface HSL {
-  h: number;
-  s: number;
-  l: number;
-}
-
-function hexToHSL(hex: string): HSL {
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  const stripped = hex.replace('#', '');
-  // Validate hex input — return neutral gray if not a valid hex color
-  if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(stripped)) {
-    return { h: 0, s: 0, l: 50 };
-  }
-  if (stripped.length === 3) {
-    r = parseInt(stripped[0]! + stripped[0]!, 16);
-    g = parseInt(stripped[1]! + stripped[1]!, 16);
-    b = parseInt(stripped[2]! + stripped[2]!, 16);
-  } else {
-    r = parseInt(stripped.substring(0, 2), 16);
-    g = parseInt(stripped.substring(2, 4), 16);
-    b = parseInt(stripped.substring(4, 6), 16);
-  }
-
-  r /= 255;
-  g /= 255;
-  b /= 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-
-  let h = 0;
-  let s = 0;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-    else if (max === g) h = ((b - r) / d + 2) / 6;
-    else h = ((r - g) / d + 4) / 6;
-  }
-
-  return { h: h * 360, s: s * 100, l: l * 100 };
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sNorm = s / 100;
-  const lNorm = l / 100;
-
-  const c = (1 - Math.abs(2 * lNorm - 1)) * sNorm;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = lNorm - c / 2;
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (h < 60) {
-    r = c;
-    g = x;
-  } else if (h < 120) {
-    r = x;
-    g = c;
-  } else if (h < 180) {
-    g = c;
-    b = x;
-  } else if (h < 240) {
-    g = x;
-    b = c;
-  } else if (h < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-
-  const toHex = (v: number) =>
-    Math.round((v + m) * 255)
-      .toString(16)
-      .padStart(2, '0');
-
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 /**
  * Convert a hex color + alpha (0–1) to an rgba() string.
@@ -128,8 +40,7 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export function useEChartsDefaults() {
   const { isDark } = useAppColorMode();
-  const { chart1Color, chart2Color, chart3Color, destructiveColor, successColor } =
-    useThemeColors();
+  const { chart1Color, chart3Color, destructiveColor, successColor } = useThemeColors();
 
   /** Line style with glow shadow. */
   function glowLineStyle(color: string, width = 2) {
@@ -173,20 +84,6 @@ export function useEChartsDefaults() {
     return { focus: 'series' as const, blurScope: 'coordinateSystem' as const };
   }
 
-  /**
-   * Generate N harmonious colors from a base hex color using golden-angle
-   * (137.5°) hue rotation for maximum perceptual spread.
-   */
-  function generatePalette(baseHex: string, count: number): string[] {
-    const hsl = hexToHSL(baseHex);
-    const goldenAngle = 137.508;
-    return Array.from({ length: count }, (_, i) => {
-      const hue = (hsl.h + i * goldenAngle) % 360;
-      const lightness = isDark.value ? 55 + (i % 3) * 8 : 45 + (i % 3) * 8;
-      return hslToHex(hue, Math.max(hsl.s, 50), lightness);
-    });
-  }
-
   /** Convert hex color + alpha (0–1) to rgba() string for ECharts. */
   function colorAlpha(hex: string, alpha: number): string {
     return hexToRgba(hex, alpha);
@@ -194,7 +91,6 @@ export function useEChartsDefaults() {
 
   return {
     chart1Color,
-    chart2Color,
     chart3Color,
     destructiveColor,
     successColor,
@@ -202,7 +98,6 @@ export function useEChartsDefaults() {
     gradientArea,
     tooltipConfig,
     emphasisConfig,
-    generatePalette,
     colorAlpha,
   };
 }

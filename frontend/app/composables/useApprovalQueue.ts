@@ -8,7 +8,17 @@
  * and is shared between components on the same page.
  */
 import type { FetchError } from 'ofetch';
-import { MODE_APPROVAL } from '~/constants';
+import {
+  MODE_APPROVAL,
+  EVENT_ENGINE_COMPLETE,
+  EVENT_DELETION_SUCCESS,
+  EVENT_DELETION_FAILED,
+  EVENT_APPROVAL_ORPHANS_RECOVERED,
+  EVENT_APPROVAL_BULK_UNSNOOZED,
+  EVENT_APPROVAL_QUEUE_CLEARED,
+  EVENT_APPROVAL_DISMISSED,
+  EVENT_APPROVAL_RETURNED_TO_PENDING,
+} from '~/constants';
 import type { ApprovalQueueItem } from '~/types/api';
 
 export interface ApprovalGroup {
@@ -389,13 +399,14 @@ export function useApprovalQueue() {
     };
 
     // Queue state changes that warrant a refresh
-    sseOn('engine_complete', refreshOnEvent);
-    sseOn('deletion_success', refreshOnEvent);
-    sseOn('deletion_failed', refreshOnEvent);
-    sseOn('approval_orphans_recovered', refreshOnEvent);
-    sseOn('approval_bulk_unsnoozed', refreshOnEvent);
-    sseOn('approval_queue_cleared', refreshOnEvent);
-    sseOn('approval_dismissed', refreshOnEvent);
+    sseOn(EVENT_ENGINE_COMPLETE, refreshOnEvent);
+    sseOn(EVENT_DELETION_SUCCESS, refreshOnEvent);
+    sseOn(EVENT_DELETION_FAILED, refreshOnEvent);
+    sseOn(EVENT_APPROVAL_ORPHANS_RECOVERED, refreshOnEvent);
+    sseOn(EVENT_APPROVAL_BULK_UNSNOOZED, refreshOnEvent);
+    sseOn(EVENT_APPROVAL_QUEUE_CLEARED, refreshOnEvent);
+    sseOn(EVENT_APPROVAL_DISMISSED, refreshOnEvent);
+    sseOn(EVENT_APPROVAL_RETURNED_TO_PENDING, refreshOnEvent);
   }
 
   return {
