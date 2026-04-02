@@ -115,6 +115,18 @@
           <p class="text-xs text-muted-foreground/70 pl-5.5">
             {{ $t('settings.integrationErrorHint') }}
           </p>
+          <div v-if="integration.consecutiveFailures > 0" class="flex items-center gap-1.5 pl-5.5">
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span
+                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"
+              />
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+            </span>
+            <span class="text-xs text-amber-500 font-medium">
+              Attempting recovery ({{ integration.consecutiveFailures }}
+              {{ integration.consecutiveFailures === 1 ? 'failure' : 'failures' }})
+            </span>
+          </div>
         </div>
 
         <!-- Inline feature toggles (issue #9) -->

@@ -216,6 +216,12 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 			Message: fmt.Sprintf("**%s** (%s) is back online", e.Name, e.IntegrationType),
 		}, func(cfg db.NotificationConfig) bool { return cfg.OnIntegrationStatus })
 
+		// Recovery attempt events are intentionally NOT dispatched to external
+		// notification channels — they fire frequently during probing and would
+		// spam Discord/Apprise. The IntegrationRecoveredEvent above handles the
+		// one-time "back online" notification. Recovery attempts flow through
+		// SSE to the frontend for real-time progress display only.
+
 		// Sunset notifications (SunsetCreatedEvent, SunsetExpiredEvent,
 		// SunsetEscalatedEvent, SunsetMisconfiguredEvent) are intentionally
 		// not dispatched to Discord/Apprise yet. Sunset events still flow

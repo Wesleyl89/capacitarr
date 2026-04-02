@@ -161,6 +161,12 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 		return c.JSON(http.StatusOK, result)
 	}, IPRateLimit(integrationTestRL))
 
+	// Integration health / recovery status
+	g.GET("/integrations/health", func(c echo.Context) error {
+		entries := reg.Recovery.HealthStatus()
+		return c.JSON(http.StatusOK, entries)
+	})
+
 	// Sync all integrations (trigger a manual poll)
 	g.POST("/integrations/sync", func(c echo.Context) error {
 		// Invalidate all cached rule values before re-syncing

@@ -46,6 +46,7 @@ type Registry struct {
 	Sunset               *SunsetService
 	PosterOverlay        *PosterOverlayService
 	Mapping              *MappingService
+	Recovery             *RecoveryService
 }
 
 // NewRegistry creates a fully wired Registry with all services.
@@ -114,6 +115,10 @@ func NewRegistry(database *gorm.DB, bus *events.EventBus, cfg *config.Config) *R
 
 	// Wire IntegrationService's cross-service dependency on DiskGroupService
 	reg.Integration.SetDiskGroupService(diskGroupSvc)
+
+	// Create RecoveryService and wire bidirectional dependency with IntegrationService
+	reg.Recovery = NewRecoveryService(reg.Integration, bus)
+	reg.Integration.SetRecoveryTracker(reg.Recovery)
 
 	// Wire DiskGroupService's cross-service dependency on EngineService
 	// so threshold changes trigger an immediate engine run for queue reconciliation

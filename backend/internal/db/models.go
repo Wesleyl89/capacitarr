@@ -51,20 +51,21 @@ func (g DiskGroup) EffectiveTotalBytes() int64 {
 // machine. If the database file is compromised, the attacker already has
 // access to the host. Ensure the DB file permissions are restrictive (0600).
 type IntegrationConfig struct {
-	ID                 uint       `gorm:"primarykey" json:"id"`
-	Type               string     `gorm:"not null;index" json:"type"` // See ValidIntegrationTypes in validation.go for allowed values
-	Name               string     `gorm:"not null" json:"name"`       // User-friendly name
-	URL                string     `gorm:"not null" json:"url"`
-	APIKey             string     `gorm:"not null" json:"apiKey"` // API key or Plex token
-	Enabled            bool       `gorm:"default:true" json:"enabled"`
-	MediaSizeBytes     int64      `json:"mediaSizeBytes"` // Total media file size
-	MediaCount         int        `json:"mediaCount"`     // Number of media items
-	LastSync           *time.Time `json:"lastSync,omitempty"`
-	LastError          string     `json:"lastError,omitempty"`
-	CollectionDeletion bool       `gorm:"default:false" json:"collectionDeletion"` // When enabled, deleting one collection member deletes all
-	ShowLevelOnly      bool       `gorm:"default:false" json:"showLevelOnly"`      // Sonarr only: evaluate entire shows instead of individual seasons
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	ID                  uint       `gorm:"primarykey" json:"id"`
+	Type                string     `gorm:"not null;index" json:"type"` // See ValidIntegrationTypes in validation.go for allowed values
+	Name                string     `gorm:"not null" json:"name"`       // User-friendly name
+	URL                 string     `gorm:"not null" json:"url"`
+	APIKey              string     `gorm:"not null" json:"apiKey"` // API key or Plex token
+	Enabled             bool       `gorm:"default:true" json:"enabled"`
+	MediaSizeBytes      int64      `json:"mediaSizeBytes"` // Total media file size
+	MediaCount          int        `json:"mediaCount"`     // Number of media items
+	LastSync            *time.Time `json:"lastSync,omitempty"`
+	LastError           string     `json:"lastError,omitempty"`
+	CollectionDeletion  bool       `gorm:"default:false" json:"collectionDeletion"`       // When enabled, deleting one collection member deletes all
+	ShowLevelOnly       bool       `gorm:"default:false" json:"showLevelOnly"`            // Sonarr only: evaluate entire shows instead of individual seasons
+	ConsecutiveFailures int        `gorm:"default:0;not null" json:"consecutiveFailures"` // Incremented on connection test failure, reset on success
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
 // DiskGroupIntegration tracks which integrations reported each disk group.

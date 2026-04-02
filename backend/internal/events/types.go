@@ -311,6 +311,32 @@ func (e IntegrationRecoveredEvent) EventMessage() string {
 	return fmt.Sprintf("Integration recovered: %s (%s)", e.Name, e.IntegrationType)
 }
 
+// IntegrationRecoveryAttemptEvent is published when the RecoveryService probes
+// a failing integration. Fires on both success and failure so the frontend can
+// show real-time recovery progress.
+type IntegrationRecoveryAttemptEvent struct {
+	IntegrationID    uint   `json:"integrationId"`
+	IntegrationType  string `json:"integrationType"`
+	Name             string `json:"name"`
+	Attempt          int    `json:"attempt"`
+	Success          bool   `json:"success"`
+	Error            string `json:"error,omitempty"`
+	NextRetrySeconds int    `json:"nextRetrySeconds,omitempty"` // Seconds until next probe (0 if recovered)
+}
+
+// EventType implements Event.
+func (e IntegrationRecoveryAttemptEvent) EventType() string {
+	return "integration_recovery_attempt"
+}
+
+// EventMessage implements Event.
+func (e IntegrationRecoveryAttemptEvent) EventMessage() string {
+	if e.Success {
+		return fmt.Sprintf("Recovery probe succeeded: %s (%s) after %d attempt(s)", e.Name, e.IntegrationType, e.Attempt)
+	}
+	return fmt.Sprintf("Recovery probe failed: %s (%s) — attempt %d, retry in %ds", e.Name, e.IntegrationType, e.Attempt, e.NextRetrySeconds)
+}
+
 // =============================================================================
 // Approval Events
 // =============================================================================

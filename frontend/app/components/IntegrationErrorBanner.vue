@@ -30,6 +30,12 @@
               <span class="text-muted-foreground text-xs truncate" :title="integration.lastError">
                 — {{ integration.lastError }}
               </span>
+              <span
+                v-if="integration.consecutiveFailures > 0"
+                class="text-amber-500 text-[10px] shrink-0 font-medium"
+              >
+                Recovering (attempt {{ integration.consecutiveFailures }})
+              </span>
             </div>
             <NuxtLink
               to="/settings"

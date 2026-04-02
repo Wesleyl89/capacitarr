@@ -328,6 +328,10 @@ func main() {
 	pollerInstance.Start()
 	cronScheduler := jobs.Start(reg)
 
+	// Start integration recovery monitor — probes failing integrations with
+	// exponential backoff between poll cycles to detect recovery quickly.
+	reg.Recovery.Start()
+
 	// Non-blocking startup self-test — check connectivity to all enabled integrations
 	go func() {
 		configs, err := reg.Integration.ListEnabled()
@@ -480,6 +484,7 @@ func main() {
 		// Stop background jobs
 		pollerInstance.Stop()
 		cronScheduler.Stop()
+		reg.Recovery.Stop()
 		reg.Integration.CloseCache()
 
 		// Stop services

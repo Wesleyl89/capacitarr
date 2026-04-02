@@ -22,6 +22,7 @@ export interface IntegrationConfig {
   mediaCount: number;
   lastSync?: string | null;
   lastError?: string;
+  consecutiveFailures: number;
   createdAt: string;
   updatedAt: string;
 }

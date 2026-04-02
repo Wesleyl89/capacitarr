@@ -532,6 +532,8 @@ function eventIcon(eventType: string) {
     case 'integration_removed':
     case 'integration_test':
     case 'integration_test_failed':
+    case 'integration_recovered':
+    case 'integration_recovery_attempt':
       return PlugIcon;
     // Approval
     case 'approval_approved':
@@ -604,6 +606,7 @@ function eventIconClass(eventType: string): string {
     case 'server_started':
     case 'integration_added':
     case 'integration_test':
+    case 'integration_recovered':
     case EVENT_DELETION_SUCCESS:
     case EVENT_DELETION_BATCH_COMPLETE:
     case 'notification_channel_added':
@@ -624,6 +627,7 @@ function eventIconClass(eventType: string): string {
     case EVENT_DELETION_DRY_RUN:
     case EVENT_DELETION_PROGRESS:
     case 'approval_orphans_recovered':
+    case 'integration_recovery_attempt':
       return 'text-warning';
     case 'rule_updated':
     case 'password_changed':
@@ -740,6 +744,8 @@ const activityEventTypes = [
   'integration_removed',
   'integration_test',
   'integration_test_failed',
+  'integration_recovered',
+  'integration_recovery_attempt',
   'approval_approved',
   'approval_rejected',
   'approval_unsnoozed',
@@ -848,6 +854,8 @@ onMounted(async () => {
   sseOn('integration_added', handleIntegrationChange, scope);
   sseOn('integration_updated', handleIntegrationChange, scope);
   sseOn('integration_removed', handleIntegrationChange, scope);
+  sseOn('integration_recovered', handleIntegrationChange, scope);
+  sseOn('integration_recovery_attempt', handleIntegrationChange, scope);
   sseOn('settings_changed', handleSettingsChange, scope);
 });
 

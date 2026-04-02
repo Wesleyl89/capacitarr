@@ -89,10 +89,11 @@ type DiskGroupManager interface {
 // external API lookups (rule values, quality profiles, tags, languages).
 // It also owns the RuleValueCache for caching external API responses.
 type IntegrationService struct {
-	db             *gorm.DB
-	bus            *events.EventBus
-	diskGroups     DiskGroupManager
-	ruleValueCache *cache.TTLCache
+	db              *gorm.DB
+	bus             *events.EventBus
+	diskGroups      DiskGroupManager
+	recoveryTracker RecoveryTracker
+	ruleValueCache  *cache.TTLCache
 }
 
 // Wired returns true when all lazily-injected dependencies are non-nil.
@@ -105,6 +106,12 @@ func (s *IntegrationService) Wired() bool {
 // Called by Registry after construction to avoid circular initialization.
 func (s *IntegrationService) SetDiskGroupService(dg DiskGroupManager) {
 	s.diskGroups = dg
+}
+
+// SetRecoveryTracker wires the RecoveryTracker so UpdateSyncStatus can notify
+// the recovery monitor of state changes. Called by Registry after construction.
+func (s *IntegrationService) SetRecoveryTracker(rt RecoveryTracker) {
+	s.recoveryTracker = rt
 }
 
 // NewIntegrationService creates a new IntegrationService with an embedded rule value cache.
@@ -797,11 +804,64 @@ func (s *IntegrationService) BuildIntegrationRegistry() (*integrations.Integrati
 	return registry, nil
 }
 
-// UpdateSyncStatus updates the last_sync and last_error fields on an integration config.
+// UpdateSyncStatus updates the sync status fields on an integration config and
+// notifies the recovery tracker. On failure (lastError non-empty), the
+// consecutive failure counter is incremented and the recovery tracker is told
+// to start probing. On success, the counter is reset and the tracker is told
+// to stop probing.
 func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, lastError string) error {
+	if lastError != "" {
+		// Failure path: increment consecutive_failures
+		result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]any{
+			"last_sync":            lastSync,
+			"last_error":           lastError,
+			"consecutive_failures": gorm.Expr("consecutive_failures + 1"),
+		})
+		if result.Error != nil {
+			return fmt.Errorf("failed to update sync status: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return ErrNotFound
+		}
+
+		// Notify recovery tracker to start probing this integration
+		if s.recoveryTracker != nil {
+			cfg, err := s.GetByID(id)
+			if err == nil {
+				s.recoveryTracker.TrackFailure(id, cfg.Type, cfg.Name, cfg.URL, cfg.APIKey, lastError)
+			}
+		}
+		return nil
+	}
+
+	// Success path: reset consecutive_failures to 0
 	result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]any{
-		"last_sync":  lastSync,
-		"last_error": lastError,
+		"last_sync":            lastSync,
+		"last_error":           lastError,
+		"consecutive_failures": 0,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("failed to update sync status: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	// Notify recovery tracker to stop probing this integration
+	if s.recoveryTracker != nil {
+		s.recoveryTracker.TrackRecovery(id)
+	}
+	return nil
+}
+
+// UpdateSyncStatusDirect updates sync status fields without notifying the
+// recovery tracker. Used by RecoveryService to write recovery results
+// without creating a circular notification loop.
+func (s *IntegrationService) UpdateSyncStatusDirect(id uint, lastSync *time.Time, lastError string, consecutiveFailures int) error {
+	result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]any{
+		"last_sync":            lastSync,
+		"last_error":           lastError,
+		"consecutive_failures": consecutiveFailures,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update sync status: %w", result.Error)
