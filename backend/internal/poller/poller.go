@@ -15,15 +15,54 @@ import (
 )
 
 // RunAccumulator collects per-cycle metrics across multiple disk group
-// evaluations within a single engine run. Passed by pointer to
-// evaluateAndCleanDisk so each disk group's results are aggregated.
-// Not shared across goroutines — the poller runs single-threaded.
+// evaluations within a single engine run. Each disk group gets its own
+// GroupAccumulator. Not shared across goroutines — the poller runs
+// single-threaded.
 type RunAccumulator struct {
-	Evaluated   int64
-	Candidates  int64
-	Protected   int64
-	FreedBytes  int64
-	Collections int64 // distinct collection group expansions
+	Groups map[uint]*GroupAccumulator
+}
+
+// NewRunAccumulator creates a RunAccumulator with an initialized map.
+func NewRunAccumulator() *RunAccumulator {
+	return &RunAccumulator{Groups: make(map[uint]*GroupAccumulator)}
+}
+
+// GetOrCreate returns the accumulator for a disk group, creating it if needed.
+func (a *RunAccumulator) GetOrCreate(groupID uint, mountPath, mode string) *GroupAccumulator {
+	if ga, ok := a.Groups[groupID]; ok {
+		return ga
+	}
+	ga := &GroupAccumulator{MountPath: mountPath, Mode: mode}
+	a.Groups[groupID] = ga
+	return ga
+}
+
+// Totals returns aggregate counts across all groups for engine stats.
+func (a *RunAccumulator) Totals() (evaluated, candidates, protected, collections int64, freedBytes int64) {
+	for _, ga := range a.Groups {
+		evaluated += ga.Evaluated
+		candidates += ga.Candidates
+		protected += ga.Protected
+		collections += ga.Collections
+		freedBytes += ga.FreedBytes
+	}
+	return
+}
+
+// GroupAccumulator collects per-group metrics for a single disk group evaluation.
+type GroupAccumulator struct {
+	MountPath     string
+	Mode          string
+	Evaluated     int64
+	Candidates    int64
+	Protected     int64
+	FreedBytes    int64
+	Collections   int64
+	DiskUsagePct  float64
+	DiskThreshold float64
+	DiskTargetPct float64
+	// Sunset-mode counters (zero for other modes)
+	SunsetQueued int
 }
 
 // Poller orchestrates periodic media library polling and capacity evaluation.
@@ -152,8 +191,7 @@ func (p *Poller) poll() {
 	}
 
 	// RunAccumulator collects per-run metrics across disk group evaluations.
-	// Zero-valued at creation — no reset needed.
-	var acc RunAccumulator
+	acc := NewRunAccumulator()
 
 	configs, err := p.reg.Integration.ListEnabled()
 	if err != nil {
@@ -315,7 +353,7 @@ func (p *Poller) poll() {
 		}
 
 		// Evaluate and trigger cleanup if threshold breached
-		totalDeletionsQueued += p.evaluateAndCleanDisk(&acc, *group, fetched.allItems, fetched.registry, runStatsID, prefs, weights, rules, evalCtx)
+		totalDeletionsQueued += p.evaluateAndCleanDisk(acc, *group, fetched.allItems, fetched.registry, runStatsID, prefs, weights, rules, evalCtx)
 	}
 
 	// Final sweep: clear any remaining approval queue items when ALL disk groups
@@ -346,12 +384,25 @@ func (p *Poller) poll() {
 	// completion of each item internally.
 	p.reg.Deletion.SignalBatchSize(totalDeletionsQueued)
 
-	// Read per-run stats from the accumulator
-	evaluated := acc.Evaluated
-	candidates := acc.Candidates
-	protected := acc.Protected
-	freedBytes := acc.FreedBytes
-	collections := acc.Collections
+	// Read per-run stats from the accumulator (aggregated across all groups)
+	evaluated, candidates, protected, _, freedBytes := acc.Totals()
+
+	// Build per-group digest data from the accumulator.
+	var groups []notifications.GroupDigest
+	for _, ga := range acc.Groups {
+		groups = append(groups, notifications.GroupDigest{
+			MountPath:          ga.MountPath,
+			Mode:               ga.Mode,
+			Evaluated:          int(ga.Evaluated),
+			Candidates:         int(ga.Candidates),
+			FreedBytes:         ga.FreedBytes,
+			DiskUsagePct:       ga.DiskUsagePct,
+			DiskThreshold:      ga.DiskThreshold,
+			DiskTargetPct:      ga.DiskTargetPct,
+			CollectionsDeleted: int(ga.Collections),
+			SunsetQueued:       ga.SunsetQueued,
+		})
+	}
 
 	// Flush the cycle digest notification directly from the poller's own
 	// counters, replacing the fragile two-gate event accumulation pattern.
@@ -359,13 +410,8 @@ func (p *Poller) poll() {
 	// asynchronously); for dry-run/approval, Candidates is used in the
 	// notification description instead of Deleted.
 	p.reg.NotificationDispatch.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode:      prefs.DefaultDiskGroupMode,
-		Evaluated:          int(evaluated),
-		Candidates:         int(candidates),
-		Deleted:            totalDeletionsQueued,
-		FreedBytes:         freedBytes,
-		DurationMs:         time.Since(pollStart).Milliseconds(),
-		CollectionsDeleted: int(collections),
+		Groups:     groups,
+		DurationMs: time.Since(pollStart).Milliseconds(),
 	})
 
 	// In auto mode, IncrementDeletedStats() accumulates actual freed bytes

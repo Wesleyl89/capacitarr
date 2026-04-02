@@ -147,20 +147,32 @@ type DiskGroupExport struct {
 
 // NotificationExport contains non-sensitive notification channel fields.
 type NotificationExport struct {
-	Name                string `json:"name"`
-	Type                string `json:"type"`
-	Enabled             bool   `json:"enabled"`
-	AppriseTags         string `json:"appriseTags,omitempty"`
-	OnCycleDigest       bool   `json:"onCycleDigest"`
-	OnDryRunDigest      bool   `json:"onDryRunDigest"`
-	OnError             bool   `json:"onError"`
-	OnModeChanged       bool   `json:"onModeChanged"`
-	OnServerStarted     bool   `json:"onServerStarted"`
-	OnThresholdBreach   bool   `json:"onThresholdBreach"`
-	OnUpdateAvailable   bool   `json:"onUpdateAvailable"`
-	OnApprovalActivity  bool   `json:"onApprovalActivity"`
-	OnIntegrationStatus bool   `json:"onIntegrationStatus"`
-	OnSunsetActivity    bool   `json:"onSunsetActivity"`
+	Name                      string `json:"name"`
+	Type                      string `json:"type"`
+	Enabled                   bool   `json:"enabled"`
+	AppriseTags               string `json:"appriseTags,omitempty"`
+	NotificationLevel         string `json:"notificationLevel"`
+	OverrideCycleDigest       *bool  `json:"overrideCycleDigest,omitempty"`
+	OverrideError             *bool  `json:"overrideError,omitempty"`
+	OverrideModeChanged       *bool  `json:"overrideModeChanged,omitempty"`
+	OverrideServerStarted     *bool  `json:"overrideServerStarted,omitempty"`
+	OverrideThresholdBreach   *bool  `json:"overrideThresholdBreach,omitempty"`
+	OverrideUpdateAvailable   *bool  `json:"overrideUpdateAvailable,omitempty"`
+	OverrideApprovalActivity  *bool  `json:"overrideApprovalActivity,omitempty"`
+	OverrideIntegrationStatus *bool  `json:"overrideIntegrationStatus,omitempty"`
+
+	// Legacy fields for backwards compatibility with pre-tier backups.
+	// Read during import; never written during export (omitempty).
+	LegacyOnCycleDigest       *bool `json:"onCycleDigest,omitempty"`
+	LegacyOnDryRunDigest      *bool `json:"onDryRunDigest,omitempty"`
+	LegacyOnError             *bool `json:"onError,omitempty"`
+	LegacyOnModeChanged       *bool `json:"onModeChanged,omitempty"`
+	LegacyOnServerStarted     *bool `json:"onServerStarted,omitempty"`
+	LegacyOnThresholdBreach   *bool `json:"onThresholdBreach,omitempty"`
+	LegacyOnUpdateAvailable   *bool `json:"onUpdateAvailable,omitempty"`
+	LegacyOnApprovalActivity  *bool `json:"onApprovalActivity,omitempty"`
+	LegacyOnIntegrationStatus *bool `json:"onIntegrationStatus,omitempty"`
+	LegacyOnSunsetActivity    *bool `json:"onSunsetActivity,omitempty"`
 }
 
 // =============================================================================
@@ -318,20 +330,19 @@ func (s *BackupService) Export(sections ExportSections, appVersion string) (*Set
 		exported := make([]NotificationExport, 0, len(channels))
 		for _, nc := range channels {
 			exported = append(exported, NotificationExport{
-				Name:                nc.Name,
-				Type:                nc.Type,
-				Enabled:             nc.Enabled,
-				AppriseTags:         nc.AppriseTags,
-				OnCycleDigest:       nc.OnCycleDigest,
-				OnDryRunDigest:      nc.OnDryRunDigest,
-				OnError:             nc.OnError,
-				OnModeChanged:       nc.OnModeChanged,
-				OnServerStarted:     nc.OnServerStarted,
-				OnThresholdBreach:   nc.OnThresholdBreach,
-				OnUpdateAvailable:   nc.OnUpdateAvailable,
-				OnApprovalActivity:  nc.OnApprovalActivity,
-				OnIntegrationStatus: nc.OnIntegrationStatus,
-				OnSunsetActivity:    nc.OnSunsetActivity,
+				Name:                      nc.Name,
+				Type:                      nc.Type,
+				Enabled:                   nc.Enabled,
+				AppriseTags:               nc.AppriseTags,
+				NotificationLevel:         nc.NotificationLevel,
+				OverrideCycleDigest:       nc.OverrideCycleDigest,
+				OverrideError:             nc.OverrideError,
+				OverrideModeChanged:       nc.OverrideModeChanged,
+				OverrideServerStarted:     nc.OverrideServerStarted,
+				OverrideThresholdBreach:   nc.OverrideThresholdBreach,
+				OverrideUpdateAvailable:   nc.OverrideUpdateAvailable,
+				OverrideApprovalActivity:  nc.OverrideApprovalActivity,
+				OverrideIntegrationStatus: nc.OverrideIntegrationStatus,
 			})
 		}
 		envelope.NotificationChannels = exported
@@ -819,6 +830,28 @@ func (s *BackupService) importDiskGroups(groups []DiskGroupExport, syncMode bool
 // channels that don't have a real webhook URL yet.
 const placeholderWebhookURL = "https://placeholder.example.com/replace-me"
 
+// mapLegacyBoolsToTier maps pre-tier boolean notification flags to a tier string.
+// Used during import of old backup files that predate the tier system.
+func mapLegacyBoolsToTier(ne NotificationExport) string {
+	boolVal := func(b *bool) bool { return b != nil && *b }
+	allFalse := !boolVal(ne.LegacyOnCycleDigest) && !boolVal(ne.LegacyOnError) &&
+		!boolVal(ne.LegacyOnModeChanged) && !boolVal(ne.LegacyOnServerStarted) &&
+		!boolVal(ne.LegacyOnThresholdBreach) && !boolVal(ne.LegacyOnUpdateAvailable) &&
+		!boolVal(ne.LegacyOnApprovalActivity) && !boolVal(ne.LegacyOnIntegrationStatus)
+	allTrue := boolVal(ne.LegacyOnCycleDigest) && boolVal(ne.LegacyOnError) &&
+		boolVal(ne.LegacyOnModeChanged) && boolVal(ne.LegacyOnServerStarted) &&
+		boolVal(ne.LegacyOnThresholdBreach) && boolVal(ne.LegacyOnUpdateAvailable) &&
+		boolVal(ne.LegacyOnApprovalActivity) && boolVal(ne.LegacyOnIntegrationStatus) &&
+		boolVal(ne.LegacyOnDryRunDigest)
+	if allFalse {
+		return "off"
+	}
+	if allTrue {
+		return "verbose"
+	}
+	return "normal"
+}
+
 // importNotificationChannels upserts notification channels by type+name.
 // Existing channels have their subscription flags updated but webhook URLs
 // are preserved. New channels are created with a placeholder webhook URL and
@@ -840,7 +873,17 @@ func (s *BackupService) importNotificationChannels(tx *gorm.DB, channels []Notif
 	importedKeys := make(map[string]bool, len(channels))
 
 	count := 0
-	for _, ne := range channels {
+	for i := range channels {
+		ne := &channels[i]
+
+		// Backwards compatibility: map legacy boolean fields to tier system
+		if ne.NotificationLevel == "" && ne.LegacyOnCycleDigest != nil {
+			ne.NotificationLevel = mapLegacyBoolsToTier(*ne)
+		}
+		if ne.NotificationLevel == "" {
+			ne.NotificationLevel = "normal" // default
+		}
+
 		importedKeys[ne.Type+":"+ne.Name] = true
 
 		// Upsert: look up existing by type + name
@@ -850,16 +893,15 @@ func (s *BackupService) importNotificationChannels(tx *gorm.DB, channels []Notif
 			// Found — update subscription flags but preserve webhook URL
 			existing.Enabled = ne.Enabled
 			existing.AppriseTags = ne.AppriseTags
-			existing.OnCycleDigest = ne.OnCycleDigest
-			existing.OnDryRunDigest = ne.OnDryRunDigest
-			existing.OnError = ne.OnError
-			existing.OnModeChanged = ne.OnModeChanged
-			existing.OnServerStarted = ne.OnServerStarted
-			existing.OnThresholdBreach = ne.OnThresholdBreach
-			existing.OnUpdateAvailable = ne.OnUpdateAvailable
-			existing.OnApprovalActivity = ne.OnApprovalActivity
-			existing.OnIntegrationStatus = ne.OnIntegrationStatus
-			existing.OnSunsetActivity = ne.OnSunsetActivity
+			existing.NotificationLevel = ne.NotificationLevel
+			existing.OverrideCycleDigest = ne.OverrideCycleDigest
+			existing.OverrideError = ne.OverrideError
+			existing.OverrideModeChanged = ne.OverrideModeChanged
+			existing.OverrideServerStarted = ne.OverrideServerStarted
+			existing.OverrideThresholdBreach = ne.OverrideThresholdBreach
+			existing.OverrideUpdateAvailable = ne.OverrideUpdateAvailable
+			existing.OverrideApprovalActivity = ne.OverrideApprovalActivity
+			existing.OverrideIntegrationStatus = ne.OverrideIntegrationStatus
 			if dbErr := tx.Save(&existing).Error; dbErr != nil {
 				return count, 0, fmt.Errorf("failed to update notification channel %q: %w", ne.Name, dbErr)
 			}
@@ -869,21 +911,20 @@ func (s *BackupService) importNotificationChannels(tx *gorm.DB, channels []Notif
 
 		// Not found — create new with placeholder webhook URL, forced disabled
 		nc := db.NotificationConfig{
-			Name:                ne.Name,
-			Type:                ne.Type,
-			WebhookURL:          placeholderWebhookURL,
-			Enabled:             true, // GORM default:true workaround — disable below
-			AppriseTags:         ne.AppriseTags,
-			OnCycleDigest:       ne.OnCycleDigest,
-			OnDryRunDigest:      ne.OnDryRunDigest,
-			OnError:             ne.OnError,
-			OnModeChanged:       ne.OnModeChanged,
-			OnServerStarted:     ne.OnServerStarted,
-			OnThresholdBreach:   ne.OnThresholdBreach,
-			OnUpdateAvailable:   ne.OnUpdateAvailable,
-			OnApprovalActivity:  ne.OnApprovalActivity,
-			OnIntegrationStatus: ne.OnIntegrationStatus,
-			OnSunsetActivity:    ne.OnSunsetActivity,
+			Name:                      ne.Name,
+			Type:                      ne.Type,
+			WebhookURL:                placeholderWebhookURL,
+			Enabled:                   true, // GORM default:true workaround — disable below
+			AppriseTags:               ne.AppriseTags,
+			NotificationLevel:         ne.NotificationLevel,
+			OverrideCycleDigest:       ne.OverrideCycleDigest,
+			OverrideError:             ne.OverrideError,
+			OverrideModeChanged:       ne.OverrideModeChanged,
+			OverrideServerStarted:     ne.OverrideServerStarted,
+			OverrideThresholdBreach:   ne.OverrideThresholdBreach,
+			OverrideUpdateAvailable:   ne.OverrideUpdateAvailable,
+			OverrideApprovalActivity:  ne.OverrideApprovalActivity,
+			OverrideIntegrationStatus: ne.OverrideIntegrationStatus,
 		}
 		if dbErr := tx.Create(&nc).Error; dbErr != nil {
 			return count, 0, fmt.Errorf("failed to create notification channel %q: %w", ne.Name, dbErr)

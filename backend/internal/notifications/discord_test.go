@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -20,20 +21,25 @@ func TestDiscordSender_SendDigest_Format(t *testing.T) {
 
 	sender := NewDiscordSender()
 	digest := CycleDigest{
-		ExecutionMode: ModeAuto,
-		Evaluated:     42,
-		Candidates:    5,
-		Deleted:       3,
-		Failed:        1,
-		FreedBytes:    1073741824, // 1 GB
-		DurationMs:    1500,
-		DiskUsagePct:  87.5,
-		DiskThreshold: 85.0,
-		DiskTargetPct: 75.0,
-		Version:       "v1.0.0",
+		Groups: []GroupDigest{
+			{
+				MountPath:     "/media",
+				Mode:          ModeAuto,
+				Evaluated:     42,
+				Candidates:    5,
+				Deleted:       3,
+				Failed:        1,
+				FreedBytes:    1073741824, // 1 GB
+				DiskUsagePct:  87.5,
+				DiskThreshold: 85.0,
+				DiskTargetPct: 75.0,
+			},
+		},
+		DurationMs: 1500,
+		Version:    "v1.0.0",
 	}
 
-	err := sender.SendDigest(SenderConfig{WebhookURL: server.URL}, digest)
+	err := sender.SendDigest(SenderConfig{WebhookURL: server.URL}, digest, TierNormal)
 	if err != nil {
 		t.Fatalf("SendDigest failed: %v", err)
 	}
@@ -48,6 +54,14 @@ func TestDiscordSender_SendDigest_Format(t *testing.T) {
 	}
 	if embed.Color == 0 {
 		t.Error("expected non-zero embed color")
+	}
+	// Per-group rendering: description should contain the mount path
+	if !strings.Contains(embed.Description, "/media") {
+		t.Error("expected description to contain mount path '/media'")
+	}
+	// Per-group rendering: description should contain group summary
+	if !strings.Contains(embed.Description, "Deleted 3 of 42") {
+		t.Error("expected description to contain deletion summary")
 	}
 }
 

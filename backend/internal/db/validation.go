@@ -54,6 +54,12 @@ var ValidNotificationChannelTypes = map[string]bool{
 	"discord": true, "apprise": true,
 }
 
+// ValidNotificationLevels defines the allowed notification level values.
+var ValidNotificationLevels = map[string]bool{
+	"off": true, "critical": true, "important": true,
+	"normal": true, "verbose": true,
+}
+
 // MediaKey builds a composite lookup key from a media name and type. This is
 // the canonical key format used throughout the codebase for deduplication,
 // snooze checks, approval queue matching, and audit log upserts. Using a

@@ -43,40 +43,54 @@ type discordField struct {
 }
 
 // SendDigest delivers a cycle digest notification to a Discord webhook.
-func (s *DiscordSender) SendDigest(config SenderConfig, digest CycleDigest) error {
+// The level parameter controls which group sections are included based
+// on the channel's notification tier.
+func (s *DiscordSender) SendDigest(config SenderConfig, digest CycleDigest, level NotificationTier) error {
 	webhookURL := config.WebhookURL
 	if webhookURL == "" {
 		return fmt.Errorf("discord webhook URL is empty")
 	}
 
-	// Build author line: "Capacitarr v1.4.0 • auto"
-	authorName := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
-	if digest.ExecutionMode != "" {
-		authorName += " • " + digest.ExecutionMode
+	groups := filterGroups(digest.Groups, level)
+	if len(groups) == 0 {
+		return nil // nothing to show at this tier
 	}
 
-	desc := digestDescription(digest)
+	// Build author line: "Capacitarr v1.4.0"
+	authorName := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
 
-	// Append disk usage progress bar for auto mode or all-clear
-	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Candidates == 0) {
-		bar := ProgressBar(digest.DiskUsagePct, 20)
-		if digest.ExecutionMode == ModeAuto && digest.Candidates > 0 {
-			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
-		} else {
-			desc += fmt.Sprintf("\n\n`%s` **%.0f%%** / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)
+	// Build per-group sections in the embed description
+	desc := ""
+	for i, g := range groups {
+		if i > 0 {
+			desc += "\n"
+		}
+		desc += fmt.Sprintf("──── %s · %s ────\n", g.MountPath, g.Mode)
+		desc += fmt.Sprintf("%s %s\n", groupIcon(g.Mode), groupDescription(g))
+		if g.DiskUsagePct > 0 {
+			bar := ProgressBar(g.DiskUsagePct, 20)
+			if g.Mode == ModeAuto && g.Deleted > 0 {
+				desc += fmt.Sprintf("`%s` **%.0f%%** → %.0f%%\n", bar, g.DiskUsagePct, g.DiskTargetPct)
+			} else {
+				desc += fmt.Sprintf("`%s` **%.0f%%** / %.0f%%\n", bar, g.DiskUsagePct, g.DiskThreshold)
+			}
 		}
 	}
 
+	// Append duration footer
+	durSec := float64(digest.DurationMs) / 1000.0
+	desc += fmt.Sprintf("\n⏱️ %.1fs", durSec)
+
 	// Append version update banner
 	if digest.UpdateAvailable && digest.LatestVersion != "" {
-		desc += fmt.Sprintf("\n\n📦 **%s** available!", digest.LatestVersion)
+		desc += fmt.Sprintf(" · 📦 **%s** available!", digest.LatestVersion)
 	}
 
 	embed := discordEmbed{
 		Author:      &discordAuthor{Name: authorName, IconURL: capacitarrIconURL},
 		Title:       digestTitle(digest),
 		Description: desc,
-		Color:       digestColor(digest),
+		Color:       digestColor(groups),
 	}
 
 	return sendDiscordPayload(webhookURL, discordPayload{Embeds: []discordEmbed{embed}})

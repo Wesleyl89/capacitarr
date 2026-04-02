@@ -452,20 +452,62 @@ func importNotifications(ctx context.Context, srcDB *sql.DB, dest *gorm.DB) (int
 			continue
 		}
 
+		// Map 1.x boolean toggles to the new tier system.
+		// All booleans true → "verbose" (dry-run digest was opt-in).
+		// All false → "off". Otherwise default to "normal" and set
+		// overrides for any booleans that deviate from the Normal tier defaults.
+		level := "normal"
+		allTrue := onCycleDigest && onError && onModeChanged && onServerStarted &&
+			onThresholdBreach && onUpdateAvailable && onApprovalActivity
+		allFalse := !onCycleDigest && !onError && !onModeChanged && !onServerStarted &&
+			!onThresholdBreach && !onUpdateAvailable && !onApprovalActivity
+		if allFalse {
+			level = "off"
+		} else if allTrue {
+			level = "verbose"
+		}
+
 		target := db.NotificationConfig{
-			Type:                nType,
-			Name:                name,
-			WebhookURL:          webhookURL,
-			AppriseTags:         appriseTags,
-			Enabled:             enabled,
-			OnCycleDigest:       onCycleDigest,
-			OnError:             onError,
-			OnModeChanged:       onModeChanged,
-			OnServerStarted:     onServerStarted,
-			OnThresholdBreach:   onThresholdBreach,
-			OnUpdateAvailable:   onUpdateAvailable,
-			OnApprovalActivity:  onApprovalActivity,
-			OnIntegrationStatus: true, // New in 2.0 — default to true to match freshly-created channel behavior
+			Type:              nType,
+			Name:              name,
+			WebhookURL:        webhookURL,
+			AppriseTags:       appriseTags,
+			Enabled:           enabled,
+			NotificationLevel: level,
+		}
+
+		// Set overrides for booleans that deviate from the assigned tier's defaults.
+		// Normal tier defaults: cycle_digest=on, error=on, threshold=on, mode_changed=on,
+		// approval=on, server_started=on, update_available=on, integration_status=on.
+		if level == "normal" {
+			if !onCycleDigest {
+				f := false
+				target.OverrideCycleDigest = &f
+			}
+			if !onError {
+				f := false
+				target.OverrideError = &f
+			}
+			if !onModeChanged {
+				f := false
+				target.OverrideModeChanged = &f
+			}
+			if !onServerStarted {
+				f := false
+				target.OverrideServerStarted = &f
+			}
+			if !onThresholdBreach {
+				f := false
+				target.OverrideThresholdBreach = &f
+			}
+			if !onUpdateAvailable {
+				f := false
+				target.OverrideUpdateAvailable = &f
+			}
+			if !onApprovalActivity {
+				f := false
+				target.OverrideApprovalActivity = &f
+			}
 		}
 		if err := dest.Create(&target).Error; err != nil {
 			slog.Error("Failed to import notification", "component", "migration",

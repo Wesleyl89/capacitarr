@@ -36,7 +36,7 @@ type mockSender struct {
 	alerts  []notifications.Alert
 }
 
-func (m *mockSender) SendDigest(_ notifications.SenderConfig, d notifications.CycleDigest) error {
+func (m *mockSender) SendDigest(_ notifications.SenderConfig, d notifications.CycleDigest, _ notifications.NotificationTier) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.digests = append(m.digests, d)
@@ -62,6 +62,9 @@ func (m *mockSender) getAlerts() []notifications.Alert {
 	return append([]notifications.Alert{}, m.alerts...)
 }
 
+// boolPtr returns a pointer to the given bool value.
+func boolPtr(b bool) *bool { return &b }
+
 // newTestDispatch creates a dispatch service with mock senders for
 // external channels (discord/apprise). Returns the service and the mock sender.
 func newTestDispatch(t *testing.T, channels *mockChannelProvider) (*NotificationDispatchService, *mockSender) {
@@ -82,41 +85,52 @@ func newTestDispatch(t *testing.T, channels *mockChannelProvider) (*Notification
 	return svc, externalMock
 }
 
+// makeDigest creates a CycleDigest with a single GroupDigest for testing.
+func makeDigest(mode string, evaluated, candidates, deleted int, freedBytes int64, durationMs int64) notifications.CycleDigest {
+	return notifications.CycleDigest{
+		Groups: []notifications.GroupDigest{
+			{
+				MountPath:    "/media",
+				Mode:         mode,
+				Evaluated:    evaluated,
+				Candidates:   candidates,
+				Deleted:      deleted,
+				FreedBytes:   freedBytes,
+				DiskUsagePct: 0,
+			},
+		},
+		DurationMs: durationMs,
+	}
+}
+
 func TestNotificationDispatch_FlushCycleDigest(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test Discord", Enabled: true, OnCycleDigest: true},
+			{ID: 1, Type: "discord", Name: "Test Discord", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
 	// FlushCycleDigest is called directly by the poller — no event sequence needed.
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     100,
-		Candidates:    3,
-		Deleted:       3,
-		FreedBytes:    3 * 1073741824,
-		DurationMs:    500,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeAuto, 100, 3, 3, 3*1073741824, 500))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
-	if digests[0].Evaluated != 100 {
-		t.Errorf("expected evaluated=100, got %d", digests[0].Evaluated)
+	if digests[0].TotalEvaluated() != 100 {
+		t.Errorf("expected evaluated=100, got %d", digests[0].TotalEvaluated())
 	}
-	if digests[0].Candidates != 3 {
-		t.Errorf("expected candidates=3, got %d", digests[0].Candidates)
+	if digests[0].TotalCandidates() != 3 {
+		t.Errorf("expected candidates=3, got %d", digests[0].TotalCandidates())
 	}
-	if digests[0].Deleted != 3 {
-		t.Errorf("expected deleted=3, got %d", digests[0].Deleted)
+	if digests[0].TotalDeleted() != 3 {
+		t.Errorf("expected deleted=3, got %d", digests[0].TotalDeleted())
 	}
-	if digests[0].FreedBytes != 3*1073741824 {
-		t.Errorf("expected freedBytes=%d, got %d", 3*1073741824, digests[0].FreedBytes)
+	if digests[0].TotalFreedBytes() != 3*1073741824 {
+		t.Errorf("expected freedBytes=%d, got %d", 3*1073741824, digests[0].TotalFreedBytes())
 	}
 	// FlushCycleDigest should set the version from the service
 	if digests[0].Version != "v1.0.0-test" {
@@ -127,65 +141,63 @@ func TestNotificationDispatch_FlushCycleDigest(t *testing.T) {
 func TestNotificationDispatch_FlushCycleDigest_DryRun(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true, OnDryRunDigest: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "verbose"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeDryRun,
-		Evaluated:     50,
-		Candidates:    5,
-		FreedBytes:    1073741824,
-		DurationMs:    200,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeDryRun, 50, 5, 0, 1073741824, 200))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
-	if digests[0].ExecutionMode != db.ModeDryRun {
-		t.Errorf("expected execution mode 'dry-run', got %q", digests[0].ExecutionMode)
+	if digests[0].PrimaryMode() != db.ModeDryRun {
+		t.Errorf("expected execution mode 'dry-run', got %q", digests[0].PrimaryMode())
 	}
 }
 
 func TestNotificationDispatch_FlushCycleDigest_CollectionGroups(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode:      db.ModeAuto,
-		Evaluated:          200,
-		Candidates:         10,
-		Deleted:            10,
-		FreedBytes:         5 * 1073741824,
-		DurationMs:         1000,
-		CollectionsDeleted: 2,
-	})
+	digest := notifications.CycleDigest{
+		Groups: []notifications.GroupDigest{
+			{
+				MountPath:          "/media",
+				Mode:               db.ModeAuto,
+				Evaluated:          200,
+				Candidates:         10,
+				Deleted:            10,
+				FreedBytes:         5 * 1073741824,
+				CollectionsDeleted: 2,
+			},
+		},
+		DurationMs: 1000,
+	}
+	svc.FlushCycleDigest(digest)
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
-	if digests[0].CollectionsDeleted != 2 {
-		t.Errorf("expected collectionsDeleted=2, got %d", digests[0].CollectionsDeleted)
+	if digests[0].TotalCollectionsDeleted() != 2 {
+		t.Errorf("expected collectionsDeleted=2, got %d", digests[0].TotalCollectionsDeleted())
 	}
 }
 
 func TestNotificationDispatch_ImmediateAlerts(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true,
-				OnError: true, OnModeChanged: true, OnServerStarted: true,
-				OnThresholdBreach: true, OnUpdateAvailable: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "critical"},
 		},
 	}
 
@@ -205,33 +217,28 @@ func TestNotificationDispatch_ImmediateAlerts(t *testing.T) {
 }
 
 func TestNotificationDispatch_SubscriptionFiltering(t *testing.T) {
+	// Channel at "critical" level should NOT receive cycle_digest (which is TierNormal).
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "No Digest", Enabled: true, OnCycleDigest: false},
+			{ID: 1, Type: "discord", Name: "No Digest", Enabled: true, NotificationLevel: "critical"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	// FlushCycleDigest respects OnCycleDigest=false
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     10,
-		Candidates:    0,
-		DurationMs:    100,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeAuto, 10, 0, 0, 0, 100))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 0 {
-		t.Fatalf("expected 0 digests (channel has OnCycleDigest=false), got %d", len(digests))
+		t.Fatalf("expected 0 digests (channel at critical level), got %d", len(digests))
 	}
 }
 
 func TestNotificationDispatch_ModeChangedAlert(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnModeChanged: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "important"},
 		},
 	}
 
@@ -252,7 +259,7 @@ func TestNotificationDispatch_ModeChangedAlert(t *testing.T) {
 func TestNotificationDispatch_ServerStartedAlert(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnServerStarted: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
@@ -271,9 +278,10 @@ func TestNotificationDispatch_ServerStartedAlert(t *testing.T) {
 }
 
 func TestNotificationDispatch_ApprovalActivityFiltering(t *testing.T) {
+	// Channel at critical level should NOT receive approval_activity (TierImportant).
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "No Approval", Enabled: true, OnApprovalActivity: false},
+			{ID: 1, Type: "discord", Name: "No Approval", Enabled: true, NotificationLevel: "critical"},
 		},
 	}
 
@@ -284,158 +292,123 @@ func TestNotificationDispatch_ApprovalActivityFiltering(t *testing.T) {
 
 	alerts := mock.getAlerts()
 	if len(alerts) != 0 {
-		t.Fatalf("expected 0 alerts (channel has OnApprovalActivity=false), got %d", len(alerts))
+		t.Fatalf("expected 0 alerts (channel at critical level), got %d", len(alerts))
 	}
 }
 
 func TestNotificationDispatch_ApprovalModeFreedBytes(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true, OnApprovalActivity: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
 	// In approval mode, FreedBytes comes from the poller's counters.
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeApproval,
-		Evaluated:     2232,
-		Candidates:    80,
-		FreedBytes:    5368709120, // ~5 GB potential savings
-		DurationMs:    11900,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeApproval, 2232, 80, 0, 5368709120, 11900))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
 		t.Fatalf("expected 1 digest, got %d", len(digests))
 	}
-	if digests[0].FreedBytes != 5368709120 {
-		t.Errorf("expected freedBytes=5368709120, got %d", digests[0].FreedBytes)
+	if digests[0].TotalFreedBytes() != 5368709120 {
+		t.Errorf("expected freedBytes=5368709120, got %d", digests[0].TotalFreedBytes())
 	}
-	if digests[0].ExecutionMode != db.ModeApproval {
-		t.Errorf("expected execution mode 'approval', got %q", digests[0].ExecutionMode)
+	if digests[0].PrimaryMode() != db.ModeApproval {
+		t.Errorf("expected execution mode 'approval', got %q", digests[0].PrimaryMode())
 	}
-	if digests[0].Candidates != 80 {
-		t.Errorf("expected candidates=80, got %d", digests[0].Candidates)
+	if digests[0].TotalCandidates() != 80 {
+		t.Errorf("expected candidates=80, got %d", digests[0].TotalCandidates())
 	}
 }
 
 func TestNotificationDispatch_ApprovalModeDigestSuppressed(t *testing.T) { //nolint:dupl // test structure intentionally similar
-	// When OnApprovalActivity=false, approval-mode cycle digests should be
-	// suppressed — users who turn off "Approval Activity" expect ALL
-	// approval-related notifications to stop, including the engine cycle
-	// digest that says "Items Queued for Approval".
+	// Override cycle_digest to false for approval-mode digests.
+	overrideFalse := boolPtr(false)
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "No Approval Digest", Enabled: true,
-				OnCycleDigest: true, OnApprovalActivity: false},
+				NotificationLevel: "normal", OverrideCycleDigest: overrideFalse},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeApproval,
-		Evaluated:     100,
-		Candidates:    5,
-		FreedBytes:    1073741824,
-		DurationMs:    500,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeApproval, 100, 5, 0, 1073741824, 500))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 0 {
-		t.Fatalf("expected 0 digests (OnApprovalActivity=false suppresses approval-mode digests), got %d", len(digests))
+		t.Fatalf("expected 0 digests (OverrideCycleDigest=false suppresses digests), got %d", len(digests))
 	}
 }
 
 func TestNotificationDispatch_DryRunDigestSuppressed(t *testing.T) { //nolint:dupl // test structure intentionally similar
-	// When OnDryRunDigest=false, dry-run cycle digests should be suppressed —
-	// users who turn off "Include Dry-Run" expect the periodic "would delete
-	// N items" summaries to stop, while still receiving auto-mode digests.
+	// Channel at "normal" level won't receive dry_run_digest (TierVerbose).
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "No DryRun Digest", Enabled: true,
-				OnCycleDigest: true, OnDryRunDigest: false},
+				NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeDryRun,
-		Evaluated:     100,
-		Candidates:    5,
-		FreedBytes:    1073741824,
-		DurationMs:    500,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeDryRun, 100, 5, 0, 1073741824, 500))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 0 {
-		t.Fatalf("expected 0 digests (OnDryRunDigest=false suppresses dry-run digests), got %d", len(digests))
+		t.Fatalf("expected 0 digests (dry_run_digest needs verbose level), got %d", len(digests))
 	}
 }
 
 func TestNotificationDispatch_NonDryRunDigestNotAffected(t *testing.T) {
-	// When OnDryRunDigest=false, auto-mode cycle digests should still
-	// be delivered normally — only dry-run digests are suppressed.
+	// Channel at "normal" level should receive auto-mode cycle_digest
+	// even though dry_run_digest requires verbose.
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "Test", Enabled: true,
-				OnCycleDigest: true, OnDryRunDigest: false},
+				NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     50,
-		Candidates:    2,
-		Deleted:       2,
-		DurationMs:    300,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeAuto, 50, 2, 2, 0, 300))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
-		t.Fatalf("expected 1 digest (auto mode unaffected by OnDryRunDigest=false), got %d", len(digests))
+		t.Fatalf("expected 1 digest (auto mode unaffected by dry-run tier), got %d", len(digests))
 	}
-	if digests[0].ExecutionMode != db.ModeAuto {
-		t.Errorf("expected execution mode 'auto', got %q", digests[0].ExecutionMode)
+	if digests[0].PrimaryMode() != db.ModeAuto {
+		t.Errorf("expected execution mode 'auto', got %q", digests[0].PrimaryMode())
 	}
 }
 
 func TestNotificationDispatch_NonApprovalDigestNotAffected(t *testing.T) {
-	// When OnApprovalActivity=false, non-approval-mode digests (auto)
-	// should still be delivered normally.
+	// Channel at "normal" level should receive auto-mode cycle_digest.
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "discord", Name: "Test", Enabled: true,
-				OnCycleDigest: true, OnApprovalActivity: false},
+				NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     50,
-		Candidates:    2,
-		Deleted:       2,
-		DurationMs:    300,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeAuto, 50, 2, 2, 0, 300))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
 	if len(digests) != 1 {
-		t.Fatalf("expected 1 digest (auto mode unaffected by OnApprovalActivity=false), got %d", len(digests))
+		t.Fatalf("expected 1 digest (auto mode at normal level), got %d", len(digests))
 	}
-	if digests[0].ExecutionMode != db.ModeAuto {
-		t.Errorf("expected execution mode 'auto', got %q", digests[0].ExecutionMode)
+	if digests[0].PrimaryMode() != db.ModeAuto {
+		t.Errorf("expected execution mode 'auto', got %q", digests[0].PrimaryMode())
 	}
 }
 
@@ -487,19 +460,13 @@ func TestNotificationDispatch_AppriseChannel(t *testing.T) {
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
 			{ID: 1, Type: "apprise", Name: "Apprise Server", WebhookURL: "http://apprise:8000/api/notify/mykey/",
-				AppriseTags: "admin", Enabled: true, OnCycleDigest: true},
+				AppriseTags: "admin", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     50,
-		Candidates:    2,
-		Deleted:       2,
-		DurationMs:    300,
-	})
+	svc.FlushCycleDigest(makeDigest(db.ModeAuto, 50, 2, 2, 0, 300))
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()
@@ -513,18 +480,16 @@ func TestNotificationDispatch_VersionPopulated(t *testing.T) {
 	// overriding any value in the input digest.
 	channels := &mockChannelProvider{
 		configs: []db.NotificationConfig{
-			{ID: 1, Type: "discord", Name: "Test", Enabled: true, OnCycleDigest: true},
+			{ID: 1, Type: "discord", Name: "Test", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
 	svc, mock := newTestDispatch(t, channels)
 
 	// Pass a digest with a different version — should be overridden
-	svc.FlushCycleDigest(notifications.CycleDigest{
-		ExecutionMode: db.ModeAuto,
-		Evaluated:     10,
-		Version:       "should-be-overridden",
-	})
+	digest := makeDigest(db.ModeAuto, 10, 0, 0, 0, 0)
+	digest.Version = "should-be-overridden"
+	svc.FlushCycleDigest(digest)
 	time.Sleep(200 * time.Millisecond)
 
 	digests := mock.getDigests()

@@ -331,19 +331,19 @@ type NotificationConfig struct {
 	WebhookURL  string `json:"webhookUrl,omitempty"`                    // Discord webhook or Apprise API endpoint URL
 	AppriseTags string `gorm:"default:''" json:"appriseTags,omitempty"` // Comma-separated Apprise tags for routing
 	Enabled     bool   `gorm:"default:true" json:"enabled"`
-	// Event subscriptions — which notification types trigger this channel
-	OnCycleDigest       bool      `gorm:"default:true" json:"onCycleDigest"`
-	OnDryRunDigest      bool      `gorm:"default:true" json:"onDryRunDigest"`
-	OnError             bool      `gorm:"default:true" json:"onError"`
-	OnModeChanged       bool      `gorm:"default:true" json:"onModeChanged"`
-	OnServerStarted     bool      `gorm:"default:true" json:"onServerStarted"`
-	OnThresholdBreach   bool      `gorm:"default:true" json:"onThresholdBreach"`
-	OnUpdateAvailable   bool      `gorm:"default:true" json:"onUpdateAvailable"`
-	OnApprovalActivity  bool      `gorm:"default:true" json:"onApprovalActivity"`
-	OnIntegrationStatus bool      `gorm:"default:true" json:"onIntegrationStatus"`
-	OnSunsetActivity    bool      `gorm:"default:true" json:"onSunsetActivity"`
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	// Notification level controls which events trigger this channel.
+	// Override fields (nullable) force individual events on/off regardless of level.
+	NotificationLevel         string    `gorm:"default:'normal';not null" json:"notificationLevel"`
+	OverrideCycleDigest       *bool     `json:"overrideCycleDigest,omitempty"`
+	OverrideError             *bool     `json:"overrideError,omitempty"`
+	OverrideModeChanged       *bool     `json:"overrideModeChanged,omitempty"`
+	OverrideServerStarted     *bool     `json:"overrideServerStarted,omitempty"`
+	OverrideThresholdBreach   *bool     `json:"overrideThresholdBreach,omitempty"`
+	OverrideUpdateAvailable   *bool     `json:"overrideUpdateAvailable,omitempty"`
+	OverrideApprovalActivity  *bool     `json:"overrideApprovalActivity,omitempty"`
+	OverrideIntegrationStatus *bool     `json:"overrideIntegrationStatus,omitempty"`
+	CreatedAt                 time.Time `json:"createdAt"`
+	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
 // ActivityEvent stores system-level activity events for the dashboard feed.

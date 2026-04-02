@@ -79,15 +79,15 @@ func (s *NotificationChannelService) PartialUpdate(id uint, req db.NotificationC
 	existing.WebhookURL = req.WebhookURL
 	existing.AppriseTags = req.AppriseTags
 	existing.Enabled = req.Enabled
-	existing.OnCycleDigest = req.OnCycleDigest
-	existing.OnError = req.OnError
-	existing.OnModeChanged = req.OnModeChanged
-	existing.OnServerStarted = req.OnServerStarted
-	existing.OnThresholdBreach = req.OnThresholdBreach
-	existing.OnUpdateAvailable = req.OnUpdateAvailable
-	existing.OnApprovalActivity = req.OnApprovalActivity
-	existing.OnDryRunDigest = req.OnDryRunDigest
-	existing.OnIntegrationStatus = req.OnIntegrationStatus
+	existing.NotificationLevel = req.NotificationLevel
+	existing.OverrideCycleDigest = req.OverrideCycleDigest
+	existing.OverrideError = req.OverrideError
+	existing.OverrideModeChanged = req.OverrideModeChanged
+	existing.OverrideServerStarted = req.OverrideServerStarted
+	existing.OverrideThresholdBreach = req.OverrideThresholdBreach
+	existing.OverrideUpdateAvailable = req.OverrideUpdateAvailable
+	existing.OverrideApprovalActivity = req.OverrideApprovalActivity
+	existing.OverrideIntegrationStatus = req.OverrideIntegrationStatus
 	existing.UpdatedAt = time.Now()
 
 	if err := s.db.Save(existing).Error; err != nil {

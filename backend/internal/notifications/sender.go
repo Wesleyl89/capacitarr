@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"fmt"
+	"strings"
 
 	"capacitarr/internal/db"
 )
@@ -18,31 +19,108 @@ type SenderConfig struct {
 // Each channel type (Discord, Apprise) implements this interface.
 type Sender interface {
 	// SendDigest delivers a cycle digest notification summarizing an engine run.
-	SendDigest(config SenderConfig, digest CycleDigest) error
+	// The level parameter lets senders filter which group sections to show
+	// based on the channel's notification tier.
+	SendDigest(config SenderConfig, digest CycleDigest, level NotificationTier) error
 	// SendAlert delivers an immediate alert notification.
 	SendAlert(config SenderConfig, alert Alert) error
 }
 
 // CycleDigest contains the data for a single engine cycle notification.
 // Built by the poller from its own counters and passed to the dispatch service.
+// Per-group metrics are in the Groups slice; top-level fields are cycle-wide.
 type CycleDigest struct {
-	ExecutionMode      string  `json:"executionMode"`
-	Evaluated          int     `json:"evaluated"`
-	Candidates         int     `json:"candidates"`
-	Deleted            int     `json:"deleted"`
-	Failed             int     `json:"failed"`
-	FreedBytes         int64   `json:"freedBytes"`
-	DurationMs         int64   `json:"durationMs"`
-	DiskUsagePct       float64 `json:"diskUsagePct"`
-	DiskThreshold      float64 `json:"diskThreshold"`
-	DiskTargetPct      float64 `json:"diskTargetPct"`
-	CollectionsDeleted int     `json:"collectionsDeleted"` // Number of distinct collections that triggered group deletions
-	Version            string  `json:"version"`
+	Groups     []GroupDigest `json:"groups"`
+	DurationMs int64         `json:"durationMs"`
+	Version    string        `json:"version"`
 
 	// Update information — populated when a newer version is available.
 	UpdateAvailable bool   `json:"updateAvailable"`
 	LatestVersion   string `json:"latestVersion"`
 	ReleaseURL      string `json:"releaseUrl"`
+}
+
+// GroupDigest contains per-disk-group metrics for a single engine cycle.
+type GroupDigest struct {
+	MountPath          string  `json:"mountPath"`
+	Mode               string  `json:"mode"`
+	Evaluated          int     `json:"evaluated"`
+	Candidates         int     `json:"candidates"`
+	Deleted            int     `json:"deleted"`
+	Failed             int     `json:"failed"`
+	FreedBytes         int64   `json:"freedBytes"`
+	DiskUsagePct       float64 `json:"diskUsagePct"`
+	DiskThreshold      float64 `json:"diskThreshold"`
+	DiskTargetPct      float64 `json:"diskTargetPct"`
+	CollectionsDeleted int     `json:"collectionsDeleted"`
+	SunsetQueued       int     `json:"sunsetQueued"`
+	SunsetExpired      int     `json:"sunsetExpired"`
+	SunsetSaved        int     `json:"sunsetSaved"`
+	EscalatedItems     int     `json:"escalatedItems"`
+	EscalatedBytes     int64   `json:"escalatedBytes"`
+}
+
+// TotalEvaluated returns the sum of Evaluated across all groups.
+func (d CycleDigest) TotalEvaluated() int {
+	total := 0
+	for _, g := range d.Groups {
+		total += g.Evaluated
+	}
+	return total
+}
+
+// TotalCandidates returns the sum of Candidates across all groups.
+func (d CycleDigest) TotalCandidates() int {
+	total := 0
+	for _, g := range d.Groups {
+		total += g.Candidates
+	}
+	return total
+}
+
+// TotalDeleted returns the sum of Deleted across all groups.
+func (d CycleDigest) TotalDeleted() int {
+	total := 0
+	for _, g := range d.Groups {
+		total += g.Deleted
+	}
+	return total
+}
+
+// TotalFreedBytes returns the sum of FreedBytes across all groups.
+func (d CycleDigest) TotalFreedBytes() int64 {
+	var total int64
+	for _, g := range d.Groups {
+		total += g.FreedBytes
+	}
+	return total
+}
+
+// TotalCollectionsDeleted returns the sum of CollectionsDeleted across all groups.
+func (d CycleDigest) TotalCollectionsDeleted() int {
+	total := 0
+	for _, g := range d.Groups {
+		total += g.CollectionsDeleted
+	}
+	return total
+}
+
+// TotalFailed returns the sum of Failed across all groups.
+func (d CycleDigest) TotalFailed() int {
+	total := 0
+	for _, g := range d.Groups {
+		total += g.Failed
+	}
+	return total
+}
+
+// PrimaryMode returns the execution mode from the first group, or empty string
+// if there are no groups. Used for backward-compatible digest rendering.
+func (d CycleDigest) PrimaryMode() string {
+	if len(d.Groups) > 0 {
+		return d.Groups[0].Mode
+	}
+	return ""
 }
 
 // AlertType identifies the category of an immediate alert notification.
@@ -170,10 +248,10 @@ func ProgressBar(pct float64, width int) string {
 // digestTitle returns the appropriate title and emoji for a cycle digest
 // based on execution mode and action counts.
 func digestTitle(d CycleDigest) string {
-	if d.Candidates == 0 {
+	if d.TotalCandidates() == 0 {
 		return titleAllClear
 	}
-	switch d.ExecutionMode {
+	switch d.PrimaryMode() {
 	case ModeAuto:
 		return titleCleanupComplete
 	case ModeDryRun:
@@ -185,52 +263,107 @@ func digestTitle(d CycleDigest) string {
 	}
 }
 
-// digestColor returns the embed color for a cycle digest.
-func digestColor(d CycleDigest) int {
-	if d.Candidates == 0 {
-		return ColorGreen
+// filterGroups returns the subset of groups that should be shown at the given tier.
+func filterGroups(groups []GroupDigest, level NotificationTier) []GroupDigest {
+	var result []GroupDigest
+	for _, g := range groups {
+		switch {
+		case level >= TierVerbose:
+			// Verbose: show everything including dry-run
+			result = append(result, g)
+		case level >= TierNormal:
+			// Normal: show all groups except dry-run
+			if g.Mode != ModeDryRun {
+				result = append(result, g)
+			}
+		case level >= TierImportant:
+			// Important: only groups where action was taken
+			if hasActivity(g) && g.Mode != ModeDryRun {
+				result = append(result, g)
+			}
+		}
+		// Critical and Off: no digest groups shown
 	}
-	switch d.ExecutionMode {
-	case ModeAuto:
-		return ColorGreen
+	return result
+}
+
+// hasActivity returns true if the group had any meaningful action this cycle.
+func hasActivity(g GroupDigest) bool {
+	return g.Deleted > 0 || g.Candidates > 0 || g.FreedBytes > 0 ||
+		g.SunsetQueued > 0 || g.SunsetExpired > 0 || g.SunsetSaved > 0 ||
+		g.EscalatedItems > 0
+}
+
+// groupDescription returns a mode-specific summary line for a group.
+func groupDescription(g GroupDigest) string {
+	switch g.Mode {
+	case "auto":
+		if g.Deleted > 0 {
+			return fmt.Sprintf("Deleted %d of %d, freeing %s", g.Deleted, g.Evaluated, HumanSize(g.FreedBytes))
+		}
+		return fmt.Sprintf("Evaluated %d items — all within threshold", g.Evaluated)
+	case "approval":
+		if g.Candidates > 0 {
+			return fmt.Sprintf("Queued %d of %d for approval", g.Candidates, g.Evaluated)
+		}
+		return fmt.Sprintf("Evaluated %d items — all within threshold", g.Evaluated)
+	case "sunset":
+		parts := []string{}
+		if g.SunsetQueued > 0 {
+			parts = append(parts, fmt.Sprintf("%d items entered sunset", g.SunsetQueued))
+		}
+		if g.SunsetExpired > 0 {
+			parts = append(parts, fmt.Sprintf("%d expired", g.SunsetExpired))
+		}
+		if g.SunsetSaved > 0 {
+			parts = append(parts, fmt.Sprintf("%d saved", g.SunsetSaved))
+		}
+		if g.EscalatedItems > 0 {
+			parts = append(parts, fmt.Sprintf("%d force-expired (%s freed)", g.EscalatedItems, HumanSize(g.EscalatedBytes)))
+		}
+		if len(parts) == 0 {
+			return fmt.Sprintf("Evaluated %d items — all within threshold", g.Evaluated)
+		}
+		return strings.Join(parts, " · ")
 	case ModeDryRun:
-		return ColorBlue
-	case ModeApproval:
-		return ColorAmber
+		if g.Candidates > 0 {
+			return fmt.Sprintf("%d candidates, would free %s", g.Candidates, HumanSize(g.FreedBytes))
+		}
+		return fmt.Sprintf("Evaluated %d items — all within threshold", g.Evaluated)
 	default:
-		return ColorGreen
+		return fmt.Sprintf("Evaluated %d items", g.Evaluated)
 	}
 }
 
-// digestDescription builds the description text for a cycle digest embed.
-func digestDescription(d CycleDigest) string {
-	durSec := float64(d.DurationMs) / 1000.0
-
-	if d.Candidates == 0 {
-		return fmt.Sprintf("Evaluated **%d** items — no action needed", d.Evaluated)
-	}
-
-	switch d.ExecutionMode {
-	case ModeAuto:
-		desc := fmt.Sprintf("Deleted **%d** of **%d** evaluated items\nin **%.1fs**, freeing **%s**",
-			d.Deleted, d.Evaluated, durSec, HumanSize(d.FreedBytes))
-		if d.CollectionsDeleted > 0 {
-			desc += fmt.Sprintf("\n📦 Included **%d** collection group deletion(s)", d.CollectionsDeleted)
-		}
-		if d.Failed > 0 {
-			desc += fmt.Sprintf("\n⚠️ %d deletion(s) failed", d.Failed)
-		}
-		return desc
+// groupIcon returns a mode-specific emoji prefix for a group.
+func groupIcon(mode string) string {
+	switch mode {
+	case "auto":
+		return "🧹"
+	case "approval":
+		return "📋"
+	case "sunset":
+		return "☀️"
 	case ModeDryRun:
-		return fmt.Sprintf("Candidates **%d** of **%d** items in **%.1fs**\nWould free **%s**",
-			d.Candidates, d.Evaluated, durSec, HumanSize(d.FreedBytes))
-	case ModeApproval:
-		return fmt.Sprintf("Queued **%d** of **%d** items in **%.1fs**\nPotential **%s**",
-			d.Candidates, d.Evaluated, durSec, HumanSize(d.FreedBytes))
+		return "🔍"
 	default:
-		return fmt.Sprintf("Processed **%d** of **%d** items in **%.1fs**",
-			d.Candidates, d.Evaluated, durSec)
+		return "📊"
 	}
+}
+
+// digestColor returns a Discord embed color based on the most severe group action.
+func digestColor(groups []GroupDigest) int {
+	for _, g := range groups {
+		if g.EscalatedItems > 0 {
+			return ColorRed // escalation happened
+		}
+	}
+	for _, g := range groups {
+		if g.Deleted > 0 || g.SunsetExpired > 0 {
+			return ColorAmber // items removed
+		}
+	}
+	return ColorGreen // healthy
 }
 
 // alertColor returns the embed color for an alert type.

@@ -14,6 +14,10 @@ import (
 // ErrUnknownChannelType is returned when a notification channel has an unrecognized type.
 var ErrUnknownChannelType = errors.New("unknown channel type")
 
+// eventKindError is the event kind string for error-class notifications,
+// matching the key in notifications.EventTier.
+const eventKindError = "error"
+
 // ChannelProvider abstracts the notification channel service for the dispatch
 // service. Satisfied by NotificationChannelService.
 type ChannelProvider interface {
@@ -25,6 +29,14 @@ type ChannelProvider interface {
 // in cycle digests. Satisfied by VersionService.
 type VersionChecker interface {
 	CheckForUpdate() (*VersionCheckResult, error)
+}
+
+// digestEnrichment accumulates sunset expired/saved counts between
+// EngineStartEvent and FlushCycleDigest so the digest can include sunset stats.
+type digestEnrichment struct {
+	mu      sync.Mutex
+	expired map[uint]int // diskGroupID → count
+	saved   map[uint]int
 }
 
 // NotificationDispatchService dispatches notifications via the Sender
@@ -40,6 +52,7 @@ type NotificationDispatchService struct {
 	versionChecker VersionChecker
 	senders        map[string]notifications.Sender
 	version        string
+	enrichment     digestEnrichment
 
 	mu   sync.Mutex
 	ch   chan events.Event
@@ -152,26 +165,34 @@ func (s *NotificationDispatchService) run() {
 
 func (s *NotificationDispatchService) handle(event events.Event) {
 	switch e := event.(type) {
+	case events.EngineStartEvent:
+		// Reset digest enrichment accumulators for the new cycle.
+		s.enrichment.mu.Lock()
+		s.enrichment.expired = make(map[uint]int)
+		s.enrichment.saved = make(map[uint]int)
+		s.enrichment.mu.Unlock()
+		_ = e // consumed for side-effect only
+
 	case events.EngineErrorEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertError,
 			Title:   "🔴 Engine Error",
 			Message: "The evaluation engine failed. Check the application logs for details.",
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnError })
+		}, eventKindError)
 
 	case events.EngineModeChangedEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertModeChanged,
 			Title:   fmt.Sprintf("⚠️ Mode: **%s** → **%s**", e.OldMode, e.NewMode),
 			Message: modeChangedMessage(e.NewMode),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnModeChanged })
+		}, "mode_changed")
 
 	case events.ServerStartedEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertServerStarted,
 			Title:   "🚀 Capacitarr is online",
 			Message: "",
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnServerStarted })
+		}, "server_started")
 
 	case events.ThresholdBreachedEvent:
 		bar := notifications.ProgressBar(e.CurrentPct, 20)
@@ -179,42 +200,42 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 			Type:    notifications.AlertThresholdBreached,
 			Title:   "🔴 Threshold Breached",
 			Message: fmt.Sprintf("`%s` **%.0f%%** / %.0f%%\nTarget: **%.0f%%**", bar, e.CurrentPct, e.ThresholdPct, e.TargetPct),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnThresholdBreach })
+		}, "threshold_breached")
 
 	case events.UpdateAvailableEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertUpdateAvailable,
 			Title:   fmt.Sprintf("📦 Update Available: **%s**", e.LatestVersion),
 			Message: fmt.Sprintf("[View Release Notes](%s)", e.ReleaseURL),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnUpdateAvailable })
+		}, "update_available")
 
 	case events.ApprovalApprovedEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertApprovalActivity,
 			Title:   "✅ Approved for Deletion",
 			Message: fmt.Sprintf("**%d** item(s) approved — queued for deletion", 1),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnApprovalActivity })
+		}, "approval_activity")
 
 	case events.ApprovalRejectedEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertApprovalActivity,
 			Title:   "😴 Item Snoozed",
 			Message: fmt.Sprintf("Snoozed for %s", e.SnoozeDuration),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnApprovalActivity })
+		}, "approval_activity")
 
 	case events.IntegrationTestFailedEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertIntegrationStatus,
 			Title:   fmt.Sprintf("🔴 Integration Down: %s", e.Name),
 			Message: fmt.Sprintf("**%s** (%s) failed connection test:\n%s", e.Name, e.IntegrationType, e.Error),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnIntegrationStatus })
+		}, "integration_down")
 
 	case events.IntegrationRecoveredEvent:
 		s.dispatchAlert(notifications.Alert{
 			Type:    notifications.AlertIntegrationStatus,
 			Title:   fmt.Sprintf("🟢 Integration Recovered: %s", e.Name),
 			Message: fmt.Sprintf("**%s** (%s) is back online", e.Name, e.IntegrationType),
-		}, func(cfg db.NotificationConfig) bool { return cfg.OnIntegrationStatus })
+		}, "integration_recovery")
 
 		// Recovery attempt events are intentionally NOT dispatched to external
 		// notification channels — they fire frequently during probing and would
@@ -222,11 +243,31 @@ func (s *NotificationDispatchService) handle(event events.Event) {
 		// one-time "back online" notification. Recovery attempts flow through
 		// SSE to the frontend for real-time progress display only.
 
-		// Sunset notifications (SunsetCreatedEvent, SunsetExpiredEvent,
-		// SunsetEscalatedEvent, SunsetMisconfiguredEvent) are intentionally
-		// not dispatched to Discord/Apprise yet. Sunset events still flow
-		// through SSE to the frontend — only external notification channels
-		// are suppressed until the feature stabilises.
+	case events.SunsetEscalatedEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertThresholdBreached,
+			Title:   fmt.Sprintf("Threshold Breached — disk group %d", e.DiskGroupID),
+			Message: fmt.Sprintf("Sunset escalation: %d items force-expired to free %s", e.ItemsExpired, notifications.HumanSize(e.BytesFreed)),
+			Version: s.version,
+		}, "threshold_breached")
+
+	case events.SunsetMisconfiguredEvent:
+		s.dispatchAlert(notifications.Alert{
+			Type:    notifications.AlertError,
+			Title:   "Sunset Misconfigured — " + e.MountPath,
+			Message: "Sunset mode skipped — sunset threshold not configured.",
+			Version: s.version,
+		}, eventKindError)
+
+	case events.SunsetExpiredEvent:
+		s.enrichment.mu.Lock()
+		s.enrichment.expired[e.DiskGroupID]++
+		s.enrichment.mu.Unlock()
+
+	case events.SunsetSavedEvent:
+		s.enrichment.mu.Lock()
+		s.enrichment.saved[e.DiskGroupID]++
+		s.enrichment.mu.Unlock()
 	}
 }
 
@@ -255,12 +296,9 @@ func (s *NotificationDispatchService) FlushCycleDigest(digest notifications.Cycl
 }
 
 // dispatchDigest sends the cycle digest to all enabled channels that
-// subscribe to OnCycleDigest. Mode-specific digests are additionally gated
-// by their respective subscription flags:
-//   - Dry-run digests require OnDryRunDigest so users can silence the
-//     periodic "would delete N items" summaries independently.
-//   - Approval-mode digests require OnApprovalActivity so that disabling
-//     "Approval Activity" silences all approval-related notifications.
+// pass tier resolution for the "cycle_digest" event kind. Dry-run digests
+// use "dry_run_digest" which maps to TierVerbose, so only verbose channels
+// receive them unless overridden.
 func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleDigest) {
 	configs, err := s.channels.ListEnabled()
 	if err != nil {
@@ -269,19 +307,13 @@ func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleD
 	}
 
 	for _, cfg := range configs {
-		if !cfg.OnCycleDigest {
-			continue
+		eventKind := "cycle_digest"
+		if digest.PrimaryMode() == notifications.ModeDryRun {
+			eventKind = "dry_run_digest"
 		}
-		// Dry-run digests are gated by both OnCycleDigest and
-		// OnDryRunDigest so users can suppress periodic dry-run
-		// summaries without losing auto-mode cleanup digests.
-		if digest.ExecutionMode == notifications.ModeDryRun && !cfg.OnDryRunDigest {
-			continue
-		}
-		// Approval-mode digests are gated by both OnCycleDigest and
-		// OnApprovalActivity so that disabling "Approval Activity"
-		// silences all approval-related notifications.
-		if digest.ExecutionMode == notifications.ModeApproval && !cfg.OnApprovalActivity {
+		level := notifications.ParseLevel(cfg.NotificationLevel)
+		override := s.resolveOverride(cfg, eventKind)
+		if !notifications.ShouldNotify(level, eventKind, override) {
 			continue
 		}
 
@@ -293,9 +325,10 @@ func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleD
 
 		c := cfg
 		d := digest
+		lvl := level
 		sc := notifications.SenderConfig{WebhookURL: c.WebhookURL, AppriseTags: c.AppriseTags}
 		go func() {
-			if sendErr := sender.SendDigest(sc, d); sendErr != nil {
+			if sendErr := sender.SendDigest(sc, d, lvl); sendErr != nil {
 				slog.Error("Failed to send digest notification",
 					"component", "notifications",
 					"channel", c.Name,
@@ -318,16 +351,16 @@ func (s *NotificationDispatchService) dispatchDigest(digest notifications.CycleD
 					ChannelID:   c.ID,
 					ChannelType: c.Type,
 					Name:        c.Name,
-					TriggerType: "cycle_digest",
+					TriggerType: eventKind,
 				})
 			}
 		}()
 	}
 }
 
-// dispatchAlert sends an immediate alert to all enabled channels matching
-// the subscription filter.
-func (s *NotificationDispatchService) dispatchAlert(alert notifications.Alert, subscribes func(db.NotificationConfig) bool) {
+// dispatchAlert sends an immediate alert to all enabled channels that pass
+// tier resolution for the given event kind.
+func (s *NotificationDispatchService) dispatchAlert(alert notifications.Alert, eventKind string) {
 	s.mu.Lock()
 	alert.Version = s.version
 	s.mu.Unlock()
@@ -339,7 +372,9 @@ func (s *NotificationDispatchService) dispatchAlert(alert notifications.Alert, s
 	}
 
 	for _, cfg := range configs {
-		if !subscribes(cfg) {
+		level := notifications.ParseLevel(cfg.NotificationLevel)
+		override := s.resolveOverride(cfg, eventKind)
+		if !notifications.ShouldNotify(level, eventKind, override) {
 			continue
 		}
 
@@ -382,6 +417,32 @@ func (s *NotificationDispatchService) dispatchAlert(alert notifications.Alert, s
 				})
 			}
 		}()
+	}
+}
+
+// resolveOverride returns the per-event override for a given notification
+// channel config and event kind. Returns nil when no override applies,
+// letting the tier-based default take effect.
+func (s *NotificationDispatchService) resolveOverride(cfg db.NotificationConfig, eventKind string) *bool {
+	switch eventKind {
+	case "cycle_digest", "dry_run_digest":
+		return cfg.OverrideCycleDigest
+	case eventKindError:
+		return cfg.OverrideError
+	case "mode_changed":
+		return cfg.OverrideModeChanged
+	case "server_started":
+		return cfg.OverrideServerStarted
+	case "threshold_breached":
+		return cfg.OverrideThresholdBreach
+	case "update_available":
+		return cfg.OverrideUpdateAvailable
+	case "approval_activity":
+		return cfg.OverrideApprovalActivity
+	case "integration_down", "integration_recovery":
+		return cfg.OverrideIntegrationStatus
+	default:
+		return nil
 	}
 }
 

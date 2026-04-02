@@ -73,137 +73,22 @@
       </UiCardHeader>
 
       <!-- Card Body -->
-      <UiCardContent class="pt-4 space-y-4">
-        <!-- Engine triggers -->
-        <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Triggers</p>
-        <div class="space-y-3">
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onCycleDigest"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onCycleDigest', val)
-                "
-              />
-              <span>Cycle Digest</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">One summary after each engine run</p>
-          </div>
-          <div class="ml-6 border-l border-border pl-4">
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onDryRunDigest"
-                size="sm"
-                :disabled="!channel.onCycleDigest"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onDryRunDigest', val)
-                "
-              />
-              <span :class="{ 'text-muted-foreground': !channel.onCycleDigest }"
-                >Include Dry-Run</span
-              >
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">Also send digests for dry-run cycles</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onThresholdBreach"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onThresholdBreach', val)
-                "
-              />
-              <span>Critical Breached</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">
-              Disk usage exceeded the configured limit
-            </p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onApprovalActivity"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onApprovalActivity', val)
-                "
-              />
-              <span>Approval Activity</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">
-              Items approved or snoozed in the queue
-            </p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onError"
-                size="sm"
-                @update:model-value="(val: boolean) => updateChannelEvent(channel, 'onError', val)"
-              />
-              <span>Errors</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">The engine crashed during evaluation</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onIntegrationStatus"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onIntegrationStatus', val)
-                "
-              />
-              <span>{{ $t('notifications.integrationStatus') }}</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">
-              {{ $t('notifications.integrationStatusDesc') }}
-            </p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onModeChanged"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onModeChanged', val)
-                "
-              />
-              <span>Mode Changed</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">Execution mode was switched</p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onServerStarted"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onServerStarted', val)
-                "
-              />
-              <span>Server Started</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">
-              Capacitarr came online after a restart
-            </p>
-          </div>
-          <div>
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channel.onUpdateAvailable"
-                size="sm"
-                @update:model-value="
-                  (val: boolean) => updateChannelEvent(channel, 'onUpdateAvailable', val)
-                "
-              />
-              <span>Update Available</span>
-            </UiLabel>
-            <p class="text-xs text-muted-foreground ml-11">A newer version is ready to install</p>
-          </div>
+      <UiCardContent class="pt-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Notification Level
+          </p>
+          <UiBadge variant="outline" class="capitalize">{{ channel.notificationLevel }}</UiBadge>
         </div>
+        <p class="text-xs text-muted-foreground">
+          {{ levelDescription(channel.notificationLevel) }}
+        </p>
+        <p v-if="activeOverrideCount(channel) > 0" class="text-xs text-muted-foreground">
+          {{ activeOverrideCount(channel) }} custom override{{
+            activeOverrideCount(channel) > 1 ? 's' : ''
+          }}
+          active
+        </p>
       </UiCardContent>
 
       <!-- Card Footer -->
@@ -287,111 +172,58 @@
         </div>
 
         <div class="space-y-3">
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Triggers</p>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onCycleDigest"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onCycleDigest = val;
-                }
-              "
-            />
-            <span>Cycle Digest</span>
-          </UiLabel>
-          <div class="ml-6 border-l border-border pl-4">
-            <UiLabel class="flex items-center gap-2 text-sm font-normal">
-              <UiSwitch
-                :model-value="channelForm.onDryRunDigest"
-                :disabled="!channelForm.onCycleDigest"
-                @update:model-value="
-                  (val: boolean) => {
-                    channelForm.onDryRunDigest = val;
-                  }
-                "
-              />
-              <span :class="{ 'text-muted-foreground': !channelForm.onCycleDigest }"
-                >Include Dry-Run</span
-              >
-            </UiLabel>
+          <div class="space-y-1.5">
+            <UiLabel>Notification Level</UiLabel>
+            <UiSelect v-model="channelForm.notificationLevel">
+              <UiSelectTrigger class="w-full">
+                <UiSelectValue placeholder="Select level" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="off">Off</UiSelectItem>
+                <UiSelectItem value="critical">Critical Only</UiSelectItem>
+                <UiSelectItem value="important">Important</UiSelectItem>
+                <UiSelectItem value="normal">Normal</UiSelectItem>
+                <UiSelectItem value="verbose">Verbose</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <p class="text-xs text-muted-foreground">
+              {{ levelDescription(channelForm.notificationLevel) }}
+            </p>
           </div>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onThresholdBreach"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onThresholdBreach = val;
-                }
-              "
-            />
-            <span>Critical Breached</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onApprovalActivity"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onApprovalActivity = val;
-                }
-              "
-            />
-            <span>Approval Activity</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onError"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onError = val;
-                }
-              "
-            />
-            <span>Errors</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onIntegrationStatus"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onIntegrationStatus = val;
-                }
-              "
-            />
-            <span>Integration Status</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onModeChanged"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onModeChanged = val;
-                }
-              "
-            />
-            <span>Mode Changed</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onServerStarted"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onServerStarted = val;
-                }
-              "
-            />
-            <span>Server Started</span>
-          </UiLabel>
-          <UiLabel class="flex items-center gap-2 text-sm font-normal">
-            <UiSwitch
-              :model-value="channelForm.onUpdateAvailable"
-              @update:model-value="
-                (val: boolean) => {
-                  channelForm.onUpdateAvailable = val;
-                }
-              "
-            />
-            <span>Update Available</span>
-          </UiLabel>
+
+          <UiCollapsible v-model:open="showAdvanced">
+            <UiCollapsibleTrigger
+              class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <component :is="showAdvanced ? ChevronDownIcon : ChevronRightIcon" class="w-4 h-4" />
+              Advanced Overrides
+            </UiCollapsibleTrigger>
+            <UiCollapsibleContent class="mt-3 space-y-2">
+              <p class="text-xs text-muted-foreground mb-3">
+                Override individual event types regardless of the notification level.
+              </p>
+              <div
+                v-for="override in overrideOptions"
+                :key="override.key"
+                class="flex items-center justify-between"
+              >
+                <span class="text-sm">{{ override.label }}</span>
+                <UiSelect
+                  :model-value="triStateValue(getOverrideValue(override.key))"
+                  @update:model-value="(val) => setTriState(override.key, String(val))"
+                >
+                  <UiSelectTrigger class="w-24 h-8">
+                    <UiSelectValue />
+                  </UiSelectTrigger>
+                  <UiSelectContent>
+                    <UiSelectItem value="auto">Auto</UiSelectItem>
+                    <UiSelectItem value="on">Always On</UiSelectItem>
+                    <UiSelectItem value="off">Always Off</UiSelectItem>
+                  </UiSelectContent>
+                </UiSelect>
+              </div>
+            </UiCollapsibleContent>
+          </UiCollapsible>
         </div>
 
         <!-- Error -->
@@ -411,7 +243,14 @@
 </template>
 
 <script setup lang="ts">
-import { PlusIcon, LoaderCircleIcon, BellIcon, SendIcon } from 'lucide-vue-next';
+import {
+  PlusIcon,
+  LoaderCircleIcon,
+  BellIcon,
+  SendIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from 'lucide-vue-next';
 import DiscordIcon from '~/components/icons/DiscordIcon.vue';
 import type { NotificationChannel, ApiError } from '~/types/api';
 
@@ -432,16 +271,73 @@ const channelForm = reactive({
   name: '',
   webhookUrl: '',
   appriseTags: '',
-  onCycleDigest: true,
-  onDryRunDigest: true,
-  onThresholdBreach: true,
-  onApprovalActivity: true,
-  onError: true,
-  onIntegrationStatus: true,
-  onModeChanged: true,
-  onServerStarted: true,
-  onUpdateAvailable: true,
+  notificationLevel: 'normal' as NotificationChannel['notificationLevel'],
+  overrideCycleDigest: null as boolean | null,
+  overrideError: null as boolean | null,
+  overrideModeChanged: null as boolean | null,
+  overrideServerStarted: null as boolean | null,
+  overrideThresholdBreach: null as boolean | null,
+  overrideUpdateAvailable: null as boolean | null,
+  overrideApprovalActivity: null as boolean | null,
+  overrideIntegrationStatus: null as boolean | null,
 });
+
+const showAdvanced = ref(false);
+
+const overrideOptions = [
+  { key: 'overrideCycleDigest', label: 'Cycle Digest' },
+  { key: 'overrideError', label: 'Errors' },
+  { key: 'overrideThresholdBreach', label: 'Threshold Breach' },
+  { key: 'overrideModeChanged', label: 'Mode Changed' },
+  { key: 'overrideApprovalActivity', label: 'Approval Activity' },
+  { key: 'overrideIntegrationStatus', label: 'Integration Status' },
+  { key: 'overrideServerStarted', label: 'Server Started' },
+  { key: 'overrideUpdateAvailable', label: 'Update Available' },
+];
+
+function levelDescription(level: string): string {
+  switch (level) {
+    case 'off':
+      return 'No notifications';
+    case 'critical':
+      return 'Errors, threshold breaches, and integration failures';
+    case 'important':
+      return 'Critical events plus mode changes and review activity';
+    case 'normal':
+      return 'Cycle digests, update notices, and all important events';
+    case 'verbose':
+      return 'Everything including simulation digests and integration recovery';
+    default:
+      return '';
+  }
+}
+
+function getOverrideValue(key: string): boolean | null {
+  return (channelForm as unknown as Record<string, boolean | null>)[key] ?? null;
+}
+
+function triStateValue(val: boolean | null): string {
+  if (val === null || val === undefined) return 'auto';
+  return val ? 'on' : 'off';
+}
+
+function setTriState(key: string, val: string) {
+  (channelForm as Record<string, unknown>)[key] = val === 'auto' ? null : val === 'on';
+}
+
+function activeOverrideCount(channel: NotificationChannel): number {
+  const overrideKeys = [
+    'overrideCycleDigest',
+    'overrideError',
+    'overrideModeChanged',
+    'overrideServerStarted',
+    'overrideThresholdBreach',
+    'overrideUpdateAvailable',
+    'overrideApprovalActivity',
+    'overrideIntegrationStatus',
+  ] as const;
+  return overrideKeys.filter((k) => channel[k] !== null && channel[k] !== undefined).length;
+}
 
 // ─── Type display helpers ────────────────────────────────────────────────────
 function channelTypeIcon(type: string) {
@@ -495,16 +391,17 @@ function openAddChannelModal() {
   channelForm.name = '';
   channelForm.webhookUrl = '';
   channelForm.appriseTags = '';
-  channelForm.onCycleDigest = true;
-  channelForm.onDryRunDigest = true;
-  channelForm.onThresholdBreach = true;
-  channelForm.onApprovalActivity = true;
-  channelForm.onError = true;
-  channelForm.onIntegrationStatus = true;
-  channelForm.onModeChanged = true;
-  channelForm.onServerStarted = true;
-  channelForm.onUpdateAvailable = true;
+  channelForm.notificationLevel = 'normal';
+  channelForm.overrideCycleDigest = null;
+  channelForm.overrideError = null;
+  channelForm.overrideModeChanged = null;
+  channelForm.overrideServerStarted = null;
+  channelForm.overrideThresholdBreach = null;
+  channelForm.overrideUpdateAvailable = null;
+  channelForm.overrideApprovalActivity = null;
+  channelForm.overrideIntegrationStatus = null;
   channelFormError.value = '';
+  showAdvanced.value = false;
   showChannelModal.value = true;
 }
 
@@ -514,16 +411,17 @@ function openEditChannelModal(channel: NotificationChannel) {
   channelForm.name = channel.name;
   channelForm.webhookUrl = channel.webhookUrl || '';
   channelForm.appriseTags = channel.appriseTags || '';
-  channelForm.onCycleDigest = channel.onCycleDigest;
-  channelForm.onDryRunDigest = channel.onDryRunDigest;
-  channelForm.onThresholdBreach = channel.onThresholdBreach;
-  channelForm.onApprovalActivity = channel.onApprovalActivity;
-  channelForm.onError = channel.onError;
-  channelForm.onIntegrationStatus = channel.onIntegrationStatus;
-  channelForm.onModeChanged = channel.onModeChanged;
-  channelForm.onServerStarted = channel.onServerStarted;
-  channelForm.onUpdateAvailable = channel.onUpdateAvailable;
+  channelForm.notificationLevel = channel.notificationLevel;
+  channelForm.overrideCycleDigest = channel.overrideCycleDigest ?? null;
+  channelForm.overrideError = channel.overrideError ?? null;
+  channelForm.overrideModeChanged = channel.overrideModeChanged ?? null;
+  channelForm.overrideServerStarted = channel.overrideServerStarted ?? null;
+  channelForm.overrideThresholdBreach = channel.overrideThresholdBreach ?? null;
+  channelForm.overrideUpdateAvailable = channel.overrideUpdateAvailable ?? null;
+  channelForm.overrideApprovalActivity = channel.overrideApprovalActivity ?? null;
+  channelForm.overrideIntegrationStatus = channel.overrideIntegrationStatus ?? null;
   channelFormError.value = '';
+  showAdvanced.value = activeOverrideCount(channel) > 0;
   showChannelModal.value = true;
 }
 
@@ -536,15 +434,15 @@ async function onChannelSubmit() {
       name: channelForm.name,
       webhookUrl: channelForm.webhookUrl,
       enabled: editingChannel.value ? editingChannel.value.enabled : true,
-      onCycleDigest: channelForm.onCycleDigest,
-      onDryRunDigest: channelForm.onDryRunDigest,
-      onThresholdBreach: channelForm.onThresholdBreach,
-      onApprovalActivity: channelForm.onApprovalActivity,
-      onError: channelForm.onError,
-      onIntegrationStatus: channelForm.onIntegrationStatus,
-      onModeChanged: channelForm.onModeChanged,
-      onServerStarted: channelForm.onServerStarted,
-      onUpdateAvailable: channelForm.onUpdateAvailable,
+      notificationLevel: channelForm.notificationLevel,
+      overrideCycleDigest: channelForm.overrideCycleDigest,
+      overrideError: channelForm.overrideError,
+      overrideModeChanged: channelForm.overrideModeChanged,
+      overrideServerStarted: channelForm.overrideServerStarted,
+      overrideThresholdBreach: channelForm.overrideThresholdBreach,
+      overrideUpdateAvailable: channelForm.overrideUpdateAvailable,
+      overrideApprovalActivity: channelForm.overrideApprovalActivity,
+      overrideIntegrationStatus: channelForm.overrideIntegrationStatus,
     };
     if (channelForm.type === 'apprise') {
       body.appriseTags = channelForm.appriseTags;
@@ -590,19 +488,6 @@ async function toggleChannelEnabled(channel: NotificationChannel, enabled: boole
     });
     channel.enabled = enabled;
     addToast(`Channel ${enabled ? 'enabled' : 'disabled'}`, 'success');
-  } catch {
-    addToast('Failed to update channel', 'error');
-  }
-}
-
-async function updateChannelEvent(channel: NotificationChannel, field: string, value: boolean) {
-  try {
-    const updated = { ...channel, [field]: value };
-    await api(`/api/v1/notifications/channels/${channel.id}`, {
-      method: 'PUT',
-      body: updated,
-    });
-    (channel as unknown as Record<string, unknown>)[field] = value;
   } catch {
     addToast('Failed to update channel', 'error');
   }

@@ -27,7 +27,7 @@ func TestBackupService_Export_AllSections(t *testing.T) {
 	database.Create(&db.NotificationConfig{
 		Type: "discord", Name: "Firefly Alerts",
 		WebhookURL: "https://discord.com/api/webhooks/secret",
-		Enabled:    true, OnCycleDigest: true, OnError: true,
+		Enabled:    true, NotificationLevel: "normal",
 	})
 
 	sections := ExportSections{
@@ -234,7 +234,7 @@ func TestBackupService_Import_AllSections(t *testing.T) {
 			{MountPath: "/mnt/media", ThresholdPct: 90, TargetPct: 80},
 		},
 		NotificationChannels: []NotificationExport{
-			{Name: "Serenity Discord", Type: "discord", Enabled: true, OnCycleDigest: true, OnError: true},
+			{Name: "Serenity Discord", Type: "discord", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
@@ -569,13 +569,13 @@ func TestBackupService_Import_NotificationChannelUpsert(t *testing.T) {
 	database.Create(&db.NotificationConfig{
 		Type: "discord", Name: "Serenity Discord",
 		WebhookURL: "https://discord.com/api/webhooks/real-webhook",
-		Enabled:    true, OnCycleDigest: false, OnError: false,
+		Enabled:    true, NotificationLevel: "critical",
 	})
 
 	envelope := SettingsExportEnvelope{
 		Version: 1,
 		NotificationChannels: []NotificationExport{
-			{Name: "Serenity Discord", Type: "discord", Enabled: true, OnCycleDigest: true, OnError: true},
+			{Name: "Serenity Discord", Type: "discord", Enabled: true, NotificationLevel: "normal"},
 		},
 	}
 
@@ -600,12 +600,9 @@ func TestBackupService_Import_NotificationChannelUpsert(t *testing.T) {
 	if channels[0].WebhookURL != "https://discord.com/api/webhooks/real-webhook" {
 		t.Errorf("expected webhook URL to be preserved, got %q", channels[0].WebhookURL)
 	}
-	// Subscription flags should be updated
-	if !channels[0].OnCycleDigest {
-		t.Error("expected OnCycleDigest to be updated to true")
-	}
-	if !channels[0].OnError {
-		t.Error("expected OnError to be updated to true")
+	// NotificationLevel should be updated
+	if channels[0].NotificationLevel != "normal" {
+		t.Errorf("expected NotificationLevel to be updated to 'normal', got %q", channels[0].NotificationLevel)
 	}
 }
 

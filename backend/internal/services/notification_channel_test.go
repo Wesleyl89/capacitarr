@@ -209,23 +209,26 @@ func TestNotificationChannelService_PartialUpdate(t *testing.T) {
 	bus := newTestBus(t)
 	svc := NewNotificationChannelService(database, bus)
 
+	overrideTrue := boolPtr(true)
 	original := db.NotificationConfig{
-		Type:       "discord",
-		Name:       "Firefly Alerts",
-		WebhookURL: "https://discord.com/api/webhooks/original",
-		Enabled:    true,
-		OnError:    true,
+		Type:              "discord",
+		Name:              "Firefly Alerts",
+		WebhookURL:        "https://discord.com/api/webhooks/original",
+		Enabled:           true,
+		NotificationLevel: "normal",
+		OverrideError:     overrideTrue,
 	}
 	database.Create(&original)
 
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
 
-	// Partial update: change webhook URL and disable OnError, but leave Name empty (keep existing)
+	// Partial update: change webhook URL and clear OverrideError, but leave Name empty (keep existing)
 	result, err := svc.PartialUpdate(original.ID, db.NotificationConfig{
-		WebhookURL: "https://discord.com/api/webhooks/updated",
-		OnError:    false,
-		Enabled:    true,
+		WebhookURL:        "https://discord.com/api/webhooks/updated",
+		NotificationLevel: "normal",
+		OverrideError:     nil,
+		Enabled:           true,
 	})
 	if err != nil {
 		t.Fatalf("PartialUpdate returned error: %v", err)
@@ -243,9 +246,9 @@ func TestNotificationChannelService_PartialUpdate(t *testing.T) {
 	if result.WebhookURL != "https://discord.com/api/webhooks/updated" {
 		t.Errorf("expected updated webhook URL, got %q", result.WebhookURL)
 	}
-	// OnError should be false (explicitly set in req)
-	if result.OnError {
-		t.Error("expected OnError to be false")
+	// OverrideError should be nil (cleared in req)
+	if result.OverrideError != nil {
+		t.Error("expected OverrideError to be nil")
 	}
 
 	// Verify event
@@ -279,6 +282,34 @@ func TestNotificationChannelService_PartialUpdate_NameOverride(t *testing.T) {
 	}
 	if result.Name != "Serenity Alerts" {
 		t.Errorf("expected name 'Serenity Alerts', got %q", result.Name)
+	}
+}
+
+func TestNotificationChannelService_PartialUpdate_PreservesNotificationLevel(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewNotificationChannelService(database, bus)
+
+	original := db.NotificationConfig{
+		Type:              "discord",
+		Name:              "Firefly Alerts",
+		WebhookURL:        "https://discord.com/api/webhooks/1",
+		Enabled:           true,
+		NotificationLevel: "critical",
+	}
+	database.Create(&original)
+
+	result, err := svc.PartialUpdate(original.ID, db.NotificationConfig{
+		Name:              "Serenity Alerts",
+		WebhookURL:        "https://discord.com/api/webhooks/1",
+		Enabled:           true,
+		NotificationLevel: "critical",
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	if result.NotificationLevel != "critical" {
+		t.Errorf("expected NotificationLevel 'critical', got %q", result.NotificationLevel)
 	}
 }
 

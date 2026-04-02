@@ -438,16 +438,15 @@ export interface NotificationExport {
   type: string;
   enabled: boolean;
   appriseTags?: string;
-  onCycleDigest: boolean;
-  onDryRunDigest: boolean;
-  onError: boolean;
-  onModeChanged: boolean;
-  onServerStarted: boolean;
-  onThresholdBreach: boolean;
-  onUpdateAvailable: boolean;
-  onApprovalActivity: boolean;
-  onIntegrationStatus: boolean;
-  onSunsetActivity: boolean;
+  notificationLevel: string;
+  overrideCycleDigest?: boolean | null;
+  overrideError?: boolean | null;
+  overrideModeChanged?: boolean | null;
+  overrideServerStarted?: boolean | null;
+  overrideThresholdBreach?: boolean | null;
+  overrideUpdateAvailable?: boolean | null;
+  overrideApprovalActivity?: boolean | null;
+  overrideIntegrationStatus?: boolean | null;
 }
 
 export interface SettingsExportEnvelope {
@@ -559,16 +558,15 @@ export interface NotificationChannel {
   webhookUrl?: string;
   appriseTags?: string;
   enabled: boolean;
-  onCycleDigest: boolean;
-  onDryRunDigest: boolean;
-  onError: boolean;
-  onModeChanged: boolean;
-  onServerStarted: boolean;
-  onThresholdBreach: boolean;
-  onUpdateAvailable: boolean;
-  onApprovalActivity: boolean;
-  onIntegrationStatus: boolean;
-  onSunsetActivity: boolean;
+  notificationLevel: 'off' | 'critical' | 'important' | 'normal' | 'verbose';
+  overrideCycleDigest?: boolean | null;
+  overrideError?: boolean | null;
+  overrideModeChanged?: boolean | null;
+  overrideServerStarted?: boolean | null;
+  overrideThresholdBreach?: boolean | null;
+  overrideUpdateAvailable?: boolean | null;
+  overrideApprovalActivity?: boolean | null;
+  overrideIntegrationStatus?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }

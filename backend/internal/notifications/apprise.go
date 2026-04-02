@@ -27,31 +27,43 @@ type apprisePayload struct {
 }
 
 // SendDigest delivers a cycle digest notification to an Apprise server.
-func (s *AppriseSender) SendDigest(config SenderConfig, digest CycleDigest) error {
+// The level parameter controls which group sections are included based
+// on the channel's notification tier.
+func (s *AppriseSender) SendDigest(config SenderConfig, digest CycleDigest, level NotificationTier) error {
 	if config.WebhookURL == "" {
 		return fmt.Errorf("apprise URL is empty")
 	}
 
-	title := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
-	if digest.ExecutionMode != "" {
-		title += " • " + digest.ExecutionMode
+	groups := filterGroups(digest.Groups, level)
+	if len(groups) == 0 {
+		return nil // nothing to show at this tier
 	}
 
-	body := digestTitle(digest) + "\n\n" + digestDescription(digest)
+	title := fmt.Sprintf("⚡ Capacitarr %s", digest.Version)
 
-	// Append disk usage progress bar
-	if digest.DiskUsagePct > 0 && (digest.ExecutionMode == ModeAuto || digest.Candidates == 0) {
-		bar := ProgressBar(digest.DiskUsagePct, 20)
-		if digest.ExecutionMode == ModeAuto && digest.Candidates > 0 {
-			body += fmt.Sprintf("\n\n%s %.0f%% → %.0f%%", bar, digest.DiskUsagePct, digest.DiskTargetPct)
-		} else {
-			body += fmt.Sprintf("\n\n%s %.0f%% / %.0f%%", bar, digest.DiskUsagePct, digest.DiskThreshold)
+	body := digestTitle(digest) + "\n"
+
+	// Build per-group sections in plain text
+	for _, g := range groups {
+		body += fmt.Sprintf("\n── %s · %s ──\n", g.MountPath, g.Mode)
+		body += fmt.Sprintf("%s %s\n", groupIcon(g.Mode), groupDescription(g))
+		if g.DiskUsagePct > 0 {
+			bar := ProgressBar(g.DiskUsagePct, 20)
+			if g.Mode == ModeAuto && g.Deleted > 0 {
+				body += fmt.Sprintf("%s %.0f%% → %.0f%%\n", bar, g.DiskUsagePct, g.DiskTargetPct)
+			} else {
+				body += fmt.Sprintf("%s %.0f%% / %.0f%%\n", bar, g.DiskUsagePct, g.DiskThreshold)
+			}
 		}
 	}
 
+	// Append duration footer
+	durSec := float64(digest.DurationMs) / 1000.0
+	body += fmt.Sprintf("\n⏱️ %.1fs", durSec)
+
 	// Append version update banner
 	if digest.UpdateAvailable && digest.LatestVersion != "" {
-		body += fmt.Sprintf("\n\n📦 %s available!", digest.LatestVersion)
+		body += fmt.Sprintf(" · 📦 %s available!", digest.LatestVersion)
 	}
 
 	payload := apprisePayload{

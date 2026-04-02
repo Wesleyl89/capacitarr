@@ -29,6 +29,12 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 	}
 	currentPct := float64(group.UsedBytes) / float64(effectiveTotal) * 100
 
+	// Get or create a per-group accumulator and record disk usage info.
+	groupAcc := acc.GetOrCreate(group.ID, group.MountPath, group.Mode)
+	groupAcc.DiskUsagePct = currentPct
+	groupAcc.DiskThreshold = group.ThresholdPct
+	groupAcc.DiskTargetPct = group.TargetPct
+
 	// ── Sunset mode: special threshold handling ─────────────────────────
 	// Sunset mode uses sunsetPct (lower) as the primary trigger and thresholdPct
 	// (higher) as the escalation safety net. The mode switch determines which
@@ -99,8 +105,8 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 	// Use the extracted Evaluator for scoring + categorization
 	evaluator := engine.NewEvaluator()
 	evalResult := evaluator.Evaluate(diskItems, weights, rules, prefs.TiebreakerMethod, evalCtx)
-	acc.Evaluated += int64(evalResult.TotalCount)
-	acc.Protected += int64(len(evalResult.Protected))
+	groupAcc.Evaluated += int64(evalResult.TotalCount)
+	groupAcc.Protected += int64(len(evalResult.Protected))
 
 	slog.Debug("Evaluation summary", "component", "poller",
 		"mount", group.MountPath,
@@ -355,7 +361,7 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 					})
 				}
 
-				acc.Collections++
+				groupAcc.Collections++
 				slog.Info("Collection expanded for deletion", "component", "poller",
 					"trigger", ev.Item.Title, "collections", collectionGroupName, "memberCount", len(allMembers))
 			}
@@ -388,8 +394,8 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 					slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", pi.item.Title)
 					continue
 				}
-				acc.Candidates++
-				acc.FreedBytes += pi.item.SizeBytes
+				groupAcc.Candidates++
+				groupAcc.FreedBytes += pi.item.SizeBytes
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
 			case db.ModeApproval:
@@ -418,8 +424,8 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 				neededKeys[db.MediaKey(pi.item.Title, string(pi.item.Type))] = true
 
 				bytesFreed += pi.item.SizeBytes
-				acc.Candidates++
-				acc.FreedBytes += pi.item.SizeBytes
+				groupAcc.Candidates++
+				groupAcc.FreedBytes += pi.item.SizeBytes
 				slog.Info("Engine action taken", "component", "poller",
 					"media", pi.item.Title, "action", "queued_for_approval", "score", pi.score, "freed", pi.item.SizeBytes,
 					"collectionGroup", pi.collectionGroup)
@@ -444,8 +450,8 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 				}
 				bytesFreed += pi.item.SizeBytes
 				deletionsQueued++
-				acc.Candidates++
-				acc.FreedBytes += pi.item.SizeBytes
+				groupAcc.Candidates++
+				groupAcc.FreedBytes += pi.item.SizeBytes
 				slog.Info("Engine action taken", "component", "poller",
 					"media", pi.item.Title, "action", db.ActionDryDelete, "score", pi.score, "freed", pi.item.SizeBytes,
 					"collectionGroup", pi.collectionGroup)
@@ -481,7 +487,7 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 	}
 
 	// Diagnostic summary: log when candidates were found but all were skipped
-	if len(candidates) > 0 && deletionsQueued == 0 && acc.Candidates == 0 {
+	if len(candidates) > 0 && deletionsQueued == 0 && groupAcc.Candidates == 0 {
 		slog.Warn("All candidates were skipped — nothing queued for approval/deletion",
 			"component", "poller", "mount", group.MountPath,
 			"mode", group.Mode,
@@ -505,6 +511,10 @@ func (p *Poller) evaluateAndCleanDisk(acc *RunAccumulator, group db.DiskGroup, a
 // even when the disk is simultaneously past critical. Escalation then processes
 // items that were just queued (or already existed) from the sunset queue.
 func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, allItems []integrations.MediaItem, registry *integrations.IntegrationRegistry, _ uint, prefs db.PreferenceSet, weights map[string]int, rules []db.CustomRule, evalCtx *engine.EvaluationContext, effectiveTotal int64, currentPct float64) int {
+	// Get the per-group accumulator (already created by evaluateAndCleanDisk
+	// before dispatching to sunset mode).
+	groupAcc := acc.GetOrCreate(group.ID, group.MountPath, group.Mode)
+
 	// Validation: sunsetPct must be configured
 	if group.SunsetPct == nil {
 		slog.Warn("Sunset mode skipped — sunset threshold not configured",
@@ -546,8 +556,8 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 		// Score items
 		evaluator := engine.NewEvaluator()
 		evalResult := evaluator.Evaluate(diskItems, weights, rules, prefs.TiebreakerMethod, evalCtx)
-		acc.Evaluated += int64(evalResult.TotalCount)
-		acc.Protected += int64(len(evalResult.Protected))
+		groupAcc.Evaluated += int64(evalResult.TotalCount)
+		groupAcc.Protected += int64(len(evalResult.Protected))
 
 		// Calculate how much to sunset (based on currentPct → targetPct range)
 		targetBytesToFree := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
@@ -603,7 +613,8 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 					slog.Info("Sunset items queued", "component", "poller",
 						"mount", group.MountPath, "count", created,
 						"deletionDate", deletionDate.Format("2006-01-02"))
-					acc.Candidates += int64(created)
+					groupAcc.Candidates += int64(created)
+					groupAcc.SunsetQueued += created
 				}
 			}
 		}
@@ -628,7 +639,7 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 			slog.Error("Sunset escalation failed", "component", "poller",
 				"mount", group.MountPath, "error", err)
 		}
-		acc.FreedBytes += freed
+		groupAcc.FreedBytes += freed
 	}
 
 	return 0 // Sunset mode doesn't queue immediate deletions

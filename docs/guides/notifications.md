@@ -2,38 +2,91 @@
 
 Capacitarr provides real-time notifications through Discord webhooks and Apprise (supporting 80+ notification services). Notifications keep you informed about engine activity, disk usage alerts, and system events without needing to check the dashboard. System events are also recorded in the **Activity Log** on the dashboard for at-a-glance visibility.
 
+## Notification Levels
+
+Each notification channel has a **notification level** that controls how much information it receives. Levels are cumulative — higher levels include everything from lower levels plus additional events.
+
+| Level | Value | What it includes |
+|-------|-------|------------------|
+| **Off** | 0 | Nothing — channel is silenced |
+| **Critical** | 1 | Errors, threshold breaches, and integration failures |
+| **Important** | 2 | Critical events + mode changes and approval activity |
+| **Normal** | 3 | Important events + cycle digests, update notices, and server started *(default)* |
+| **Verbose** | 4 | Everything — adds dry-run digests and integration recovery |
+
+### Event Tier Mapping
+
+Every notification event has a fixed tier. A channel receives an event if its level is **≥** the event's tier.
+
+| Event | Tier | Description |
+|-------|------|-------------|
+| Engine Error | Critical | The evaluation engine encountered an error during a run |
+| Threshold Breached | Critical | Disk usage exceeded the configured threshold for a disk group |
+| Integration Down | Critical | An integration has failed its connection test |
+| Mode Changed | Important | The execution mode was switched (e.g., dry-run → auto) |
+| Approval Activity | Important | An item was approved or rejected in the approval queue |
+| Cycle Digest | Normal | Summary of each engine run with stats and disk usage |
+| Update Available | Normal | A newer Capacitarr release was detected on GitHub |
+| Server Started | Normal | Capacitarr has started and is ready to accept requests |
+| Dry-Run Digest | Verbose | Cycle digest for dry-run mode engine runs |
+| Integration Recovery | Verbose | An integration has recovered from a previous failure |
+
+### Modes and Notification Routing
+
+Execution modes (auto, approval, sunset, dry-run) are **not** separate notification categories. The mode determines the **content** of a digest (title, description, stats) but not whether it gets sent. Routing is determined solely by the channel's notification level and the event's tier:
+
+- **Auto**, **approval**, and **sunset** cycle digests all map to the `cycle_digest` event (tier: Normal)
+- **Dry-run** cycle digests map to the `dry_run_digest` event (tier: Verbose)
+- **Sunset escalation** fires as a `threshold_breached` alert (tier: Critical) — not a separate sunset event
+- **Sunset misconfigured** fires as an `error` alert (tier: Critical) — not a separate sunset event
+
+### Advanced Overrides
+
+For power users, each event type has a per-channel **override** that takes precedence over the tier-based routing. Overrides use a tri-state:
+
+| Override Value | Behavior |
+|----------------|----------|
+| **Auto** (default) | The notification level determines delivery — no override |
+| **On** | Always deliver this event to this channel, regardless of level |
+| **Off** | Never deliver this event to this channel, regardless of level |
+
+Overrides are useful when you want a channel at a lower level (e.g., Critical) to still receive a specific Normal-tier event like cycle digests, or when you want to suppress a specific event on a Verbose channel without lowering its level.
+
 ## Notification Types
 
 ### Cycle Digests
 
-A cycle digest is a single summary notification sent after each engine run completes. It includes the full picture of what happened during the cycle — how many items were evaluated, how many were flagged, what was deleted, and how much space was freed.
+A cycle digest is a single summary notification sent after each engine run completes. Each configured disk group gets its own section in the digest, showing group-specific metrics (items evaluated, candidates, freed space, disk usage). The mode of each disk group determines the content template for its section.
 
-Digest content varies by execution mode:
+Digest titles vary by execution mode:
 
 | Mode | Title | Summary |
 |------|-------|---------|
 | **Auto** | 🧹 Cleanup Complete | `Deleted X of Y evaluated items in Z.Zs, freeing N.N GB` |
-| **Dry-run** | 🔍 Dry-Run Complete | `Flagged X of Y items in Z.Zs — Would free N.N GB` |
+| **Dry-run** | 🔍 Dry-Run Complete | `Candidates X of Y items in Z.Zs — Would free N.N GB` |
 | **Approval** | 📋 Items Queued for Approval | `Queued X of Y items in Z.Zs — Potential N.N GB` |
 | *(no action needed)* | ✅ All Clear | `Evaluated X items — no action needed` |
 
 Auto-mode digests also include a disk usage progress bar showing the before/after usage percentage and target. If a newer Capacitarr version is available, a version banner is appended to the digest.
 
-Digests use a **two-gate flush** internally — the notification waits until both the evaluation phase and the deletion phase of the engine run are complete before sending. This ensures deletion results (freed bytes, failure count) are included in the summary.
+The notification tier determines which channels receive the digest: auto/approval/sunset digests are sent to channels at **Normal** or higher, while dry-run digests are only sent to channels at the **Verbose** level.
 
 ### Instant Alerts
 
 Instant alerts fire immediately when their trigger event occurs — they are not batched or delayed. Each alert type covers a specific operational event:
 
-| Alert Type | Description |
-|------------|-------------|
-| **Engine Error** | The evaluation engine encountered an error during a run |
-| **Mode Changed** | The execution mode was switched (e.g., dry-run → auto) |
-| **Server Started** | Capacitarr has started and is ready to accept requests |
-| **Threshold Breached** | Disk usage has exceeded the configured threshold for a disk group |
-| **Update Available** | A newer Capacitarr release was detected on GitHub |
-| **Approval Activity** | An item was approved or rejected in the approval queue |
-| **Integration Status** | An integration has failed its connection test or recovered from a previous failure |
+| Alert Type | Tier | Description |
+|------------|------|-------------|
+| **Engine Error** | Critical | The evaluation engine encountered an error during a run |
+| **Mode Changed** | Important | The execution mode was switched (e.g., dry-run → auto) |
+| **Server Started** | Normal | Capacitarr has started and is ready to accept requests |
+| **Threshold Breached** | Critical | Disk usage has exceeded the configured threshold for a disk group |
+| **Update Available** | Normal | A newer Capacitarr release was detected on GitHub |
+| **Approval Activity** | Important | An item was approved or rejected in the approval queue |
+| **Integration Down** | Critical | An integration has failed its connection test |
+| **Integration Recovery** | Verbose | An integration has recovered from a previous failure |
+
+Sunset escalation fires as a **Threshold Breached** alert (when sunset force-expires items to free space). Sunset misconfigured fires as an **Engine Error** alert (when sunset mode is active but no sunset threshold is configured). There is no separate "sunset activity" notification type for routing purposes.
 
 ## Discord Setup
 
@@ -56,9 +109,11 @@ Instant alerts fire immediately when their trigger event occurs — they are not
 5. Give the channel a descriptive name (e.g., "Media Alerts")
 6. Click **Save**
 
-### Step 3: Configure Subscriptions
+### Step 3: Configure Notification Level
 
-After saving the channel, configure which notifications it receives using the subscription toggles. Each toggle controls a specific category of events — see the [Subscription Toggles](#subscription-toggles) section below.
+After saving the channel, set its **notification level** to control which events it receives — see the [Notification Levels](#notification-levels) section above. The default level is **Normal**, which covers cycle digests, update notices, and all critical/important events.
+
+For fine-grained control, expand the **Advanced Overrides** section to force individual event types on or off regardless of the channel's level.
 
 Use the **Test** button to verify the webhook is working. A test notification will appear in your Discord channel.
 
@@ -97,9 +152,11 @@ Once running, configure your notification URLs in the Apprise server. Refer to t
 6. Give the channel a descriptive name (e.g., "Telegram via Apprise")
 7. Click **Save**
 
-### Step 3: Configure Subscriptions
+### Step 3: Configure Notification Level
 
-After saving the channel, configure which notifications it receives using the subscription toggles. Each toggle controls a specific category of events — see the [Subscription Toggles](#subscription-toggles) section below.
+After saving the channel, set its **notification level** to control which events it receives — see the [Notification Levels](#notification-levels) section above. The default level is **Normal**.
+
+For fine-grained control, expand the **Advanced Overrides** section to force individual event types on or off regardless of the channel's level.
 
 Use the **Test** button to verify the Apprise connection is working.
 
@@ -121,24 +178,9 @@ Tags let you route notifications to specific destinations configured on your App
 
 If no tags are specified, the notification is sent to **all** notification URLs configured on the Apprise server.
 
-## Subscription Toggles
-
-Each external notification channel (Discord or Apprise) has independent subscription toggles. You can enable or disable each event category per channel, allowing you to route different notification types to different channels.
-
-| Toggle | Events | Description |
-|--------|--------|-------------|
-| **Cycle Digest** | Engine complete + deletion batch | Summary of each engine run with stats and disk usage |
-| **Error** | Engine errors | Fires when the evaluation engine fails during a run |
-| **Mode Changed** | Execution mode switch | Fires when switching between dry-run, approval, and auto |
-| **Server Started** | Application startup | Confirms Capacitarr is online after a restart |
-| **Threshold Breach** | Disk usage exceeds threshold | Immediate alert when a disk group exceeds its threshold |
-| **Update Available** | New version detected | Fires when a newer Capacitarr release exists on GitHub |
-| **Approval Activity** | Items approved or rejected | Fires when approval queue items are approved or rejected |
-| **Integration Status** | Integration failure or recovery | Fires when an integration fails its connection test or recovers |
-
 ## Digest Format
 
-Cycle digest notifications are rendered as rich embeds in Discord and as Markdown messages for Apprise. Here's what a typical auto-mode digest looks like:
+Cycle digest notifications are rendered as rich embeds in Discord and as Markdown messages for Apprise. Each disk group gets its own section in the digest, showing group-specific metrics. Here's what a multi-group auto-mode digest looks like:
 
 ```
 ⚡ Capacitarr v2.0.0 • auto
@@ -147,6 +189,7 @@ Cycle digest notifications are rendered as rich embeds in Discord and as Markdow
 
 Deleted 12 of 97 evaluated items
 in 3.2s, freeing 48.3 GB
+📦 Included 2 collection group deletion(s)
 
 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 72% → 65%
 
@@ -157,8 +200,10 @@ Digest components:
 
 - **Author line:** Shows the Capacitarr version and current execution mode
 - **Title:** Mode-specific title (🧹 Cleanup Complete, 🔍 Dry-Run Complete, 📋 Items Queued, or ✅ All Clear)
-- **Description:** Item counts, duration, and freed/potential space
+- **Per-group sections:** Each disk group contributes its evaluated items, candidates, deletions, and freed space to the totals
 - **Progress bar:** Visual disk usage indicator (auto mode and all-clear only) showing current percentage and target
 - **Version banner:** Appears when a newer release is available (optional)
+
+The mode of each disk group determines the content template for its section. For example, a group in auto mode shows deletion counts and freed space, while a group in approval mode shows queued items and potential savings. The notification tier determines **which channels** receive the digest — not which groups appear in it.
 
 Alert notifications use a similar format with a title, message, and color-coded severity (green for success, blue for info, amber for attention, red for errors).
