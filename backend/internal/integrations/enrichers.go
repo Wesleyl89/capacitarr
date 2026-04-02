@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 // logEnrichmentResult logs enrichment match statistics at Info level with match
@@ -123,8 +124,12 @@ func (e *TautulliEnricher) Priority() int { return 10 }
 // EnrichmentCapability implements EnrichmentCapabilityProvider.
 func (e *TautulliEnricher) EnrichmentCapability() string { return EnrichCapWatchData }
 
-// Enrich implements Enricher by querying Tautulli per item.
-// Uses the TMDb→RatingKey map to translate *arr TMDb IDs into Plex rating keys.
+// Enrich implements Enricher by fetching all Tautulli history in bulk and
+// aggregating by rating key. This replaces the previous per-item query pattern
+// (N HTTP calls) with a single paginated bulk fetch (1-20 HTTP calls).
+//
+// Uses the TMDb→RatingKey map to translate *arr TMDb IDs into Plex rating keys,
+// and a reverse map (ratingKey→TMDb ID) to match aggregated history back to items.
 func (e *TautulliEnricher) Enrich(items []MediaItem) error {
 	if len(e.tmdbToRatingKey) == 0 {
 		slog.Debug("Tautulli enricher skipped — no TMDb→RatingKey mappings available",
@@ -132,6 +137,56 @@ func (e *TautulliEnricher) Enrich(items []MediaItem) error {
 		return nil
 	}
 
+	// Fetch all history in bulk (paginated at 1000 entries per call)
+	allHistory, err := e.client.getAllHistory()
+	if err != nil {
+		return fmt.Errorf("tautulli bulk history: %w", err)
+	}
+
+	// Build reverse map: ratingKey → TMDb ID for matching
+	ratingKeyToTMDb := make(map[string]int, len(e.tmdbToRatingKey))
+	for tmdbID, rk := range e.tmdbToRatingKey {
+		ratingKeyToTMDb[rk] = tmdbID
+	}
+
+	// Aggregate history entries by effective rating key.
+	// Movies: use rating_key directly.
+	// Episodes: use grandparent_rating_key (the show's key) to aggregate
+	//           all episode watches under the parent show.
+	type historyAgg struct {
+		playCount  int
+		lastPlayed int64 // Unix epoch of most recent play
+		users      map[string]bool
+	}
+	aggByKey := make(map[string]*historyAgg)
+
+	for _, entry := range allHistory {
+		var key string
+		switch entry.MediaType {
+		case string(MediaTypeEpisode):
+			key = string(entry.GrandparentRatingKey)
+		default:
+			key = string(entry.RatingKey)
+		}
+		if key == "" {
+			continue
+		}
+
+		agg, ok := aggByKey[key]
+		if !ok {
+			agg = &historyAgg{users: make(map[string]bool)}
+			aggByKey[key] = agg
+		}
+		agg.playCount++
+		if entry.User != "" {
+			agg.users[entry.User] = true
+		}
+		if int64(entry.Date) > agg.lastPlayed {
+			agg.lastPlayed = int64(entry.Date)
+		}
+	}
+
+	// Match aggregated history to items via TMDb ID
 	matched := 0
 	for i := range items {
 		item := &items[i]
@@ -140,32 +195,29 @@ func (e *TautulliEnricher) Enrich(items []MediaItem) error {
 		}
 		ratingKey, ok := e.tmdbToRatingKey[item.TMDbID]
 		if !ok {
-			continue // No Plex ratingKey for this TMDb ID
-		}
-
-		var watchData *TautulliWatchData
-		var err error
-		if item.Type == MediaTypeShow {
-			watchData, err = e.client.GetShowWatchHistory(ratingKey)
-		} else {
-			watchData, err = e.client.GetWatchHistory(ratingKey)
-		}
-		if err != nil {
-			slog.Error("Tautulli enrichment failed", "component", "enrichment",
-				"title", item.Title, "tmdbID", item.TMDbID, "ratingKey", ratingKey, "error", err)
 			continue
 		}
-		if watchData != nil {
-			item.PlayCount = watchData.PlayCount
-			item.LastPlayed = watchData.LastPlayed
-			if len(watchData.Users) > 0 {
-				item.WatchedByUsers = watchData.Users
-			}
-			matched++
+		agg, ok := aggByKey[ratingKey]
+		if !ok || agg.playCount == 0 {
+			continue
 		}
+
+		item.PlayCount = agg.playCount
+		if agg.lastPlayed > 0 {
+			t := time.Unix(agg.lastPlayed, 0)
+			item.LastPlayed = &t
+		}
+		users := make([]string, 0, len(agg.users))
+		for u := range agg.users {
+			users = append(users, u)
+		}
+		if len(users) > 0 {
+			item.WatchedByUsers = users
+		}
+		matched++
 	}
-	logEnrichmentResult("Tautulli Watch History", len(items), len(e.tmdbToRatingKey), matched,
-		"ratingKeyMappings", len(e.tmdbToRatingKey))
+	logEnrichmentResult("Tautulli Watch History", len(items), len(aggByKey), matched,
+		"ratingKeyMappings", len(e.tmdbToRatingKey), "historyEntries", len(allHistory))
 	return nil
 }
 

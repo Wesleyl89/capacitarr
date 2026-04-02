@@ -8,15 +8,32 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 // EmbyClient provides access to the Emby API for watch history data.
 // Emby's API is structurally similar to Jellyfin (Jellyfin forked from Emby),
 // using the same X-Emby-Token auth header and similar endpoint patterns.
+//
+// Per-cycle caching: getAllUsers() and GetAdminUserID() cache their results
+// for the lifetime of this client instance (one poll cycle). Since
+// BuildIntegrationRegistry() creates new client instances each cycle, caches
+// are naturally cycle-scoped. This eliminates ~5 redundant /Users API calls
+// per cycle where multiple methods independently fetched the same user list.
 type EmbyClient struct {
 	URL    string
 	APIKey string `json:"-"`
+
+	// Per-cycle user list cache. Populated on first call to getAllUsers().
+	cachedUsers    []embyUser
+	cachedUsersErr error
+	usersOnce      sync.Once
+
+	// Per-cycle admin user ID cache. Populated on first call to GetAdminUserID().
+	cachedAdminID    string
+	cachedAdminIDErr error
+	adminOnce        sync.Once
 }
 
 // NewEmbyClient creates a new Emby media server API client.
@@ -75,8 +92,19 @@ type embyUser struct {
 	} `json:"Policy"`
 }
 
-// getAllUsers fetches all users from Emby.
+// getAllUsers returns all Emby users, caching the result for the lifetime
+// of this client instance (one poll cycle). The /Users endpoint is hit by
+// GetBulkWatchData, GetWatchlistItems, GetCollectionMemberships, and
+// GetAdminUserID — caching avoids ~5 redundant API calls per cycle.
 func (e *EmbyClient) getAllUsers() ([]embyUser, error) {
+	e.usersOnce.Do(func() {
+		e.cachedUsers, e.cachedUsersErr = e.fetchAllUsers()
+	})
+	return e.cachedUsers, e.cachedUsersErr
+}
+
+// fetchAllUsers performs the actual HTTP call to fetch all Emby users.
+func (e *EmbyClient) fetchAllUsers() ([]embyUser, error) {
 	body, err := e.doRequest("/Users")
 	if err != nil {
 		return nil, err
@@ -284,7 +312,16 @@ func (e *EmbyClient) GetFavoritedItems(userID string) (map[int]bool, error) {
 }
 
 // GetAdminUserID returns the first admin user's ID for making user-specific queries.
+// Result is cached for the lifetime of this client instance (one poll cycle).
 func (e *EmbyClient) GetAdminUserID() (string, error) {
+	e.adminOnce.Do(func() {
+		e.cachedAdminID, e.cachedAdminIDErr = e.resolveAdminUserID()
+	})
+	return e.cachedAdminID, e.cachedAdminIDErr
+}
+
+// resolveAdminUserID performs the actual admin user lookup from the cached user list.
+func (e *EmbyClient) resolveAdminUserID() (string, error) {
 	users, err := e.getAllUsers()
 	if err != nil {
 		return "", err

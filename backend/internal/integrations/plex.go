@@ -8,15 +8,29 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // PlexClient implements Connectable, WatchDataProvider, and WatchlistProvider for Plex Media Server.
 // PlexClient intentionally does NOT implement MediaSource — only *arr integrations (which also
 // implement MediaDeleter and DiskReporter) should provide media items to the evaluation pool.
+//
+// Per-cycle caching: getMediaItems() fetches the full Plex library once per client
+// instance and caches the result. Since BuildIntegrationRegistry() creates new client
+// instances each poll cycle, the cache is naturally cycle-scoped and requires no
+// explicit reset. This eliminates ~16 redundant Plex API calls per cycle where
+// multiple enrichers (watch data, collections, labels, TMDb mapping) each independently
+// fetched the same library data.
 type PlexClient struct {
 	URL   string
 	Token string `json:"-"` // X-Plex-Token
+
+	// Per-cycle library cache. Populated on first call to getMediaItems(),
+	// reused by all subsequent callers within the same poll cycle.
+	cachedItems    []MediaItem
+	cachedItemsErr error
+	cacheOnce      sync.Once
 }
 
 // NewPlexClient creates a new Plex media server API client.
@@ -118,11 +132,22 @@ func plexExtractTMDbID(guids []plexGUID) int {
 	return 0
 }
 
-// getMediaItems fetches all movies, shows, and seasons from all Plex libraries.
+// getMediaItems returns all movies, shows, and seasons from all Plex libraries.
+// Results are cached for the lifetime of this PlexClient instance (one poll cycle).
 // This method is unexported to prevent PlexClient from satisfying the MediaSource interface.
 // Only *arr integrations should implement MediaSource. Internal callers (GetBulkWatchData,
-// GetCollectionNames) use this method for enrichment data extraction.
+// GetCollectionMemberships, GetLabelMemberships, GetTMDbToRatingKeyMap, GetCollectionNames,
+// GetLabelNames) all share the same cached result.
 func (p *PlexClient) getMediaItems() ([]MediaItem, error) {
+	p.cacheOnce.Do(func() {
+		p.cachedItems, p.cachedItemsErr = p.fetchMediaItems()
+	})
+	return p.cachedItems, p.cachedItemsErr
+}
+
+// fetchMediaItems performs the actual HTTP calls to fetch all movies, shows, and
+// seasons from all Plex libraries. Called once per cycle via getMediaItems().
+func (p *PlexClient) fetchMediaItems() ([]MediaItem, error) {
 	// 1. Get all library sections
 	body, err := p.doRequest("/library/sections")
 	if err != nil {
@@ -285,60 +310,33 @@ type PlexLibrarySection struct {
 	Type  string `json:"type"`
 }
 
-// GetBulkWatchData fetches all movies and shows from Plex libraries and returns
-// a map keyed by TMDb ID to watch data. TMDb IDs are extracted from Plex GUIDs.
-// Items without a parseable TMDb GUID are skipped.
+// GetBulkWatchData returns a map of TMDb ID to watch data from the cached Plex
+// library. Uses getMediaItems() to avoid redundant library fetches — the same
+// cached data is shared with GetCollectionMemberships, GetLabelMemberships,
+// GetTMDbToRatingKeyMap, etc.
 func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
-	body, err := p.doRequest("/library/sections")
+	items, err := p.getMediaItems()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch Plex library sections: %w", err)
-	}
-
-	var libs plexLibraryResponse
-	if err := json.Unmarshal(body, &libs); err != nil {
-		return nil, fmt.Errorf("failed to parse library sections: %w", err)
+		return nil, fmt.Errorf("failed to fetch Plex items for watch data: %w", err)
 	}
 
 	result := make(map[int]*WatchData)
-	for _, lib := range libs.MediaContainer.Directory {
-		if lib.Type != string(MediaTypeMovie) && lib.Type != string(MediaTypeShow) {
+	for _, item := range items {
+		if item.TMDbID == 0 {
 			continue
 		}
 
-		itemBody, err := p.doRequest(fmt.Sprintf("/library/sections/%s/all", lib.Key))
-		if err != nil {
-			continue
+		data := &WatchData{
+			PlayCount:  item.PlayCount,
+			LastPlayed: item.LastPlayed,
 		}
-
-		var media plexMediaResponse
-		if err := json.Unmarshal(itemBody, &media); err != nil {
-			continue
-		}
-
-		for _, m := range media.MediaContainer.Metadata {
-			tmdbID := plexExtractTMDbID(m.GUIDs)
-			if tmdbID == 0 {
-				continue
+		// Keep the entry with the highest play count if duplicates
+		if existing, ok := result[item.TMDbID]; ok {
+			if data.PlayCount > existing.PlayCount {
+				result[item.TMDbID] = data
 			}
-
-			var lastPlayed *time.Time
-			if m.LastViewedAt > 0 {
-				t := time.Unix(m.LastViewedAt, 0)
-				lastPlayed = &t
-			}
-
-			data := &WatchData{
-				PlayCount:  m.ViewCount,
-				LastPlayed: lastPlayed,
-			}
-			// Keep the entry with the highest play count if duplicates
-			if existing, ok := result[tmdbID]; ok {
-				if data.PlayCount > existing.PlayCount {
-					result[tmdbID] = data
-				}
-			} else {
-				result[tmdbID] = data
-			}
+		} else {
+			result[item.TMDbID] = data
 		}
 	}
 	return result, nil

@@ -5,13 +5,25 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // RadarrClient implements Connectable, MediaSource, DiskReporter, MediaDeleter, and RuleValueFetcher for Radarr v3 API.
 // Shared *arr methods are provided by the embedded arrBaseClient.
+//
+// Per-cycle caching: The raw movie list from /api/v3/movie is cached on first
+// fetch and reused by ResolveCollectionMembers(). Since BuildIntegrationRegistry()
+// creates new client instances each cycle, the cache is naturally cycle-scoped.
+// This eliminates 3 redundant API calls per collection resolution (movie list +
+// quality profiles + tags).
 type RadarrClient struct {
 	arrBaseClient
+
+	// Per-cycle movie list cache. Populated on first call to getCachedMovies().
+	cachedMovies    []radarrMovie
+	cachedMoviesErr error
+	moviesOnce      sync.Once
 }
 
 // NewRadarrClient creates a new Radarr movie management API client.
@@ -54,6 +66,29 @@ type radarrCollection struct {
 	TmdbID int    `json:"tmdbId"`
 }
 
+// getCachedMovies returns the raw Radarr movie list, caching it for the lifetime
+// of this client instance (one poll cycle). Used by both GetMediaItems() and
+// ResolveCollectionMembers() to avoid redundant /api/v3/movie fetches.
+func (r *RadarrClient) getCachedMovies() ([]radarrMovie, error) {
+	r.moviesOnce.Do(func() {
+		r.cachedMovies, r.cachedMoviesErr = r.fetchMovies()
+	})
+	return r.cachedMovies, r.cachedMoviesErr
+}
+
+// fetchMovies performs the actual HTTP call to fetch all movies from Radarr.
+func (r *RadarrClient) fetchMovies() ([]radarrMovie, error) {
+	body, err := r.doRequest("/api/v3/movie")
+	if err != nil {
+		return nil, err
+	}
+	var movies []radarrMovie
+	if err := json.Unmarshal(body, &movies); err != nil {
+		return nil, fmt.Errorf("failed to parse movies: %w", err)
+	}
+	return movies, nil
+}
+
 // GetMediaItems fetches all movies from Radarr with quality and tag metadata.
 func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 	// Fetch quality profiles for name lookup
@@ -68,15 +103,10 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 		return nil, err
 	}
 
-	// Fetch all movies
-	body, err := r.doRequest("/api/v3/movie")
+	// Fetch all movies (cached for reuse by ResolveCollectionMembers)
+	movies, err := r.getCachedMovies()
 	if err != nil {
 		return nil, err
-	}
-
-	var movies []radarrMovie
-	if err := json.Unmarshal(body, &movies); err != nil {
-		return nil, fmt.Errorf("failed to parse movies: %w", err)
 	}
 
 	items := make([]MediaItem, 0, len(movies))
@@ -140,22 +170,17 @@ func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {
 // --- CollectionResolver implementation ---
 
 // ResolveCollectionMembers returns all movies in the same TMDb collection as the
-// given item. Fetches the full movie list from Radarr and groups by collection
-// TMDb ID. Returns nil if the item has no collection membership.
+// given item. Uses the cached movie list from GetMediaItems() to avoid redundant
+// API calls. Returns nil if the item has no collection membership.
 func (r *RadarrClient) ResolveCollectionMembers(item MediaItem) ([]MediaItem, error) {
 	if len(item.Collections) == 0 {
 		return nil, nil
 	}
 
-	// Fetch all movies to find collection siblings
-	body, err := r.doRequest("/api/v3/movie")
+	// Use cached movie list (shared with GetMediaItems)
+	movies, err := r.getCachedMovies()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch movies for collection resolution: %w", err)
-	}
-
-	var movies []radarrMovie
-	if err := json.Unmarshal(body, &movies); err != nil {
-		return nil, fmt.Errorf("failed to parse movies for collection resolution: %w", err)
+		return nil, fmt.Errorf("failed to get movies for collection resolution: %w", err)
 	}
 
 	// Find the target collection TMDb ID by matching the item's collection name

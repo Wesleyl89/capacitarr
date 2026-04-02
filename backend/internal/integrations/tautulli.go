@@ -266,8 +266,55 @@ func (t *TautulliClient) GetShowWatchHistory(ratingKey string) (*TautulliWatchDa
 	return data, nil
 }
 
+// tautulliHistoryPageSize is the number of history entries fetched per API call
+// in GetAllHistory(). 1000 is a good balance — small enough to keep individual
+// response sizes manageable (~500KB), large enough to minimize round trips
+// (a typical server has 1,000–20,000 total history entries = 1–20 API calls).
+const tautulliHistoryPageSize = 1000
+
+// getAllHistory fetches the complete watch history from Tautulli in paginated
+// chunks. This replaces the previous per-item GetWatchHistory() pattern which
+// made N individual API calls (one per media item with a TMDb→RatingKey mapping).
+// With 500+ items that was 500+ sequential HTTP requests; this bulk approach
+// reduces it to ceil(totalRecords / 1000) calls — typically 1–20.
+//
+// Returns all history entries for in-memory aggregation by the TautulliEnricher.
+func (t *TautulliClient) getAllHistory() ([]tautulliHistoryEntry, error) {
+	var allEntries []tautulliHistoryEntry
+	start := 0
+
+	for {
+		params := fmt.Sprintf("length=%d&start=%d", tautulliHistoryPageSize, start)
+		body, err := t.doRequest("get_history", params)
+		if err != nil {
+			return allEntries, fmt.Errorf("tautulli bulk history page %d: %w", start, err)
+		}
+
+		var resp tautulliResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return allEntries, fmt.Errorf("tautulli bulk history parse: %w", err)
+		}
+
+		if resp.Response.Result != "success" {
+			return allEntries, fmt.Errorf("tautulli error: %s", resp.Response.Message)
+		}
+
+		var history tautulliHistoryData
+		if err := json.Unmarshal(resp.Response.Data, &history); err != nil {
+			return allEntries, fmt.Errorf("tautulli bulk history data: %w", err)
+		}
+
+		allEntries = append(allEntries, history.Data...)
+
+		// Check if we've fetched all records
+		if len(allEntries) >= history.RecordsFiltered || len(history.Data) == 0 {
+			break
+		}
+		start += len(history.Data)
+	}
+
+	return allEntries, nil
+}
+
 // Verify TautulliClient satisfies capability interfaces at compile time.
-// Note: Tautulli uses per-item watch history queries rather than a bulk fetch,
-// so it does not implement WatchDataProvider. The TautulliEnricher handles
-// the per-item enrichment pattern directly.
 var _ Connectable = (*TautulliClient)(nil)

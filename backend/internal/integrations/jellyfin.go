@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,9 +16,25 @@ import (
 // Jellyfin is a free, open-source media server (Plex alternative).
 // Its API is used to enrich media items with last-played and play-count
 // data for scoring — recently watched content should be protected.
+//
+// Per-cycle caching: getAllUsers() and GetAdminUserID() cache their results
+// for the lifetime of this client instance (one poll cycle). Since
+// BuildIntegrationRegistry() creates new client instances each cycle, caches
+// are naturally cycle-scoped. This eliminates ~5 redundant /Users API calls
+// per cycle where multiple methods independently fetched the same user list.
 type JellyfinClient struct {
 	URL    string
 	APIKey string `json:"-"`
+
+	// Per-cycle user list cache. Populated on first call to getAllUsers().
+	cachedUsers    []jellyfinUser
+	cachedUsersErr error
+	usersOnce      sync.Once
+
+	// Per-cycle admin user ID cache. Populated on first call to GetAdminUserID().
+	cachedAdminID    string
+	cachedAdminIDErr error
+	adminOnce        sync.Once
 }
 
 // NewJellyfinClient creates a new Jellyfin media server API client.
@@ -78,8 +95,19 @@ type jellyfinUser struct {
 	} `json:"Policy"`
 }
 
-// getAllUsers fetches all users from Jellyfin.
+// getAllUsers returns all Jellyfin users, caching the result for the lifetime
+// of this client instance (one poll cycle). The /Users endpoint is hit by
+// GetBulkWatchData, GetWatchlistItems, GetCollectionMemberships, and
+// GetAdminUserID — caching avoids ~5 redundant API calls per cycle.
 func (j *JellyfinClient) getAllUsers() ([]jellyfinUser, error) {
+	j.usersOnce.Do(func() {
+		j.cachedUsers, j.cachedUsersErr = j.fetchAllUsers()
+	})
+	return j.cachedUsers, j.cachedUsersErr
+}
+
+// fetchAllUsers performs the actual HTTP call to fetch all Jellyfin users.
+func (j *JellyfinClient) fetchAllUsers() ([]jellyfinUser, error) {
 	body, err := j.doRequest("/Users")
 	if err != nil {
 		return nil, err
@@ -301,7 +329,16 @@ func (j *JellyfinClient) GetFavoritedItems(userID string) (map[int]bool, error) 
 }
 
 // GetAdminUserID returns the first admin user's ID for making user-specific queries.
+// Result is cached for the lifetime of this client instance (one poll cycle).
 func (j *JellyfinClient) GetAdminUserID() (string, error) {
+	j.adminOnce.Do(func() {
+		j.cachedAdminID, j.cachedAdminIDErr = j.resolveAdminUserID()
+	})
+	return j.cachedAdminID, j.cachedAdminIDErr
+}
+
+// resolveAdminUserID performs the actual admin user lookup from the cached user list.
+func (j *JellyfinClient) resolveAdminUserID() (string, error) {
 	users, err := j.getAllUsers()
 	if err != nil {
 		return "", err
