@@ -1,4 +1,14 @@
-## [3.0.1-beta] - 2026-03-31
+## [3.0.3-beta] - 2026-04-02
+
+### 🚀 Features
+
+- *(integrations)* Add automatic recovery with exponential backoff probing ([7c8e31f](https://github.com/Ghent/capacitarr/commit/7c8e31ff7dc06e8cf00e16c111136fd387684035))
+- *(notifications)* Replace boolean toggles with tier-based notification levels ([217a05c](https://github.com/Ghent/capacitarr/commit/217a05cec34985b42f8a9289c62a2390d3a1a05e))
+
+### 🐛 Bug Fixes
+
+- Comprehensive audit remediation and codebase cleanup ([d422322](https://github.com/Ghent/capacitarr/commit/d422322e1842d447920b329f2dce2e17b1a7c49f))
+## [3.0.2-beta] - 2026-03-31
 
 ### 🚀 Features
 
