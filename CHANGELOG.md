@@ -1,3 +1,8 @@
+## [3.0.4-beta] - 2026-04-03
+
+### 🚀 Features
+
+- *(sunset)* Add display style preference for overlay text ([69b51f8](https://github.com/Ghent/capacitarr/commit/69b51f8cec7ed7ebdb1e6abf9fbece7934f3828e))
 ## [3.0.3-beta] - 2026-04-02
 
 ### 🚀 Features
