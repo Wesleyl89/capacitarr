@@ -1,11 +1,13 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"capacitarr/internal/db"
+	"capacitarr/internal/engine"
 	"capacitarr/internal/events"
 	"capacitarr/internal/integrations"
 
@@ -742,6 +744,16 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 		return false
 	}
 
+	// Parse stored score details back into factors so the audit log entry
+	// records the full score breakdown, not just the numeric score.
+	var factors []engine.ScoreFactor
+	if item.ScoreDetails != "" {
+		if jsonErr := json.Unmarshal([]byte(item.ScoreDetails), &factors); jsonErr != nil {
+			slog.Error("Failed to parse score details for sunset expiry",
+				"component", "services", "mediaName", item.MediaName, "error", jsonErr)
+		}
+	}
+
 	_ = deps.Deletion.QueueDeletion(DeleteJob{
 		Client: deleter,
 		Item: integrations.MediaItem{
@@ -752,6 +764,7 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 		},
 		DiskGroupID:       &item.DiskGroupID,
 		Trigger:           db.TriggerEngine,
+		Factors:           factors,
 		CollectionGroup:   item.CollectionGroup,
 		EnqueuedMode:      db.ModeSunset,
 		SunsetQueueItemID: item.ID,

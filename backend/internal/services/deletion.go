@@ -531,6 +531,20 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	defer s.currentlyDeleting.Store("")
 	defer s.checkBatchComplete()
 
+	// Marshal score factors early so all code paths (including cancellation)
+	// can include the score breakdown in the audit log entry. The DeleteJob
+	// carries Score and Factors from the engine evaluation; preserving them
+	// in the audit trail lets the history log show what score an item had
+	// even when the deletion was cancelled or mode-changed.
+	if job.Factors == nil {
+		job.Factors = []engine.ScoreFactor{}
+	}
+	factorsJSON, marshalErr := json.Marshal(job.Factors)
+	if marshalErr != nil {
+		slog.Error("Failed to marshal score factors", "component", "services", "error", marshalErr)
+		factorsJSON = []byte("[]")
+	}
+
 	// Check cancellation skip-list before doing any work.
 	if s.IsCancelled(job.Item.Title, string(job.Item.Type)) {
 		s.cancelled.Delete(cancelKey(job.Item.Title, string(job.Item.Type)))
@@ -541,8 +555,10 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 		logEntry := db.AuditLogEntry{
 			MediaName:       job.Item.Title,
 			MediaType:       string(job.Item.Type),
+			ScoreDetails:    string(factorsJSON),
 			Action:          db.ActionCancelled,
 			SizeBytes:       job.Item.SizeBytes,
+			Score:           job.Score,
 			Trigger:         job.Trigger,
 			DiskGroupID:     job.DiskGroupID,
 			CollectionGroup: job.CollectionGroup,
@@ -578,8 +594,10 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 			logEntry := db.AuditLogEntry{
 				MediaName:       job.Item.Title,
 				MediaType:       string(job.Item.Type),
+				ScoreDetails:    string(factorsJSON),
 				Action:          db.ActionCancelled,
 				SizeBytes:       job.Item.SizeBytes,
+				Score:           job.Score,
 				Trigger:         job.Trigger,
 				DiskGroupID:     job.DiskGroupID,
 				CollectionGroup: job.CollectionGroup,
@@ -611,12 +629,6 @@ func (s *DeletionService) processJob(job DeleteJob, deferredAuditEntries *[]db.A
 	deletionsEnabled := false
 	if prefs, err := s.settings.GetPreferences(); err == nil {
 		deletionsEnabled = prefs.DeletionsEnabled
-	}
-
-	factorsJSON, marshalErr := json.Marshal(job.Factors)
-	if marshalErr != nil {
-		slog.Error("Failed to marshal score factors", "component", "services", "error", marshalErr)
-		factorsJSON = []byte("[]")
 	}
 
 	if !deletionsEnabled || job.ForceDryRun {

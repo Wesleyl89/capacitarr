@@ -118,6 +118,16 @@
       {{ legacyParsed.rawBreakdown }}
     </span>
   </div>
+  <div
+    v-else-if="props.score !== undefined && props.score !== null && props.score > 0"
+    class="flex items-center gap-2"
+  >
+    <span
+      :class="['font-semibold tabular-nums text-foreground', size === 'sm' ? 'text-xs' : 'text-sm']"
+    >
+      {{ props.score.toFixed(2) }}
+    </span>
+  </div>
   <span v-else class="text-xs text-zinc-500 max-w-xs truncate block" :title="reason">
     {{ reason }}
   </span>
