@@ -195,16 +195,24 @@
       transition: { type: 'spring', stiffness: 260, damping: 24, delay: 100 },
     }"
   >
-    <UiCardHeader>
-      <UiCardTitle>{{ $t('settings.sunsetSettings') }}</UiCardTitle>
-      <UiCardDescription>{{ $t('settings.sunsetSettingsDesc') }}</UiCardDescription>
+    <UiCardHeader class="border-b border-border">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
+          <component :is="SunsetIcon" class="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <UiCardTitle class="text-base">{{ $t('settings.sunsetSettings') }}</UiCardTitle>
+          <UiCardDescription>{{ $t('settings.sunsetSettingsDesc') }}</UiCardDescription>
+        </div>
+      </div>
     </UiCardHeader>
-    <UiCardContent class="space-y-6">
+    <UiCardContent class="pt-5 space-y-6">
       <!-- ── Countdown & Labels ───────────────────────────────────── -->
       <div class="space-y-4">
         <h4 class="text-sm font-medium text-foreground">
           {{ $t('settings.sunsetCountdownGroup') }}
         </h4>
+        <!-- Duration pickers: Sunset Countdown + Saved Duration -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div class="space-y-1.5">
             <div class="flex items-center gap-2">
@@ -237,7 +245,37 @@
               </UiSelectContent>
             </UiSelect>
           </div>
+          <div class="space-y-1.5">
+            <div class="flex items-center gap-2">
+              <UiLabel>{{ $t('settings.savedDuration') }}</UiLabel>
+              <SaveIndicator :status="saveStatus.savedDuration ?? 'idle'" />
+            </div>
+            <p class="text-xs text-muted-foreground mb-1">
+              {{ $t('settings.savedDurationDesc') }}
+            </p>
+            <UiSelect
+              :model-value="String(savedDurationDays)"
+              @update:model-value="
+                (v: AcceptableValue) => {
+                  savedDurationDays = Number(v);
+                  patchPreference('savedDuration', 'sunset', 'savedDurationDays', Number(v));
+                }
+              "
+            >
+              <UiSelectTrigger class="w-full">
+                <UiSelectValue :placeholder="$t('settings.selectDuration')" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="3">{{ $t('settings.nDays', { n: 3 }) }}</UiSelectItem>
+                <UiSelectItem value="5">{{ $t('settings.nDays', { n: 5 }) }}</UiSelectItem>
+                <UiSelectItem value="7">{{ $t('settings.nDays', { n: 7 }) }}</UiSelectItem>
+                <UiSelectItem value="14">{{ $t('settings.nDays', { n: 14 }) }}</UiSelectItem>
+                <UiSelectItem value="30">{{ $t('settings.nDays', { n: 30 }) }}</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+          </div>
         </div>
+        <!-- Label strings: Media Server Label + Saved Label -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div class="space-y-1.5">
             <div class="flex items-center gap-2">
@@ -341,41 +379,6 @@
               </UiSelectContent>
             </UiSelect>
           </div>
-          <div class="space-y-3">
-            <div class="space-y-1.5">
-              <UiLabel>{{ $t('settings.refreshPosters') }}</UiLabel>
-              <p class="text-xs text-muted-foreground mb-1">
-                {{ $t('settings.refreshPostersDesc') }}
-              </p>
-              <UiButton
-                variant="outline"
-                size="sm"
-                :disabled="refreshingPosters"
-                @click="refreshAllPosters"
-              >
-                <LoaderCircleIcon
-                  v-if="refreshingPosters"
-                  class="w-3.5 h-3.5 mr-1.5 animate-spin"
-                />
-                {{ $t('settings.refreshPosters') }}
-              </UiButton>
-            </div>
-            <div class="space-y-1.5">
-              <UiLabel>{{ $t('settings.restoreAllPosters') }}</UiLabel>
-              <p class="text-xs text-muted-foreground mb-1">
-                {{ $t('settings.restoreAllPostersDesc') }}
-              </p>
-              <UiButton
-                variant="destructive"
-                size="sm"
-                :disabled="restoringPosters"
-                @click="confirmRestorePosters"
-              >
-                <LoaderCircleIcon v-if="restoringPosters" class="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                {{ $t('settings.restoreAllPosters') }}
-              </UiButton>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -391,57 +394,53 @@
             {{ $t('settings.scoreProtectionGroupDesc') }}
           </p>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div class="space-y-1.5">
-            <div class="flex items-center gap-2">
-              <UiLabel>{{ $t('settings.dailyScoreCheck') }}</UiLabel>
-              <SaveIndicator :status="saveStatus.sunsetRescore ?? 'idle'" />
-            </div>
-            <p class="text-xs text-muted-foreground mb-1">
-              {{ $t('settings.dailyScoreCheckDesc') }}
-            </p>
-            <UiSwitch
-              :model-value="sunsetRescoreEnabled"
-              @update:model-value="
-                (v: boolean) => {
-                  sunsetRescoreEnabled = v;
-                  patchPreference('sunsetRescore', 'sunset', 'sunsetRescoreEnabled', v);
-                }
-              "
-            />
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <UiLabel>{{ $t('settings.dailyScoreCheck') }}</UiLabel>
+            <SaveIndicator :status="saveStatus.sunsetRescore ?? 'idle'" />
           </div>
-          <div class="space-y-1.5">
-            <div class="flex items-center gap-2">
-              <UiLabel>{{ $t('settings.savedDuration') }}</UiLabel>
-              <SaveIndicator :status="saveStatus.savedDuration ?? 'idle'" />
-            </div>
-            <p class="text-xs text-muted-foreground mb-1">
-              {{ $t('settings.savedDurationDesc') }}
-            </p>
-            <UiSelect
-              :model-value="String(savedDurationDays)"
-              @update:model-value="
-                (v: AcceptableValue) => {
-                  savedDurationDays = Number(v);
-                  patchPreference('savedDuration', 'sunset', 'savedDurationDays', Number(v));
-                }
-              "
-            >
-              <UiSelectTrigger class="w-full">
-                <UiSelectValue :placeholder="$t('settings.selectDuration')" />
-              </UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem value="3">{{ $t('settings.nDays', { n: 3 }) }}</UiSelectItem>
-                <UiSelectItem value="5">{{ $t('settings.nDays', { n: 5 }) }}</UiSelectItem>
-                <UiSelectItem value="7">{{ $t('settings.nDays', { n: 7 }) }}</UiSelectItem>
-                <UiSelectItem value="14">{{ $t('settings.nDays', { n: 14 }) }}</UiSelectItem>
-                <UiSelectItem value="30">{{ $t('settings.nDays', { n: 30 }) }}</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-          </div>
+          <p class="text-xs text-muted-foreground mb-1">
+            {{ $t('settings.dailyScoreCheckDesc') }}
+          </p>
+          <UiSwitch
+            :model-value="sunsetRescoreEnabled"
+            @update:model-value="
+              (v: boolean) => {
+                sunsetRescoreEnabled = v;
+                patchPreference('sunsetRescore', 'sunset', 'sunsetRescoreEnabled', v);
+              }
+            "
+          />
         </div>
       </div>
     </UiCardContent>
+
+    <!-- ── Actions (poster management) ──────────────────────────── -->
+    <UiCardFooter class="border-t border-border flex items-center justify-between">
+      <div class="flex items-center gap-1.5">
+        <UiButton
+          variant="outline"
+          size="sm"
+          :disabled="refreshingPosters"
+          @click="refreshAllPosters"
+        >
+          <LoaderCircleIcon v-if="refreshingPosters" class="w-3.5 h-3.5 mr-1.5 animate-spin" />
+          {{ $t('settings.refreshPosters') }}
+        </UiButton>
+        <p class="text-xs text-muted-foreground hidden sm:block">
+          {{ $t('settings.refreshPostersDesc') }}
+        </p>
+      </div>
+      <UiButton
+        variant="destructive"
+        size="sm"
+        :disabled="restoringPosters"
+        @click="confirmRestorePosters"
+      >
+        <LoaderCircleIcon v-if="restoringPosters" class="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        {{ $t('settings.restoreAllPosters') }}
+      </UiButton>
+    </UiCardFooter>
   </UiCard>
 
   <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -551,7 +550,7 @@
 </template>
 
 <script setup lang="ts">
-import { MonitorIcon, CogIcon, LoaderCircleIcon } from 'lucide-vue-next';
+import { MonitorIcon, CogIcon, SunsetIcon, LoaderCircleIcon } from 'lucide-vue-next';
 import type { PreferenceSet } from '~/types/api';
 import { TIEBREAKER_SIZE_DESC } from '~/constants';
 import type { AcceptableValue } from 'reka-ui';
