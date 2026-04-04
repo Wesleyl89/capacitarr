@@ -7,6 +7,7 @@ import {
   CheckSquare,
   Square,
   ShieldCheck,
+  ShieldCheckIcon,
   ClockIcon,
   CheckIcon,
   ZapIcon,
@@ -29,7 +30,7 @@ const props = defineProps<{
   selectable?: boolean;
   selected?: boolean;
   seasonCount?: number;
-  queueStatus?: 'pending' | 'approved' | 'user_initiated' | 'deleting';
+  queueStatus?: 'pending' | 'approved' | 'user_initiated' | 'deleting' | 'saved';
   /** Collection name if the item belongs to a collection (e.g., "Sonic the Hedgehog Collection") */
   collectionName?: string;
   /** Sunset countdown — when set, an amber "Leaving in X days" banner is shown */
@@ -142,6 +143,8 @@ const queueStatusLabel = computed(() => {
       return 'Delete';
     case 'deleting':
       return 'Deleting…';
+    case 'saved':
+      return t('sunset.savedByPopularDemand');
     default:
       return '';
   }
@@ -274,25 +277,28 @@ const sunsetLabel = computed(() => {
     <!-- Queue status banner (above title gradient) -->
     <div
       v-if="queueStatus"
-      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm"
+      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-xs font-semibold backdrop-blur-sm"
       :class="{
-        'bg-amber-500/70 text-white': queueStatus === 'pending',
-        'bg-emerald-500/70 text-white': queueStatus === 'approved',
-        'bg-red-500/70 text-white': queueStatus === 'user_initiated',
-        'bg-red-500/70 text-white animate-pulse': queueStatus === 'deleting',
+        'bg-amber-500/70 text-white uppercase tracking-wider': queueStatus === 'pending',
+        'bg-emerald-500/70 text-white uppercase tracking-wider': queueStatus === 'approved',
+        'bg-red-500/70 text-white uppercase tracking-wider': queueStatus === 'user_initiated',
+        'bg-red-500/70 text-white uppercase tracking-wider animate-pulse':
+          queueStatus === 'deleting',
+        'bg-emerald-500/70 text-white': queueStatus === 'saved',
       }"
     >
       <ClockIcon v-if="queueStatus === 'pending'" class="w-3 h-3" />
       <CheckIcon v-else-if="queueStatus === 'approved'" class="w-3 h-3" />
       <ZapIcon v-else-if="queueStatus === 'user_initiated'" class="w-3 h-3" />
       <LoaderCircleIcon v-else-if="queueStatus === 'deleting'" class="w-3 h-3 animate-spin" />
+      <ShieldCheckIcon v-else-if="queueStatus === 'saved'" class="w-3 h-3" />
       <span>{{ queueStatusLabel }}</span>
     </div>
 
     <!-- Sunset countdown banner (above title gradient) -->
     <div
       v-if="sunsetDaysRemaining != null && !queueStatus"
-      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm bg-orange-500/70 text-white"
+      class="absolute inset-x-0 bottom-10 z-10 flex items-center justify-center gap-1 py-1 text-xs font-semibold uppercase tracking-wider backdrop-blur-sm bg-orange-500/70 text-white"
     >
       <HourglassIcon class="w-3 h-3" />
       <span>{{ sunsetLabel }}</span>

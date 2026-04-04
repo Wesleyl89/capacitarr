@@ -139,7 +139,7 @@ function rescheduleByDays(itemId: number, currentDate: string, addDays: number) 
           :sunset-days-remaining="item.status !== 'saved' ? item.daysRemaining : undefined"
           :overlay-style="overlayStyle"
           :animation-delay="idx * 30"
-          :queue-status="item.status === 'saved' ? 'approved' : undefined"
+          :queue-status="item.status === 'saved' ? 'saved' : undefined"
           @click="showDetail(item)"
         />
       </div>
