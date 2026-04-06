@@ -140,9 +140,9 @@ describe('useConnectionHealth', () => {
   });
 
   it('duplicate onConnectionLost calls do not restart polling', () => {
-    const { onConnectionLost } = useConnectionHealth();
+    const { onConnectionLost, isConnected } = useConnectionHealth();
     onConnectionLost();
-    onConnectionLost(); // second call should be ignored
-    // No error thrown — just verify it doesn't cause issues
+    onConnectionLost(); // second call should be ignored — no error thrown
+    expect(isConnected.value).toBe(false);
   });
 });

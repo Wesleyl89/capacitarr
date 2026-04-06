@@ -328,7 +328,7 @@ flowchart LR
 
 See [notifications.md](../guides/notifications.md) for the full user-facing guide.
 
-### Event Types (68 total)
+### Event Types (70 total)
 
 | Category | Events |
 |----------|--------|

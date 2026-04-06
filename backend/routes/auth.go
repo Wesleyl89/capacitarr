@@ -120,7 +120,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	protected.PUT("/auth/password", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
-			return echo.ErrUnauthorized
+			return apiError(c, http.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req struct {
@@ -152,7 +152,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	protected.PUT("/auth/username", func(c echo.Context) error {
 		currentUser, ok := c.Get("user").(string)
 		if !ok || currentUser == "" {
-			return echo.ErrUnauthorized
+			return apiError(c, http.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req struct {
@@ -193,7 +193,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	protected.POST("/auth/apikey", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
-			return echo.ErrUnauthorized
+			return apiError(c, http.StatusUnauthorized, "Unauthorized")
 		}
 
 		plaintext, err := reg.Auth.GenerateAPIKey(username)
@@ -208,7 +208,7 @@ func RegisterAuthRoutes(public *echo.Group, protected *echo.Group, reg *services
 	protected.GET("/auth/apikey", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok || username == "" {
-			return echo.ErrUnauthorized
+			return apiError(c, http.StatusUnauthorized, "Unauthorized")
 		}
 
 		user, err := reg.Auth.GetByUsername(username)

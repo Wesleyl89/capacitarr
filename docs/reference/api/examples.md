@@ -1065,7 +1065,7 @@ curl -N -H "X-Api-Key: $CAPACITARR_API_KEY" \
   "$CAPACITARR_URL/events"
 ```
 
-See the [Architecture](../architecture.md) documentation for the complete list of 67 event types.
+See the [Architecture](../architecture.md) documentation for the complete list of 70 event types.
 
 ---
 
@@ -1089,7 +1089,7 @@ curl -s -X POST -H "X-Api-Key: $CAPACITARR_API_KEY" \
     "name": "My Discord",
     "webhookUrl": "https://discord.com/api/webhooks/...",
     "enabled": true,
-    "notificationLevel": "all"
+    "notificationLevel": "normal"
   }' | jq
 ```
 

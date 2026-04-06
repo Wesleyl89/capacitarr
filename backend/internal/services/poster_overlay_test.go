@@ -5,7 +5,6 @@ import (
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/events"
-	"capacitarr/internal/poster"
 )
 
 func setupPosterOverlayTest(t *testing.T) (*PosterOverlayService, *events.EventBus) {
@@ -39,37 +38,6 @@ func TestPosterOverlayService_ValidateCache_NoActiveOverlays(t *testing.T) {
 	svc, _ := setupPosterOverlayTest(t)
 	// Should not panic or error — just a no-op
 	svc.ValidateCache()
-}
-
-func TestPosterOverlayService_CacheKeyForItem(t *testing.T) {
-	svc, _ := setupPosterOverlayTest(t)
-
-	tmdbID := 12345
-	item := db.SunsetQueueItem{
-		MediaName: "Firefly",
-		TmdbID:    &tmdbID,
-	}
-
-	key := svc.cacheKeyForItem(1, item)
-	expected := poster.CacheKey(1, 12345, "orig")
-	if key != expected {
-		t.Errorf("Expected cache key %q, got %q", expected, key)
-	}
-}
-
-func TestPosterOverlayService_CacheKeyForItem_NilTmdbID(t *testing.T) {
-	svc, _ := setupPosterOverlayTest(t)
-
-	item := db.SunsetQueueItem{
-		MediaName: "Firefly",
-		TmdbID:    nil,
-	}
-
-	key := svc.cacheKeyForItem(1, item)
-	expected := poster.CacheKey(1, 0, "orig")
-	if key != expected {
-		t.Errorf("Expected cache key %q for nil TmdbID, got %q", expected, key)
-	}
 }
 
 func TestPosterOverlayService_UpdateOverlay_NilTmdbID(t *testing.T) {

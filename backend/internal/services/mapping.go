@@ -23,16 +23,17 @@ var ErrMappingNotFound = errors.New("mapping not found")
 // IntegrationRegistry.BuildTMDbToNativeIDMaps(). Mappings are populated during
 // engine poll cycles and consumed by PosterOverlayService and SunsetService for
 // label and poster operations.
-//
-// Follows the established service pattern: accepts *gorm.DB and *events.EventBus.
 type MappingService struct {
-	db  *gorm.DB
-	bus *events.EventBus
+	db *gorm.DB
 }
 
 // NewMappingService creates a new mapping service.
 func NewMappingService(database *gorm.DB, bus *events.EventBus) *MappingService {
-	return &MappingService{db: database, bus: bus}
+	// bus is accepted for constructor signature consistency with other services
+	// but not currently used — MappingService is a low-level data access service
+	// whose mutations are driven by orchestrators that publish their own events.
+	_ = bus
+	return &MappingService{db: database}
 }
 
 // Resolve returns the native ID for a TMDb ID on a specific media server.

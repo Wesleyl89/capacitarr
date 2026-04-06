@@ -34,7 +34,7 @@ flowchart TD
 
 Each media item is scored across seven dimensions. Every factor produces a raw score between 0.0 (keep) and 1.0 (delete), which is then multiplied by the user-configured weight (0–10).
 
-### Watch History
+### Play History
 
 **What it measures:** How many times the item has been played.
 
@@ -47,7 +47,7 @@ Each media item is scored across seven dimensions. Every factor produces a raw s
 
 Unwatched content scores highest — it gets deleted first when this factor has a high weight.
 
-### Last Watched
+### Last Played
 
 **What it measures:** How recently the item was last played.
 
@@ -100,7 +100,7 @@ The score is inverted: `1.0 - (rating / 10.0)`. High-rated content scores low (k
 
 Calculated as `daysSinceAdded / 365`, capped at 1.0. Older content scores higher than recently added content.
 
-### Series Status
+### Show Status
 
 **What it measures:** Whether a show is still producing new episodes.
 

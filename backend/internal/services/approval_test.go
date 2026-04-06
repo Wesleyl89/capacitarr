@@ -613,8 +613,8 @@ func TestApprovalService_CleanExpiredSnoozes(t *testing.T) {
 		name string
 		snz  *time.Time
 	}{
-		{"Expired Movie", &expired},
-		{"Active Movie", &active},
+		{"Serenity (Expired)", &expired},
+		{"Serenity (Active)", &active},
 	} {
 		item := db.ApprovalQueueItem{
 			MediaName: tc.name, MediaType: "movie",
@@ -636,13 +636,13 @@ func TestApprovalService_CleanExpiredSnoozes(t *testing.T) {
 
 	// Verify: expired item is now pending, active item is still rejected
 	var expiredItem db.ApprovalQueueItem
-	database.Where("media_name = ?", "Expired Movie").First(&expiredItem)
+	database.Where("media_name = ?", "Serenity (Expired)").First(&expiredItem)
 	if expiredItem.Status != db.StatusPending {
 		t.Errorf("expected expired item to be pending, got %q", expiredItem.Status)
 	}
 
 	var activeItem db.ApprovalQueueItem
-	database.Where("media_name = ?", "Active Movie").First(&activeItem)
+	database.Where("media_name = ?", "Serenity (Active)").First(&activeItem)
 	if activeItem.Status != db.StatusRejected {
 		t.Errorf("expected active item to still be rejected, got %q", activeItem.Status)
 	}

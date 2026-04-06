@@ -122,9 +122,7 @@ func IPRateLimit(rl *ipRateLimiter) echo.MiddlewareFunc {
 			ip := c.RealIP()
 			if !rl.allow(ip) {
 				slog.Warn("Rate limit exceeded", "component", "ratelimit", "ip", ip)
-				return c.JSON(http.StatusTooManyRequests, map[string]string{
-					"error": "Too many requests. Please try again later.",
-				})
+				return apiError(c, http.StatusTooManyRequests, "Too many requests. Please try again later.")
 			}
 			return next(c)
 		}

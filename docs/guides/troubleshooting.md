@@ -65,7 +65,7 @@ docker logs capacitarr | grep -i "integration"
 ### Common Causes
 
 - **Channel not enabled:** Ensure the channel's "Enabled" toggle is on in Settings → Notifications
-- **Subscription toggles off:** Each notification type has its own toggle per channel. Verify the relevant subscription is enabled (e.g., "Cycle Digest" for engine run summaries).
+- **Notification level too low:** Each channel has a notification level (Off, Critical, Important, Normal, Verbose). If the level is too restrictive, lower-priority events will be filtered out. Check the channel's notification level and per-event advanced overrides in Settings → Notifications.
 - **Invalid webhook URL:** The webhook URL may have been revoked or changed in Discord. For Apprise, verify the server URL is correct. Use the Test button to verify.
 - **Rate limiting:** Discord may rate-limit rapid webhook calls. If many notifications fire in a short window, some may be delayed or dropped.
 

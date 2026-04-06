@@ -25,7 +25,7 @@ func seedAuditLogs(t *testing.T, database *gorm.DB, n int) {
 			action = db.ActionDryDelete
 		}
 		log := db.AuditLogEntry{
-			MediaName: fmt.Sprintf("Test Media %d", i),
+			MediaName: fmt.Sprintf("Serenity %d", i),
 			MediaType: "movie",
 			Action:    action,
 			SizeBytes: int64(1000000 * (i + 1)),

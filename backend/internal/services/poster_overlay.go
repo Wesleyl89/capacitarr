@@ -393,17 +393,6 @@ func (s *PosterOverlayService) ValidateCache() {
 	}
 }
 
-// cacheKeyForItem generates the cache key for a sunset queue item and integration.
-// Retained for backward compatibility with RestoreOriginal which may still have
-// per-integration cached originals from before the canonical source migration.
-func (s *PosterOverlayService) cacheKeyForItem(integrationID uint, item db.SunsetQueueItem) string {
-	tmdbID := 0
-	if item.TmdbID != nil {
-		tmdbID = *item.TmdbID
-	}
-	return poster.CacheKey(integrationID, tmdbID, "orig")
-}
-
 // cacheKeyForCanonical generates a cache key for the canonical (TMDb CDN)
 // original poster. Not tied to any specific media server integration.
 func (s *PosterOverlayService) cacheKeyForCanonical(item db.SunsetQueueItem) string {
