@@ -15,11 +15,11 @@
     "@fontsource/geist-mono": "^5.2.7",
     "@fontsource/geist-sans": "^5.2.5",
     "@nuxt/content": "^3.12.0",
-    "@nuxt/ui": "^4.5.1",
-    "@nuxtjs/sitemap": "^8.0.6",
-    "mermaid": "^11.12.3",
-    "nuxt": "^4.3.1",
-    "tailwindcss": "^4.2.1"
+    "@nuxt/ui": "^4.6.1",
+    "@nuxtjs/sitemap": "^8.0.11",
+    "mermaid": "^11.14.0",
+    "nuxt": "^4.4.2",
+    "tailwindcss": "^4.2.2"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
@@ -40,11 +40,12 @@
       "srvx@<0.11.13": ">=0.11.13",
       "svgo@=4.0.0": ">=4.0.1",
       "tar@<=7.5.10": ">=7.5.11",
+      "lodash-es@<4.18.0": ">=4.18.0",
       "yaml@>=2.0.0 <2.8.3": ">=2.8.3"
     }
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
-    "better-sqlite3": "^12.6.2"
+    "@types/node": "^25.5.2",
+    "better-sqlite3": "^12.8.0"
   }
 }
