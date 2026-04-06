@@ -1,3 +1,8 @@
+## [3.0.7-beta] - 2026-04-06
+
+### 🚀 Features
+
+- Add automatic database backup and startup schema validation ([3dce322](https://github.com/Ghent/capacitarr/commit/3dce3228ceb39bbf68cc2a661fe8b8d40baeccd1))
 ## [3.0.6-beta] - 2026-04-04
 
 ### 🐛 Bug Fixes
