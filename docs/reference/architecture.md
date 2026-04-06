@@ -127,15 +127,18 @@ All services accept `*gorm.DB` and `*events.EventBus` in their constructor and a
 | | EngineService | Trigger runs, get stats |
 | | SettingsService | Update preferences and thresholds |
 | **Data** | AuditLogService | Create, upsert, dedup audit entries |
-| | BackupService | Database backup, restore, and export/import |
+| | BackupService | Settings export/import and backup archive creation |
+| | DatabaseBackupService | Automatic VACUUM INTO backup with rotation and retention |
 | | DataService | Data reset operations |
 | | MetricsService | History, rollup, lifetime stats |
 | | RulesService | Custom rule CRUD, validation, and impact preview |
 | | PreviewService | Scored media preview cache, SSE-driven invalidation |
+| | MappingService | Media server TMDb ID → native ID mapping for cross-references |
 | **Analytics** | WatchAnalyticsService | Dead content, stale content analytics |
 | **Sunset** | SunsetService | Sunset queue CRUD, expiry processing, escalation, label management |
 | | PosterOverlayService | Poster overlay lifecycle (apply, restore, update all) |
 | **External** | IntegrationService | CRUD, test connections, sync data |
+| | RecoveryService | Integration recovery with exponential backoff |
 | | AuthService | Login, change password, generate API keys |
 | | NotificationChannelService | CRUD for notification channels |
 | | NotificationDispatchService | Two-gate flush, digest, and alerts |
@@ -172,6 +175,9 @@ type Registry struct {
     Migration            *MigrationService
     Sunset               *SunsetService
     PosterOverlay        *PosterOverlayService
+    Mapping              *MappingService
+    Recovery             *RecoveryService
+    DatabaseBackup       *DatabaseBackupService
 }
 ```
 
