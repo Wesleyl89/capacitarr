@@ -1,53 +1,15 @@
-## [3.0.7-beta] - 2026-04-06
-
-### 🚀 Features
-
-- Add automatic database backup and startup schema validation ([3dce322](https://github.com/Ghent/capacitarr/commit/3dce3228ceb39bbf68cc2a661fe8b8d40baeccd1))
-## [3.0.6-beta] - 2026-04-04
-
-### 🐛 Bug Fixes
-
-- *(sunset)* Show 'Saved by popular demand' on poster cards ([b3f1576](https://github.com/Ghent/capacitarr/commit/b3f15762003663c76580ad7b4da2f1e76615643a))
-## [3.0.5-beta] - 2026-04-04
-
-### 🐛 Bug Fixes
-
-- *(audit)* Restore score display for deleted and cancelled history entries ([5dc3103](https://github.com/Ghent/capacitarr/commit/5dc31034a38b6d37b4470f8656a8d76d9c292e05))
-## [3.0.4-beta] - 2026-04-03
-
-### 🚀 Features
-
-- *(sunset)* Add display style preference for overlay text ([69b51f8](https://github.com/Ghent/capacitarr/commit/69b51f8cec7ed7ebdb1e6abf9fbece7934f3828e))
-## [3.0.3-beta] - 2026-04-02
-
-### 🚀 Features
-
-- *(integrations)* Add automatic recovery with exponential backoff probing ([7c8e31f](https://github.com/Ghent/capacitarr/commit/7c8e31ff7dc06e8cf00e16c111136fd387684035))
-- *(notifications)* Replace boolean toggles with tier-based notification levels ([217a05c](https://github.com/Ghent/capacitarr/commit/217a05cec34985b42f8a9289c62a2390d3a1a05e))
-
-### 🐛 Bug Fixes
-
-- Comprehensive audit remediation and codebase cleanup ([d422322](https://github.com/Ghent/capacitarr/commit/d422322e1842d447920b329f2dce2e17b1a7c49f))
-## [3.0.2-beta] - 2026-03-31
-
-### 🚀 Features
-
-- *(ci)* Add rolling :alpha and :beta Docker image tags for pre-release channels ([a1ff4c9](https://github.com/Ghent/capacitarr/commit/a1ff4c95700cfb0f58d91345fecbf4d72b7c2849))
-
-### 🐛 Bug Fixes
-
-- *(deps)* Add pnpm overrides for site/ transitive dependency vulnerabilities ([d1d95e7](https://github.com/Ghent/capacitarr/commit/d1d95e7107040e5116a6d1f38ea875e274afec3e))
-- *(integrations)* Handle Tautulli numeric rating_key fields ([2273684](https://github.com/Ghent/capacitarr/commit/227368405b6148477694bf292fbd492e2c7d9a82))
-- *(integrations)* Preserve HTTP method across redirects in *arr API calls ([2cefd57](https://github.com/Ghent/capacitarr/commit/2cefd57c24f9aed76a5dac90d1d0385ca17d6e60))
-- *(integrations)* Handle Tautulli fractional watched_status field ([01047ac](https://github.com/Ghent/capacitarr/commit/01047ac6dbc3ed3cbe6e52a27de98f7fb1b70dd3))
-- *(integrations)* Add flexInt64 type for loose-typed API numeric fields ([87a90c8](https://github.com/Ghent/capacitarr/commit/87a90c8bca9f34e222652e69613cb435a31d3758))
-## [3.0.0-beta] - 2026-03-31
+## [3.1.0] - 2026-04-06
 
 ### 🚀 Features
 
 - *(sunset)* Add virtual show-level-only override for sunset mode ([78d321a](https://github.com/Ghent/capacitarr/commit/78d321a7d22014c4a3f0a6e89447e9ed5c9a8f85))
 - *(help)* Add show-level evaluation help section and fix sunset details ([b78f343](https://github.com/Ghent/capacitarr/commit/b78f343a44966d1936bc0ec9326c37415020b9e5))
 - *(ui)* Show integration instance names in disk group pill badges ([e21e7f0](https://github.com/Ghent/capacitarr/commit/e21e7f096c6440c5f44c209c9a7ed3c7b620d7b8))
+- *(ci)* Add rolling :alpha and :beta Docker image tags for pre-release channels ([a1ff4c9](https://github.com/Ghent/capacitarr/commit/a1ff4c95700cfb0f58d91345fecbf4d72b7c2849))
+- *(integrations)* Add automatic recovery with exponential backoff probing ([7c8e31f](https://github.com/Ghent/capacitarr/commit/7c8e31ff7dc06e8cf00e16c111136fd387684035))
+- *(notifications)* Replace boolean toggles with tier-based notification levels ([217a05c](https://github.com/Ghent/capacitarr/commit/217a05cec34985b42f8a9289c62a2390d3a1a05e))
+- *(sunset)* Add display style preference for overlay text ([69b51f8](https://github.com/Ghent/capacitarr/commit/69b51f8cec7ed7ebdb1e6abf9fbece7934f3828e))
+- Add automatic database backup and startup schema validation ([3dce322](https://github.com/Ghent/capacitarr/commit/3dce3228ceb39bbf68cc2a661fe8b8d40baeccd1))
 
 ### 🐛 Bug Fixes
 
@@ -56,6 +18,14 @@
 - *(ui)* Replace browser confirm dialogs with UiDialog ([f0dff0b](https://github.com/Ghent/capacitarr/commit/f0dff0b588e33622014eb2a0fda70a054978bd6d))
 - *(rules)* Show-level-only hides TV shows from deletion priority ([7534a67](https://github.com/Ghent/capacitarr/commit/7534a67a506ecfe9a9fe545735756a4600c4ebca))
 - *(rules)* Restore score-based sort order in deletion priority view ([53d55ab](https://github.com/Ghent/capacitarr/commit/53d55ab3a23337364022711d9a81fe5cacf15923))
+- *(deps)* Add pnpm overrides for site/ transitive dependency vulnerabilities ([d1d95e7](https://github.com/Ghent/capacitarr/commit/d1d95e7107040e5116a6d1f38ea875e274afec3e))
+- *(integrations)* Handle Tautulli numeric rating_key fields ([2273684](https://github.com/Ghent/capacitarr/commit/227368405b6148477694bf292fbd492e2c7d9a82))
+- *(integrations)* Preserve HTTP method across redirects in *arr API calls ([2cefd57](https://github.com/Ghent/capacitarr/commit/2cefd57c24f9aed76a5dac90d1d0385ca17d6e60))
+- *(integrations)* Handle Tautulli fractional watched_status field ([01047ac](https://github.com/Ghent/capacitarr/commit/01047ac6dbc3ed3cbe6e52a27de98f7fb1b70dd3))
+- *(integrations)* Add flexInt64 type for loose-typed API numeric fields ([87a90c8](https://github.com/Ghent/capacitarr/commit/87a90c8bca9f34e222652e69613cb435a31d3758))
+- Comprehensive audit remediation and codebase cleanup ([d422322](https://github.com/Ghent/capacitarr/commit/d422322e1842d447920b329f2dce2e17b1a7c49f))
+- *(audit)* Restore score display for deleted and cancelled history entries ([5dc3103](https://github.com/Ghent/capacitarr/commit/5dc31034a38b6d37b4470f8656a8d76d9c292e05))
+- *(sunset)* Show 'Saved by popular demand' on poster cards ([b3f1576](https://github.com/Ghent/capacitarr/commit/b3f15762003663c76580ad7b4da2f1e76615643a))
 ## [2.3.2] - 2026-03-30
 
 ### 🚀 Features
