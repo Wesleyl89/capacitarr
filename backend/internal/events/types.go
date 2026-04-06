@@ -650,6 +650,57 @@ func (e ThresholdBreachedEvent) EventMessage() string {
 }
 
 // =============================================================================
+// Disk Group Lifecycle Events
+// =============================================================================
+
+// DiskGroupStaleEvent is published when a disk group is marked stale (no longer
+// reported by any integration). Used by the activity feed — not user-actionable.
+type DiskGroupStaleEvent struct {
+	DiskGroupID uint   `json:"diskGroupId"`
+	MountPath   string `json:"mountPath"`
+}
+
+// EventType implements Event.
+func (e DiskGroupStaleEvent) EventType() string { return "disk_group_stale" }
+
+// EventMessage implements Event.
+func (e DiskGroupStaleEvent) EventMessage() string {
+	return fmt.Sprintf("Disk group %s marked stale — not reported by any integration", e.MountPath)
+}
+
+// DiskGroupReapedEvent is published when a stale disk group is permanently
+// deleted after the grace period expires.
+type DiskGroupReapedEvent struct {
+	DiskGroupID uint   `json:"diskGroupId"`
+	MountPath   string `json:"mountPath"`
+	StaleDays   int    `json:"staleDays"`
+}
+
+// EventType implements Event.
+func (e DiskGroupReapedEvent) EventType() string { return "disk_group_reaped" }
+
+// EventMessage implements Event.
+func (e DiskGroupReapedEvent) EventMessage() string {
+	return fmt.Sprintf("Disk group %s removed after %d days without integration data", e.MountPath, e.StaleDays)
+}
+
+// DiskGroupResurrectedEvent is published when a stale disk group is restored to
+// active status because its mount path was reported again by an integration.
+type DiskGroupResurrectedEvent struct {
+	DiskGroupID uint   `json:"diskGroupId"`
+	MountPath   string `json:"mountPath"`
+	StaleDays   int    `json:"staleDays"` // How long it was stale before resurrection
+}
+
+// EventType implements Event.
+func (e DiskGroupResurrectedEvent) EventType() string { return "disk_group_resurrected" }
+
+// EventMessage implements Event.
+func (e DiskGroupResurrectedEvent) EventMessage() string {
+	return fmt.Sprintf("Disk group %s restored (was stale for %d days)", e.MountPath, e.StaleDays)
+}
+
+// =============================================================================
 // Version Events
 // =============================================================================
 

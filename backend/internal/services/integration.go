@@ -80,7 +80,8 @@ var genreSuggestions = []integrations.NameValue{
 // Defined here to avoid import cycles between IntegrationService and DiskGroupService.
 type DiskGroupManager interface {
 	Upsert(disk integrations.DiskSpace) (*db.DiskGroup, error)
-	RemoveAll() (int64, error)
+	RemoveAll() (int64, error)    // Immediate hard delete — used by IntegrationService.Delete() (deliberate user action)
+	MarkAllStale() (int64, error) // Soft-delete — used by poller (involuntary, all integrations disabled)
 	HasSunsetModeForIntegration(integrationID uint) (bool, error)
 	SunsetLinkedIntegrationIDs() (map[uint]bool, error)
 }

@@ -270,6 +270,32 @@
         Threshold triggers cleanup. Target is the desired usage level after cleanup. Threshold must
         be greater than target.
       </p>
+      <UiSeparator class="my-2" />
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <UiLabel>Grace Period</UiLabel>
+          <SaveIndicator :status="saveStatus.diskGroupGracePeriod ?? 'idle'" />
+        </div>
+        <UiSelect v-model="diskGroupGracePeriodStr">
+          <UiSelectTrigger class="w-full max-w-xs">
+            <UiSelectValue placeholder="Select grace period" />
+          </UiSelectTrigger>
+          <UiSelectContent>
+            <UiSelectItem value="0"> Immediate (no grace period) </UiSelectItem>
+            <UiSelectItem value="1"> 1 day </UiSelectItem>
+            <UiSelectItem value="3"> 3 days </UiSelectItem>
+            <UiSelectItem value="7"> 7 days (default) </UiSelectItem>
+            <UiSelectItem value="14"> 14 days </UiSelectItem>
+            <UiSelectItem value="30"> 30 days </UiSelectItem>
+            <UiSelectItem value="60"> 60 days </UiSelectItem>
+            <UiSelectItem value="90"> 90 days </UiSelectItem>
+          </UiSelectContent>
+        </UiSelect>
+        <p class="text-xs text-muted-foreground/70">
+          Disk groups not seen by any integration are preserved for this many days before removal.
+          Set to 0 to delete immediately (legacy behavior).
+        </p>
+      </div>
     </UiCardContent>
   </UiCard>
 
@@ -479,6 +505,7 @@ initFields([
   'backupRetention',
   'defaultThreshold',
   'defaultTarget',
+  'diskGroupGracePeriod',
   'deletionsEnabled',
   'logLevel',
   'checkForUpdates',
@@ -495,6 +522,7 @@ const defaultTarget = ref(75);
 const deletionsEnabled = ref(true);
 const checkForUpdatesEnabled = ref(true);
 const deletionQueueDelaySeconds = ref(30);
+const diskGroupGracePeriodDays = ref(7);
 const showDeletionConfirmDialog = ref(false);
 const showResetDialog = ref(false);
 const resettingData = ref(false);
@@ -527,6 +555,13 @@ const backupRetentionStr = computed({
   },
 });
 
+const diskGroupGracePeriodStr = computed({
+  get: () => String(diskGroupGracePeriodDays.value),
+  set: (val: string) => {
+    diskGroupGracePeriodDays.value = Number(val);
+  },
+});
+
 // Watch poll interval
 watch(pollIntervalSeconds, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
@@ -552,6 +587,13 @@ watch(retentionDays, (newVal, oldVal) => {
 watch(backupRetentionDays, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
     patchPreference('backupRetention', 'advanced', 'backupRetentionDays', newVal);
+  }
+});
+
+// Watch disk group grace period
+watch(diskGroupGracePeriodDays, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    patchPreference('diskGroupGracePeriod', 'advanced', 'diskGroupGracePeriodDays', newVal);
   }
 });
 
@@ -631,6 +673,9 @@ async function fetchPreferences() {
     }
     if (prefs?.backupRetentionDays !== undefined) {
       backupRetentionDays.value = prefs.backupRetentionDays;
+    }
+    if (prefs?.diskGroupGracePeriodDays !== undefined) {
+      diskGroupGracePeriodDays.value = prefs.diskGroupGracePeriodDays;
     }
   } catch (err) {
     console.warn('[SettingsAdvanced] fetchPreferences failed:', err);

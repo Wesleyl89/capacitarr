@@ -3,6 +3,8 @@ package services
 import (
 	"fmt"
 	"log/slog"
+	"math"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -113,7 +115,9 @@ func (s *DiskGroupService) GetByID(id uint) (*db.DiskGroup, error) {
 }
 
 // Upsert creates or updates a disk group from discovered disk space.
-// Shared by the sync route and the poller.
+// Shared by the sync route and the poller. If an existing group is stale
+// (stale_since != NULL), it is resurrected — stale_since is cleared and
+// all configuration (thresholds, mode, override) is preserved.
 func (s *DiskGroupService) Upsert(disk integrations.DiskSpace) (*db.DiskGroup, error) {
 	var group db.DiskGroup
 	result := s.db.Where("mount_path = ?", disk.Path).First(&group)
@@ -131,12 +135,27 @@ func (s *DiskGroupService) Upsert(disk integrations.DiskSpace) (*db.DiskGroup, e
 			return nil, fmt.Errorf("failed to create disk group: %w", err)
 		}
 	} else {
-		// Update existing
+		// Resurrect if stale: clear stale_since alongside the byte update.
+		// gorm.Expr("NULL") is required because GORM skips nil pointer values in maps.
+		wasStale := group.StaleSince != nil
 		if err := s.db.Model(&group).Updates(map[string]any{
 			"total_bytes": disk.TotalBytes,
 			"used_bytes":  usedBytes,
+			"stale_since": gorm.Expr("NULL"),
 		}).Error; err != nil {
 			return nil, fmt.Errorf("failed to update disk group: %w", err)
+		}
+
+		if wasStale {
+			staleDays := int(math.Ceil(time.Since(*group.StaleSince).Hours() / 24))
+			slog.Info("Resurrected stale disk group",
+				"component", "diskgroup_service", "mount", group.MountPath, "staleDays", staleDays)
+			s.bus.Publish(events.DiskGroupResurrectedEvent{
+				DiskGroupID: group.ID,
+				MountPath:   group.MountPath,
+				StaleDays:   staleDays,
+			})
+			group.StaleSince = nil
 		}
 	}
 
@@ -230,34 +249,38 @@ func (s *DiskGroupService) RemoveAll() (int64, error) {
 	return result.RowsAffected, nil
 }
 
-// ReconcileActiveMounts removes disk groups whose mount paths are not in the
-// provided set of active mount paths.
+// ReconcileActiveMounts marks disk groups stale whose mount paths are not in
+// the provided set of active mount paths. Groups already stale are left
+// untouched (their stale_since clock is not reset). Junction table links are
+// preserved so that resurrected groups retain their integration associations.
+// Returns the count of newly-stale groups (not total stale).
 func (s *DiskGroupService) ReconcileActiveMounts(activeMounts map[string]bool) (int64, error) {
 	var allGroups []db.DiskGroup
 	if err := s.db.Find(&allGroups).Error; err != nil {
 		return 0, fmt.Errorf("failed to fetch disk groups: %w", err)
 	}
 
-	var deleted int64
+	var newlyStale int64
 	for _, g := range allGroups {
 		if !activeMounts[g.MountPath] {
-			// Remove junction table entries for this group
-			s.db.Where("disk_group_id = ?", g.ID).Delete(&db.DiskGroupIntegration{})
-
-			if err := s.db.Delete(&g).Error; err != nil {
-				return deleted, fmt.Errorf("failed to delete orphaned disk group %q: %w", g.MountPath, err)
+			if g.StaleSince != nil {
+				continue // Already stale — don't reset the clock
 			}
-			deleted++
+			if err := s.markStaleByID(g.ID, g.MountPath); err != nil {
+				return newlyStale, fmt.Errorf("failed to mark disk group %q stale: %w", g.MountPath, err)
+			}
+			newlyStale++
 		}
 	}
 
-	return deleted, nil
+	return newlyStale, nil
 }
 
 // ImportUpsert creates or updates a disk group from backup import data.
 // Only configuration fields (thresholds, override) are imported — discovery
 // fields (total_bytes, used_bytes) are left at zero for new groups since
-// they will be populated by the next poll cycle.
+// they will be populated by the next poll cycle. If the target group is stale,
+// it is resurrected (stale_since cleared).
 func (s *DiskGroupService) ImportUpsert(mountPath string, threshold, target float64, totalOverride *int64) error {
 	var existing db.DiskGroup
 	err := s.db.Where("mount_path = ?", mountPath).First(&existing).Error
@@ -278,6 +301,7 @@ func (s *DiskGroupService) ImportUpsert(mountPath string, threshold, target floa
 		existing.ThresholdPct = threshold
 		existing.TargetPct = target
 		existing.TotalBytesOverride = totalOverride
+		existing.StaleSince = nil // Resurrect if stale — import is an explicit user action
 		if saveErr := s.db.Save(&existing).Error; saveErr != nil {
 			return fmt.Errorf("failed to update disk group %q: %w", mountPath, saveErr)
 		}
@@ -377,6 +401,133 @@ func (s *DiskGroupService) ListWithIntegrations() ([]DiskGroupWithIntegrations, 
 	}
 
 	return result, nil
+}
+
+// markStaleByID sets stale_since = NOW() on a single disk group by ID and
+// publishes a DiskGroupStaleEvent. Internal helper — callers are responsible
+// for checking that the group is not already stale.
+func (s *DiskGroupService) markStaleByID(id uint, mountPath string) error {
+	now := time.Now()
+	if err := s.db.Model(&db.DiskGroup{}).Where("id = ?", id).
+		Update("stale_since", now).Error; err != nil {
+		return fmt.Errorf("failed to mark disk group %d stale: %w", id, err)
+	}
+	slog.Info("Marked disk group stale",
+		"component", "diskgroup_service", "id", id, "mount", mountPath)
+	s.bus.Publish(events.DiskGroupStaleEvent{
+		DiskGroupID: id,
+		MountPath:   mountPath,
+	})
+	return nil
+}
+
+// MarkStale sets stale_since = NOW() on a single disk group if it is not
+// already stale (idempotent — does not reset the clock on already-stale groups).
+func (s *DiskGroupService) MarkStale(id uint) error {
+	var group db.DiskGroup
+	if err := s.db.First(&group, id).Error; err != nil {
+		return fmt.Errorf("disk group not found: %w", err)
+	}
+	if group.StaleSince != nil {
+		return nil // Already stale — don't reset the clock
+	}
+	return s.markStaleByID(group.ID, group.MountPath)
+}
+
+// MarkAllStale sets stale_since = NOW() on all active disk groups (where
+// stale_since IS NULL). Returns the count of newly-stale groups. Does NOT
+// touch junction table links — those are preserved for resurrection.
+func (s *DiskGroupService) MarkAllStale() (int64, error) {
+	// Fetch active groups first to publish per-group events
+	var activeGroups []db.DiskGroup
+	if err := s.db.Where("stale_since IS NULL").Find(&activeGroups).Error; err != nil {
+		return 0, fmt.Errorf("failed to fetch active disk groups: %w", err)
+	}
+	if len(activeGroups) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now()
+	result := s.db.Model(&db.DiskGroup{}).
+		Where("stale_since IS NULL").
+		Update("stale_since", now)
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to mark all disk groups stale: %w", result.Error)
+	}
+
+	// Publish per-group events for activity feed
+	for _, g := range activeGroups {
+		slog.Info("Marked disk group stale",
+			"component", "diskgroup_service", "id", g.ID, "mount", g.MountPath)
+		s.bus.Publish(events.DiskGroupStaleEvent{
+			DiskGroupID: g.ID,
+			MountPath:   g.MountPath,
+		})
+	}
+
+	return result.RowsAffected, nil
+}
+
+// ReapStale deletes disk groups whose grace period has expired (stale_since
+// is set and older than gracePeriodDays). Also deletes corresponding junction
+// table rows. If gracePeriodDays == 0, all stale groups are reaped immediately.
+// Returns the count of reaped groups.
+func (s *DiskGroupService) ReapStale(gracePeriodDays int) (int64, error) {
+	// SELECT stale groups past the grace period to publish per-group events
+	cutoff := time.Now().AddDate(0, 0, -gracePeriodDays)
+	var expired []db.DiskGroup
+	query := s.db.Where("stale_since IS NOT NULL AND stale_since < ?", cutoff)
+	if err := query.Find(&expired).Error; err != nil {
+		return 0, fmt.Errorf("failed to find expired stale disk groups: %w", err)
+	}
+	if len(expired) == 0 {
+		return 0, nil
+	}
+
+	// Collect IDs for batch delete
+	expiredIDs := make([]uint, len(expired))
+	for i, g := range expired {
+		expiredIDs[i] = g.ID
+	}
+
+	// Delete junction table rows
+	if err := s.db.Where("disk_group_id IN ?", expiredIDs).
+		Delete(&db.DiskGroupIntegration{}).Error; err != nil {
+		slog.Error("Failed to clear junction rows for reaped disk groups",
+			"component", "diskgroup_service", "error", err)
+	}
+
+	// Delete the disk groups
+	result := s.db.Where("id IN ?", expiredIDs).Delete(&db.DiskGroup{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to reap stale disk groups: %w", result.Error)
+	}
+
+	// Publish per-group events for activity feed
+	for _, g := range expired {
+		staleDays := int(math.Ceil(time.Since(*g.StaleSince).Hours() / 24))
+		slog.Info("Reaped expired stale disk group",
+			"component", "diskgroup_service", "id", g.ID, "mount", g.MountPath, "staleDays", staleDays)
+		s.bus.Publish(events.DiskGroupReapedEvent{
+			DiskGroupID: g.ID,
+			MountPath:   g.MountPath,
+			StaleDays:   staleDays,
+		})
+	}
+
+	return result.RowsAffected, nil
+}
+
+// ListStale returns disk groups where stale_since IS NOT NULL, ordered by
+// stale_since ascending (oldest stale first).
+func (s *DiskGroupService) ListStale() ([]db.DiskGroup, error) {
+	var groups []db.DiskGroup
+	if err := s.db.Where("stale_since IS NOT NULL").
+		Order("stale_since ASC").
+		Find(&groups).Error; err != nil {
+		return nil, fmt.Errorf("failed to list stale disk groups: %w", err)
+	}
+	return groups, nil
 }
 
 // SunsetLinkedIntegrationIDs returns the set of integration IDs that are linked

@@ -231,11 +231,17 @@ func (p *Poller) poll() {
 		"executionMode", prefs.DefaultDiskGroupMode)
 
 	if len(configs) == 0 {
-		slog.Debug("No enabled integrations, cleaning all disk groups", "component", "poller")
-		if removed, rmErr := p.reg.DiskGroup.RemoveAll(); rmErr != nil {
-			slog.Error("Failed to remove disk groups", "component", "poller", "error", rmErr)
-		} else if removed > 0 {
-			slog.Info("Removed all disk groups (no enabled integrations)", "component", "poller", "count", removed)
+		slog.Debug("No enabled integrations, marking all disk groups stale", "component", "poller")
+		if marked, markErr := p.reg.DiskGroup.MarkAllStale(); markErr != nil {
+			slog.Error("Failed to mark disk groups stale", "component", "poller", "error", markErr)
+		} else if marked > 0 {
+			slog.Info("Marked all disk groups stale (no enabled integrations)", "component", "poller", "count", marked)
+		}
+		// Still run the reaper — stale groups from previous cycles may have expired
+		if reaped, reapErr := p.reg.DiskGroup.ReapStale(prefs.DiskGroupGracePeriodDays); reapErr != nil {
+			slog.Error("Failed to reap stale disk groups", "component", "poller", "error", reapErr)
+		} else if reaped > 0 {
+			slog.Info("Reaped expired stale disk groups", "component", "poller", "count", reaped)
 		}
 		return
 	}
@@ -377,10 +383,17 @@ func (p *Poller) poll() {
 	if len(mediaMounts) == 0 && !fetched.anyDiskSuccess {
 		slog.Warn("Skipping disk group reconciliation — no disk reporters returned data",
 			"component", "poller")
-	} else if deleted, cleanErr := p.reg.DiskGroup.ReconcileActiveMounts(mediaMounts); cleanErr != nil {
-		slog.Error("Failed to clean orphaned disk groups", "component", "poller", "error", cleanErr)
-	} else if deleted > 0 {
-		slog.Info("Removed orphaned disk groups", "component", "poller", "count", deleted)
+	} else if stale, cleanErr := p.reg.DiskGroup.ReconcileActiveMounts(mediaMounts); cleanErr != nil {
+		slog.Error("Failed to reconcile disk groups", "component", "poller", "error", cleanErr)
+	} else if stale > 0 {
+		slog.Info("Marked orphaned disk groups stale", "component", "poller", "count", stale)
+	}
+
+	// Reap stale disk groups whose grace period has expired
+	if reaped, reapErr := p.reg.DiskGroup.ReapStale(prefs.DiskGroupGracePeriodDays); reapErr != nil {
+		slog.Error("Failed to reap stale disk groups", "component", "poller", "error", reapErr)
+	} else if reaped > 0 {
+		slog.Info("Reaped expired stale disk groups", "component", "poller", "count", reaped)
 	}
 
 	// Signal the deletion service with the batch size so it knows how many

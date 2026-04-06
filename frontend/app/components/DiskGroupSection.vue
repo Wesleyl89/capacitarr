@@ -4,13 +4,14 @@
     :initial="{ opacity: 0, y: 12 }"
     :enter="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 24 } }"
     class="overflow-hidden"
+    :class="{ 'opacity-60': isStale }"
   >
     <UiCardContent class="pt-5 pb-4">
       <!-- Top row: icon + path + badges -->
       <div class="flex items-start gap-3 mb-4">
         <div
           class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-          :class="statusBgColor"
+          :class="isStale ? 'bg-muted' : statusBgColor"
         >
           <component :is="HardDriveIcon" class="w-5 h-5 text-white" />
         </div>
@@ -36,7 +37,10 @@
                 </UiTooltipContent>
               </UiTooltip>
             </UiTooltipProvider>
-            <UiBadge :variant="modeBadgeVariant" class="text-[10px] px-1.5 py-0">
+            <UiBadge v-if="isStale" variant="secondary" class="text-[10px] px-1.5 py-0">
+              Stale
+            </UiBadge>
+            <UiBadge v-else :variant="modeBadgeVariant" class="text-[10px] px-1.5 py-0">
               {{ modeBadgeLabel }}
             </UiBadge>
           </div>
@@ -50,6 +54,9 @@
             >
               📌 Custom
             </UiBadge>
+          </span>
+          <span v-if="isStale" class="block text-[10px] text-muted-foreground/60">
+            Last seen {{ staleAgo }}
           </span>
         </div>
       </div>
@@ -125,6 +132,7 @@ import { HardDriveIcon, TrendingUpIcon, TrendingDownIcon, ClockIcon } from 'luci
 import { formatBytes, diskStatusBgClass } from '~/utils/format';
 import { MODE_AUTO, MODE_APPROVAL, MODE_SUNSET } from '~/constants';
 import type { DiskGroup } from '~/types/api';
+import { useTimeAgo } from '@vueuse/core';
 
 const props = defineProps<{
   group: DiskGroup;
@@ -133,6 +141,14 @@ const props = defineProps<{
 }>();
 
 const api = useApi();
+
+/** Whether this disk group is stale (not reported by any integration). */
+const isStale = computed(() => !!props.group.staleSince);
+
+/** Human-readable "X ago" string for when the group went stale. */
+const staleAgo = useTimeAgo(() =>
+  props.group.staleSince ? new Date(props.group.staleSince) : new Date(),
+);
 
 /** Mode badge variant — matches UiBadge styling convention. */
 const modeBadgeVariant = computed(() => {

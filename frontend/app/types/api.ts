@@ -47,6 +47,7 @@ export interface DiskGroup {
   targetPct: number;
   mode: string;
   sunsetPct?: number | null;
+  staleSince?: string | null;
   integrations?: DiskGroupIntegration[];
   createdAt: string;
   updatedAt: string;
@@ -76,6 +77,7 @@ export interface PreferenceSet {
   savedDurationDays: number;
   savedLabel: string;
   backupRetentionDays: number;
+  diskGroupGracePeriodDays: number;
   logLevelOverridden: boolean; // true when DEBUG=true env var pins log level to debug
   updatedAt: string;
 }

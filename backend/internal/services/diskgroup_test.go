@@ -2,6 +2,7 @@ package services
 
 import (
 	"testing"
+	"time"
 
 	"capacitarr/internal/db"
 	"capacitarr/internal/integrations"
@@ -202,7 +203,7 @@ func TestDiskGroupService_RemoveAll_Empty(t *testing.T) {
 	}
 }
 
-func TestDiskGroupService_ReconcileActiveMounts(t *testing.T) {
+func TestDiskGroupService_ReconcileActiveMounts_MarksStaleInsteadOfDeleting(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewDiskGroupService(database, bus)
@@ -213,25 +214,28 @@ func TestDiskGroupService_ReconcileActiveMounts(t *testing.T) {
 
 	// Only /mnt/a is still active
 	activeMounts := map[string]bool{"/mnt/a": true}
-	deleted, err := svc.ReconcileActiveMounts(activeMounts)
+	stale, err := svc.ReconcileActiveMounts(activeMounts)
 	if err != nil {
 		t.Fatalf("ReconcileActiveMounts error: %v", err)
 	}
-	if deleted != 2 {
-		t.Errorf("expected 2 deleted, got %d", deleted)
+	if stale != 2 {
+		t.Errorf("expected 2 newly stale, got %d", stale)
 	}
 
-	// Verify only /mnt/a remains
+	// All 3 groups should still exist — stale ones are not deleted
 	groups, _ := svc.List()
-	if len(groups) != 1 {
-		t.Fatalf("expected 1 disk group, got %d", len(groups))
+	if len(groups) != 3 {
+		t.Fatalf("expected 3 disk groups (stale not deleted), got %d", len(groups))
 	}
-	if groups[0].MountPath != "/mnt/a" {
-		t.Errorf("expected remaining mount '/mnt/a', got %q", groups[0].MountPath)
+
+	// Verify stale_since is set on orphaned groups
+	staleGroups, _ := svc.ListStale()
+	if len(staleGroups) != 2 {
+		t.Fatalf("expected 2 stale groups, got %d", len(staleGroups))
 	}
 }
 
-func TestDiskGroupService_ReconcileActiveMounts_EmptyMapDeletesAll(t *testing.T) {
+func TestDiskGroupService_ReconcileActiveMounts_EmptyMapMarksAllStale(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewDiskGroupService(database, bus)
@@ -240,33 +244,36 @@ func TestDiskGroupService_ReconcileActiveMounts_EmptyMapDeletesAll(t *testing.T)
 	database.Create(&db.DiskGroup{MountPath: "/mnt/a", TotalBytes: 100, UsedBytes: 50, ThresholdPct: 90, TargetPct: 80})
 	database.Create(&db.DiskGroup{MountPath: "/mnt/b", TotalBytes: 200, UsedBytes: 100, ThresholdPct: 92, TargetPct: 82})
 
-	// Empty active mounts — simulates all disk reporters being unreachable.
-	// Without the poller guard, this call deletes all groups; subsequent
-	// Upsert() calls recreate them with default 85/75 thresholds, silently
-	// losing the user's 90/80 and 92/82 customizations.
-	deleted, err := svc.ReconcileActiveMounts(map[string]bool{})
+	// Empty active mounts marks groups stale but doesn't delete them.
+	stale, err := svc.ReconcileActiveMounts(map[string]bool{})
 	if err != nil {
 		t.Fatalf("ReconcileActiveMounts error: %v", err)
 	}
-	if deleted != 2 {
-		t.Errorf("expected 2 deleted, got %d", deleted)
+	if stale != 2 {
+		t.Errorf("expected 2 stale, got %d", stale)
 	}
 
+	// Groups still exist — thresholds are preserved
 	groups, _ := svc.List()
-	if len(groups) != 0 {
-		t.Fatalf("expected 0 groups after reconcile with empty map, got %d", len(groups))
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups after reconcile (stale, not deleted), got %d", len(groups))
 	}
 
-	// Recreate via Upsert (simulating next successful poll) — thresholds revert to defaults
+	// Resurrect via Upsert — thresholds should be preserved (not reverted to defaults)
 	g, err := svc.Upsert(integrations.DiskSpace{Path: "/mnt/a", TotalBytes: 100, FreeBytes: 50})
 	if err != nil {
 		t.Fatalf("Upsert error: %v", err)
 	}
-	if g.ThresholdPct != 85 {
-		t.Errorf("expected default threshold 85 after delete+recreate, got %f", g.ThresholdPct)
+	// Reload to get the preserved threshold values
+	reloaded, _ := svc.GetByID(g.ID)
+	if reloaded.ThresholdPct != 90 {
+		t.Errorf("expected preserved threshold 90, got %f", reloaded.ThresholdPct)
 	}
-	if g.TargetPct != 75 {
-		t.Errorf("expected default target 75 after delete+recreate, got %f", g.TargetPct)
+	if reloaded.TargetPct != 80 {
+		t.Errorf("expected preserved target 80, got %f", reloaded.TargetPct)
+	}
+	if reloaded.StaleSince != nil {
+		t.Error("expected stale_since to be nil after resurrection")
 	}
 }
 
@@ -517,5 +524,250 @@ func TestDiskGroupService_HasSunsetModeForIntegration_MultipleGroups_OneSunset(t
 	}
 	if !has {
 		t.Error("expected true when at least one linked disk group is in sunset mode")
+	}
+}
+
+// =============================================================================
+// Stale lifecycle tests
+// =============================================================================
+
+func TestDiskGroupService_MarkStale_SetsTimestamp(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500})
+
+	if err := svc.MarkStale(1); err != nil {
+		t.Fatalf("MarkStale error: %v", err)
+	}
+
+	group, _ := svc.GetByID(1)
+	if group.StaleSince == nil {
+		t.Fatal("expected stale_since to be set")
+	}
+}
+
+func TestDiskGroupService_MarkStale_Idempotent(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	earlier := time.Now().Add(-24 * time.Hour)
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500, StaleSince: &earlier})
+
+	// Calling MarkStale on an already-stale group should not reset the clock
+	if err := svc.MarkStale(1); err != nil {
+		t.Fatalf("MarkStale error: %v", err)
+	}
+
+	group, _ := svc.GetByID(1)
+	if group.StaleSince == nil {
+		t.Fatal("expected stale_since to remain set")
+	}
+	// The stale_since should still be approximately 24 hours ago, not now
+	if time.Since(*group.StaleSince) < 23*time.Hour {
+		t.Error("expected stale_since to remain at the original timestamp, not reset to now")
+	}
+}
+
+func TestDiskGroupService_MarkAllStale_MarksOnlyActive(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	earlier := time.Now().Add(-48 * time.Hour)
+	database.Create(&db.DiskGroup{MountPath: "/mnt/a", TotalBytes: 100, UsedBytes: 50})                        // active
+	database.Create(&db.DiskGroup{MountPath: "/mnt/b", TotalBytes: 200, UsedBytes: 100, StaleSince: &earlier}) // already stale
+	database.Create(&db.DiskGroup{MountPath: "/mnt/c", TotalBytes: 300, UsedBytes: 150})                       // active
+
+	marked, err := svc.MarkAllStale()
+	if err != nil {
+		t.Fatalf("MarkAllStale error: %v", err)
+	}
+	if marked != 2 {
+		t.Errorf("expected 2 newly stale, got %d", marked)
+	}
+
+	// All 3 should now be stale
+	stale, _ := svc.ListStale()
+	if len(stale) != 3 {
+		t.Errorf("expected 3 stale groups, got %d", len(stale))
+	}
+
+	// The already-stale group's timestamp should NOT have been reset
+	for _, g := range stale {
+		if g.MountPath == "/mnt/b" {
+			if time.Since(*g.StaleSince) < 47*time.Hour {
+				t.Error("expected /mnt/b stale_since to remain at the original timestamp")
+			}
+		}
+	}
+}
+
+func TestDiskGroupService_Upsert_ResurrectsStaleGroup(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	earlier := time.Now().Add(-72 * time.Hour)
+	database.Create(&db.DiskGroup{
+		MountPath:    "/mnt/media",
+		TotalBytes:   1000,
+		UsedBytes:    500,
+		ThresholdPct: 90,
+		TargetPct:    80,
+		StaleSince:   &earlier,
+	})
+
+	// Upsert should resurrect the stale group
+	group, err := svc.Upsert(integrations.DiskSpace{Path: "/mnt/media", TotalBytes: 2000, FreeBytes: 800})
+	if err != nil {
+		t.Fatalf("Upsert error: %v", err)
+	}
+	if group.StaleSince != nil {
+		t.Error("expected stale_since to be nil after resurrection")
+	}
+
+	// Reload and verify thresholds are preserved
+	reloaded, _ := svc.GetByID(group.ID)
+	if reloaded.ThresholdPct != 90 {
+		t.Errorf("expected preserved threshold 90, got %f", reloaded.ThresholdPct)
+	}
+	if reloaded.TargetPct != 80 {
+		t.Errorf("expected preserved target 80, got %f", reloaded.TargetPct)
+	}
+}
+
+func TestDiskGroupService_ReapStale_DeletesExpiredGroups(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	old := time.Now().Add(-10 * 24 * time.Hour) // 10 days ago
+	database.Create(&db.DiskGroup{MountPath: "/mnt/old", TotalBytes: 100, UsedBytes: 50, StaleSince: &old})
+	database.Create(&db.DiskGroup{MountPath: "/mnt/active", TotalBytes: 200, UsedBytes: 100}) // active
+
+	reaped, err := svc.ReapStale(7) // Grace period: 7 days
+	if err != nil {
+		t.Fatalf("ReapStale error: %v", err)
+	}
+	if reaped != 1 {
+		t.Errorf("expected 1 reaped, got %d", reaped)
+	}
+
+	groups, _ := svc.List()
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group remaining, got %d", len(groups))
+	}
+	if groups[0].MountPath != "/mnt/active" {
+		t.Errorf("expected remaining group '/mnt/active', got %q", groups[0].MountPath)
+	}
+}
+
+func TestDiskGroupService_ReapStale_PreservesRecentlyStaleGroups(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	recent := time.Now().Add(-2 * 24 * time.Hour) // 2 days ago
+	database.Create(&db.DiskGroup{MountPath: "/mnt/recent", TotalBytes: 100, UsedBytes: 50, StaleSince: &recent})
+
+	reaped, err := svc.ReapStale(7) // Grace period: 7 days — should NOT reap 2-day-old stale group
+	if err != nil {
+		t.Fatalf("ReapStale error: %v", err)
+	}
+	if reaped != 0 {
+		t.Errorf("expected 0 reaped (within grace period), got %d", reaped)
+	}
+}
+
+func TestDiskGroupService_ReapStale_ZeroGracePeriod(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	recent := time.Now().Add(-1 * time.Hour) // 1 hour ago
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 100, UsedBytes: 50, StaleSince: &recent})
+
+	reaped, err := svc.ReapStale(0) // Grace period: 0 = reap all stale immediately
+	if err != nil {
+		t.Fatalf("ReapStale error: %v", err)
+	}
+	if reaped != 1 {
+		t.Errorf("expected 1 reaped with zero grace period, got %d", reaped)
+	}
+}
+
+func TestDiskGroupService_ReapStale_ClearsJunctionTable(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	old := time.Now().Add(-10 * 24 * time.Hour)
+	database.Create(&db.DiskGroup{MountPath: "/mnt/media", TotalBytes: 1000, UsedBytes: 500, StaleSince: &old})
+	database.Create(&db.IntegrationConfig{Name: "Firefly Sonarr", Type: "sonarr", URL: "http://localhost:8989", APIKey: "key1"})
+	_ = svc.SyncIntegrationLinks(1, []uint{1})
+
+	_, err := svc.ReapStale(7)
+	if err != nil {
+		t.Fatalf("ReapStale error: %v", err)
+	}
+
+	var count int64
+	database.Model(&db.DiskGroupIntegration{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 junction rows after reap, got %d", count)
+	}
+}
+
+func TestDiskGroupService_ListStale_ReturnsOnlyStale(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	earlier := time.Now().Add(-24 * time.Hour)
+	database.Create(&db.DiskGroup{MountPath: "/mnt/active", TotalBytes: 100, UsedBytes: 50})
+	database.Create(&db.DiskGroup{MountPath: "/mnt/stale", TotalBytes: 200, UsedBytes: 100, StaleSince: &earlier})
+
+	stale, err := svc.ListStale()
+	if err != nil {
+		t.Fatalf("ListStale error: %v", err)
+	}
+	if len(stale) != 1 {
+		t.Fatalf("expected 1 stale group, got %d", len(stale))
+	}
+	if stale[0].MountPath != "/mnt/stale" {
+		t.Errorf("expected stale mount '/mnt/stale', got %q", stale[0].MountPath)
+	}
+}
+
+func TestDiskGroupService_ImportUpsert_ResurrectsStale(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewDiskGroupService(database, bus)
+
+	earlier := time.Now().Add(-48 * time.Hour)
+	database.Create(&db.DiskGroup{
+		MountPath:    "/mnt/media",
+		TotalBytes:   1000,
+		UsedBytes:    500,
+		ThresholdPct: 85,
+		TargetPct:    75,
+		StaleSince:   &earlier,
+	})
+
+	// Import should resurrect the stale group and update thresholds
+	err := svc.ImportUpsert("/mnt/media", 92, 82, nil)
+	if err != nil {
+		t.Fatalf("ImportUpsert error: %v", err)
+	}
+
+	group, _ := svc.GetByID(1)
+	if group.StaleSince != nil {
+		t.Error("expected stale_since to be nil after import resurrection")
+	}
+	if group.ThresholdPct != 92 {
+		t.Errorf("expected threshold 92, got %f", group.ThresholdPct)
 	}
 }
