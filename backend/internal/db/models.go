@@ -24,12 +24,12 @@ type DiskGroup struct {
 	MountPath          string     `gorm:"uniqueIndex;not null" json:"mountPath"`
 	TotalBytes         int64      `gorm:"not null" json:"totalBytes"`
 	UsedBytes          int64      `gorm:"not null" json:"usedBytes"`
-	TotalBytesOverride *int64     `json:"totalBytesOverride,omitempty"`           // User-defined total; nil = use detected
-	ThresholdPct       float64    `gorm:"default:85" json:"thresholdPct"`         // Clean up at this % (escalation trigger in sunset mode)
-	TargetPct          float64    `gorm:"default:75" json:"targetPct"`            // Free down to this %
-	Mode               string     `gorm:"not null;default:'dry-run'" json:"mode"` // "dry-run", "approval", "auto", "sunset" — per-group execution mode
-	SunsetPct          *float64   `json:"sunsetPct,omitempty"`                    // Sunset countdown starts at this %; NULL until explicitly configured
-	StaleSince         *time.Time `json:"staleSince,omitempty"`                   // Non-nil = stale (not reported by any integration); nil = active
+	TotalBytesOverride *int64     `json:"totalBytesOverride,omitempty"`            // User-defined total; nil = use detected
+	ThresholdPct       float64    `gorm:"not null;default:85" json:"thresholdPct"` // Clean up at this % (escalation trigger in sunset mode)
+	TargetPct          float64    `gorm:"not null;default:75" json:"targetPct"`    // Free down to this %
+	Mode               string     `gorm:"not null;default:'dry-run'" json:"mode"`  // "dry-run", "approval", "auto", "sunset" — per-group execution mode
+	SunsetPct          *float64   `json:"sunsetPct,omitempty"`                     // Sunset countdown starts at this %; NULL until explicitly configured
+	StaleSince         *time.Time `json:"staleSince,omitempty"`                    // Non-nil = stale (not reported by any integration); nil = active
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 }

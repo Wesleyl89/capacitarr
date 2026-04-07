@@ -237,38 +237,46 @@ func (s *SchemaService) hasColumn(sqlDB *sql.DB, tableName, column string) bool 
 	return false
 }
 
-// repair runs AutoMigrate on all GORM models to create missing tables and
-// add missing columns. Returns a list of human-readable descriptions of
-// changes made. AutoMigrate is additive only — it never drops tables, columns,
-// or data.
+// repair creates missing tables using AutoMigrate. Only tables that do NOT
+// already exist are passed to AutoMigrate. Tables that exist are managed by
+// Goose migrations and must NOT be touched — GORM's AutoMigrate on SQLite
+// triggers destructive temp-table rebuilds when it detects DDL differences
+// between GORM tags and the Goose-created schema (e.g., NOT NULL, DEFAULT
+// clauses, comment syntax). This causes data loss: the rebuild copies only
+// columns it knows about, resetting user-customized values (like thresholds)
+// to schema defaults.
 func (s *SchemaService) repair() []string {
 	migrator := s.database.Migrator()
 	var repairs []string
 
-	// Snapshot which tables exist before AutoMigrate
-	tablesBefore := make(map[string]bool)
+	// Collect only models whose tables are missing
+	var missingModels []any
 	for _, model := range allModels {
-		if migrator.HasTable(model) {
-			tablesBefore[tableName(model)] = true
+		if !migrator.HasTable(model) {
+			missingModels = append(missingModels, model)
 		}
 	}
 
-	// Run AutoMigrate on all models
-	if err := s.database.AutoMigrate(allModels...); err != nil {
+	if len(missingModels) == 0 {
+		return repairs
+	}
+
+	// Run AutoMigrate only on missing tables
+	if err := s.database.AutoMigrate(missingModels...); err != nil {
 		slog.Error("AutoMigrate failed", "component", "schema", "error", err)
 		return repairs
 	}
 
-	// Report what changed
-	for _, model := range allModels {
+	// Report what was created
+	for _, model := range missingModels {
 		name := tableName(model)
-		if !tablesBefore[name] && migrator.HasTable(model) {
+		if migrator.HasTable(model) {
 			repairs = append(repairs, fmt.Sprintf("created table %s", name))
 		}
 	}
 
 	if len(repairs) > 0 {
-		slog.Info("AutoMigrate applied repairs", "component", "schema", "repairs", strings.Join(repairs, ", "))
+		slog.Info("AutoMigrate created missing tables", "component", "schema", "repairs", strings.Join(repairs, ", "))
 	}
 
 	return repairs
