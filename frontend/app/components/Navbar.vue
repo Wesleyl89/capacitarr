@@ -41,7 +41,7 @@
           </NuxtLink>
         </div>
 
-        <!-- Nav Links (right-aligned) -->
+        <!-- Nav Links – desktop (right-aligned) -->
         <nav aria-label="Main navigation" class="hidden sm:flex items-center gap-1">
           <NuxtLink
             v-for="link in navLinks"
@@ -58,13 +58,33 @@
             {{ link.label }}
           </NuxtLink>
         </nav>
+
+        <!-- Nav Links – mobile overflow menu -->
+        <UiDropdownMenu>
+          <UiDropdownMenuTrigger as-child>
+            <UiButton variant="ghost" size="icon" class="sm:hidden" :aria-label="$t('nav.menu')">
+              <component :is="EllipsisVerticalIcon" class="w-5 h-5" />
+            </UiButton>
+          </UiDropdownMenuTrigger>
+          <UiDropdownMenuContent align="end">
+            <UiDropdownMenuItem
+              v-for="link in navLinks"
+              :key="link.to"
+              class="cursor-pointer"
+              :class="isActive(link.to) ? 'text-primary' : ''"
+              @click="$router.push(link.to)"
+            >
+              {{ link.label }}
+            </UiDropdownMenuItem>
+          </UiDropdownMenuContent>
+        </UiDropdownMenu>
       </div>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { DatabaseIcon } from 'lucide-vue-next';
+import { DatabaseIcon, EllipsisVerticalIcon } from 'lucide-vue-next';
 
 const { fadeIn } = useMotionPresets();
 const { uiVersion, apiVersion } = useVersion();

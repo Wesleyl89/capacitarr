@@ -35,6 +35,7 @@
   "nav.auditLog": "Audit Log",
   "nav.settings": "Settings",
   "nav.help": "Help",
+  "nav.menu": "Navigation menu",
   "nav.logout": "Logout",
   "nav.about": "About Capacitarr",
   "nav.aboutDescription": "Automated media library capacity management — score, rank, and clean up your *arr libraries.",
