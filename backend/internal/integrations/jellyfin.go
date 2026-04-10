@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -782,11 +783,14 @@ func (j *JellyfinClient) GetPosterImage(itemID string) ([]byte, string, error) {
 }
 
 // UploadPosterImage uploads a new primary poster to a Jellyfin item.
-// Jellyfin accepts raw image bytes with the appropriate Content-Type header
-// and requires the X-Emby-Token auth header alongside it.
+// Jellyfin's SetItemImage endpoint unconditionally wraps the request body in a
+// FromBase64Transform, so the payload must be the Base64-encoded image string
+// (not raw bytes). The Content-Type header still describes the decoded image
+// format so Jellyfin knows the file extension.
 func (j *JellyfinClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
 	fullURL := j.URL + "/Items/" + itemID + "/Images/Primary"
-	return DoAPIRequestWithHeaders("POST", fullURL, imageData, map[string]string{
+	encoded := []byte(base64.StdEncoding.EncodeToString(imageData))
+	return DoAPIRequestWithHeaders("POST", fullURL, encoded, map[string]string{
 		"Content-Type": contentType,
 		"X-Emby-Token": j.APIKey,
 	})
