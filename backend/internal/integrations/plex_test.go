@@ -1384,15 +1384,27 @@ func TestPlexExtractTMDbID(t *testing.T) {
 const testPlexPathHistory = "/status/sessions/history/all"
 const testPlexPathAccounts = "/accounts"
 
-// plexHistoryJSON builds a JSON history response for testing. Entries are embedded
-// directly; totalSize controls the pagination totalSize field.
-func plexHistoryJSON(totalSize int, entries []plexHistoryEntry) string {
+// encodePlexHistory writes a JSON history response to w using json.NewEncoder
+// (matching the pattern used by all existing test mock handlers).
+func encodePlexHistory(t *testing.T, w http.ResponseWriter, totalSize int, entries []plexHistoryEntry) {
+	t.Helper()
 	resp := plexHistoryResponse{}
 	resp.MediaContainer.Size = len(entries)
 	resp.MediaContainer.TotalSize = totalSize
 	resp.MediaContainer.Metadata = entries
-	b, _ := json.Marshal(resp)
-	return string(b)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		t.Fatalf("Failed to encode history response: %v", err)
+	}
+}
+
+// encodePlexAccounts writes a JSON accounts response to w using json.NewEncoder.
+func encodePlexAccounts(t *testing.T, w http.ResponseWriter, accounts []plexAccount) {
+	t.Helper()
+	resp := plexAccountsResponse{}
+	resp.MediaContainer.Account = accounts
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		t.Fatalf("Failed to encode accounts response: %v", err)
+	}
 }
 
 func TestPlexClient_fetchAllHistory_SinglePage(t *testing.T) {
@@ -1403,7 +1415,7 @@ func TestPlexClient_fetchAllHistory_SinglePage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == testPlexPathHistory {
-			_, _ = w.Write([]byte(plexHistoryJSON(2, entries)))
+			encodePlexHistory(t, w, 2, entries)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -1440,14 +1452,14 @@ func TestPlexClient_fetchAllHistory_MultiPage(t *testing.T) {
 					{RatingKey: "102", Type: "movie", ViewedAt: 1700000002, AccountID: 1},
 					{RatingKey: "103", Type: "movie", ViewedAt: 1700000003, AccountID: 2},
 				}
-				_, _ = w.Write([]byte(plexHistoryJSON(5, entries)))
+				encodePlexHistory(t, w, 5, entries)
 			} else {
 				// Second page: return remaining 2 entries
 				entries := []plexHistoryEntry{
 					{RatingKey: "104", Type: "movie", ViewedAt: 1700000004, AccountID: 2},
 					{RatingKey: "105", Type: "movie", ViewedAt: 1700000005, AccountID: 3},
 				}
-				_, _ = w.Write([]byte(plexHistoryJSON(5, entries)))
+				encodePlexHistory(t, w, 5, entries)
 			}
 			return
 		}
@@ -1476,7 +1488,7 @@ func TestPlexClient_fetchAllHistory_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == testPlexPathHistory {
-			_, _ = w.Write([]byte(plexHistoryJSON(0, nil)))
+			encodePlexHistory(t, w, 0, nil)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -1504,7 +1516,7 @@ func TestPlexClient_fetchAllHistory_MidPaginationError(t *testing.T) {
 					{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 1},
 					{RatingKey: "102", Type: "movie", ViewedAt: 1700000002, AccountID: 2},
 				}
-				_, _ = w.Write([]byte(plexHistoryJSON(10, entries)))
+				encodePlexHistory(t, w, 10, entries)
 			} else {
 				// Second page fails
 				w.WriteHeader(http.StatusInternalServerError)
@@ -1556,7 +1568,7 @@ func TestPlexClient_fetchAllHistory_EntryDeserialization(t *testing.T) {
 					AccountID:            42,
 				},
 			}
-			_, _ = w.Write([]byte(plexHistoryJSON(1, entries)))
+			encodePlexHistory(t, w, 1, entries)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -1595,14 +1607,6 @@ func TestPlexClient_fetchAllHistory_EntryDeserialization(t *testing.T) {
 
 // ─── GetBulkWatchData multi-user history tests ─────────────────────────────
 
-// plexAccountsJSON serializes accounts for the /accounts mock endpoint.
-func plexAccountsJSON(accounts []plexAccount) string {
-	resp := plexAccountsResponse{}
-	resp.MediaContainer.Account = accounts
-	b, _ := json.Marshal(resp)
-	return string(b)
-}
-
 // newPlexMultiUserMockServer creates an httptest.Server that serves all endpoints
 // needed for a full GetBulkWatchData cycle: library sections, library items,
 // session history, and accounts. Callers provide history entries and accounts.
@@ -1637,9 +1641,9 @@ func newPlexMultiUserMockServer(
 				t.Fatalf("Failed to encode: %v", err)
 			}
 		case testPlexPathHistory:
-			_, _ = w.Write([]byte(plexHistoryJSON(len(history), history)))
+			encodePlexHistory(t, w, len(history), history)
 		case testPlexPathAccounts:
-			_, _ = w.Write([]byte(plexAccountsJSON(accounts)))
+			encodePlexAccounts(t, w, accounts)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -1862,7 +1866,7 @@ func TestPlexClient_GetBulkWatchData_AccountsFallback(t *testing.T) {
 				t.Fatalf("Failed to encode: %v", err)
 			}
 		case testPlexPathHistory:
-			_, _ = w.Write([]byte(plexHistoryJSON(len(history), history)))
+			encodePlexHistory(t, w, len(history), history)
 		case testPlexPathAccounts:
 			// Accounts endpoint returns 500
 			w.WriteHeader(http.StatusInternalServerError)
