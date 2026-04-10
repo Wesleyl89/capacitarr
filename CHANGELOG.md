@@ -1,3 +1,8 @@
+## [3.2.2] - 2026-04-10
+
+### 🐛 Bug Fixes
+
+- *(plex)* Use session history API for multi-user play counts ([25b84ac](https://github.com/Ghent/capacitarr/commit/25b84ac6263cedea1409c073b29dfc167d91bde0))
 ## [3.2.1] - 2026-04-07
 
 ### 🐛 Bug Fixes
