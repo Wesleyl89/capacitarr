@@ -127,7 +127,7 @@ These jobs are defined in `.github/workflows/ci.yml`. Lint and test jobs run in 
 
 | Job | Group | Tool / Action | Purpose |
 |-----|-------|---------------|---------|
-| `lint-go` | lint | `golangci/golangci-lint-action@v7` (golangci-lint v2.11.4) | Go linting |
+| `lint-go` | lint | `golangci/golangci-lint:v2.11.4` Docker image | Go linting |
 | `lint-frontend` | lint | pnpm + Node.js 24 | ESLint + Prettier + TypeScript typecheck |
 | `test-go` | test | Go 1.26 | Go unit tests |
 | `test-frontend` | test | pnpm + Vitest | Frontend unit tests |
