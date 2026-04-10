@@ -1,8 +1,9 @@
 # Bubble Tea TUI/CLI Frontend
 
-> **Status:** ⏸️ Deferred — previous implementation on stale `feature/tui-cli` branch (deleted, recoverable via SHA `57b9d63`)
+> **Status:** ❌ Will not implement
 > **Created:** 2026-03-18
-> **Original work:** 21 commits implementing a full terminal UI and CLI for Capacitarr
+> **Closed:** 2026-04-08
+> **Original work:** 21 commits implementing a full terminal UI and CLI for Capacitarr (stale `feature/tui-cli` branch, recoverable via SHA `57b9d63`)
 
 ## Summary
 
@@ -28,9 +29,9 @@ The `feature/tui-cli` branch contained a near-complete implementation:
 | 12 | Non-interactive CLI — `capacitarr status`, `capacitarr approve <id>`, etc. | ✅ Complete |
 | 13 | Build pipeline integration — TUI binary included in release | ✅ Complete |
 
-## Why It Was Deferred
+## Why It Will Not Be Implemented
 
-The branch was based on an older version of `main` (before queue management, deletion queue, preview service, and many other features). The API surface changed significantly, making the TUI incompatible with the current backend. Rather than rebasing 21 commits, the decision was made to defer and potentially reimplement against the 2.0 API.
+The branch was based on an older version of `main` (before queue management, deletion queue, preview service, and many other features). The API surface changed significantly, making the TUI incompatible with the current backend. The cost of reimplementation against the current or 2.0 API does not justify the benefit — the web UI covers all use cases adequately.
 
 ## Architecture
 
@@ -46,16 +47,8 @@ The branch was based on an older version of `main` (before queue management, del
 - `github.com/charmbracelet/glamour` — Markdown rendering
 - `github.com/NimbleMarkets/ntcharts` — Terminal charts (sparklines, history)
 
-## Relationship to 2.0
+## Historical Notes
 
-The TUI is **not part of the 2.0 plan**. It's a separate initiative that could be revisited after 2.0 ships, when the API surface is stable. If reimplemented, it should target the 2.0 API (which includes the new analytics endpoints, per-integration thresholds, and Insights data).
+The TUI was never part of the 2.0 plan. The non-interactive CLI commands (`capacitarr status`, `capacitarr approve`, `capacitarr run`) were independently valuable as thin API wrappers, but are also not planned.
 
-The non-interactive CLI commands (`capacitarr status`, `capacitarr approve`, `capacitarr run`) are independently valuable and could be added to 2.0 without the full TUI — they're thin wrappers around API calls.
-
-## Recovery
-
-The stale branch commits are recoverable via:
-```bash
-git checkout -b feature/tui-cli-archive 57b9d63
-```
-This will work until git garbage collects unreachable objects (typically 30-90 days).
+The stale branch commits were recoverable via SHA `57b9d63`, but may have been garbage collected by now (branch deleted prior to 2026-03-18).
