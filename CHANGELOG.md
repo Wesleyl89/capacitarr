@@ -1,3 +1,9 @@
+## [3.2.3] - 2026-04-10
+
+### 🐛 Bug Fixes
+
+- *(nav)* Add mobile navigation dropdown menu ([e0930e8](https://github.com/Ghent/capacitarr/commit/e0930e83c960c42f8a4b864b41a4ca52be3672ef)) — reported by @kiwi3007 ([#20](https://github.com/Ghent/capacitarr/issues/20))
+- *(jellyfin)* Base64-encode poster image uploads ([ca117b1](https://github.com/Ghent/capacitarr/commit/ca117b10f6516381a8e0d28e423530c0f9943342)) — reported by @yannolerobot ([#21](https://github.com/Ghent/capacitarr/issues/21))
 ## [3.2.2] - 2026-04-10
 
 ### 🐛 Bug Fixes
