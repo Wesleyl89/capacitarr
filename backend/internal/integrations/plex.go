@@ -3,6 +3,7 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"sort"
@@ -112,6 +113,46 @@ type plexMetadata struct {
 type plexGUID struct {
 	ID string `json:"id"` // e.g. "tmdb://12345", "imdb://tt1234567", "tvdb://54321"
 }
+
+// plexHistoryResponse maps /status/sessions/history/all response.
+// The Plex history API returns individual play events for all users (admin token required).
+// Pagination is controlled via X-Plex-Container-Start and X-Plex-Container-Size query params.
+type plexHistoryResponse struct {
+	MediaContainer struct {
+		Size      int                `json:"size"`      // Number of entries in this page
+		TotalSize int                `json:"totalSize"` // Total number of history entries
+		Metadata  []plexHistoryEntry `json:"Metadata"`
+	} `json:"MediaContainer"`
+}
+
+// plexHistoryEntry represents a single play event from Plex session history.
+type plexHistoryEntry struct {
+	RatingKey            string `json:"ratingKey"`
+	ParentRatingKey      string `json:"parentRatingKey"`
+	GrandparentRatingKey string `json:"grandparentRatingKey"`
+	Type                 string `json:"type"`     // movie, episode, track
+	ViewedAt             int64  `json:"viewedAt"` // Unix epoch timestamp
+	AccountID            int    `json:"accountID"`
+}
+
+// plexAccountsResponse maps /accounts response for resolving account IDs to usernames.
+type plexAccountsResponse struct {
+	MediaContainer struct {
+		Account []plexAccount `json:"Account"`
+	} `json:"MediaContainer"`
+}
+
+// plexAccount represents a Plex managed/shared user account.
+type plexAccount struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// plexHistoryPageSize controls the number of history entries per API request in
+// fetchAllHistory(). 1000 is a good balance — small enough to keep individual
+// response sizes manageable, large enough to minimize round trips. A typical
+// server has 1,000–50,000 total history entries = 1–50 API calls.
+const plexHistoryPageSize = 1000
 
 // plexTMDbIDRegex matches TMDb IDs in Plex GUID strings like "tmdb://12345".
 var plexTMDbIDRegex = regexp.MustCompile(`^tmdb://(\d+)$`)
@@ -310,22 +351,233 @@ type PlexLibrarySection struct {
 	Type  string `json:"type"`
 }
 
-// GetBulkWatchData returns a map of TMDb ID to watch data from the cached Plex
-// library. Uses getMediaItems() to avoid redundant library fetches — the same
-// cached data is shared with GetCollectionMemberships, GetLabelMemberships,
-// GetTMDbToRatingKeyMap, etc.
+// fetchAccounts retrieves the account ID → username mapping from the Plex server.
+// Returns an empty map (not nil) on error — this is non-fatal since callers fall
+// back to using numeric account IDs in WatchedByUsers.
+func (p *PlexClient) fetchAccounts() map[int]string {
+	body, err := p.doRequest("/accounts")
+	if err != nil {
+		slog.Debug("Failed to fetch Plex accounts — will use account IDs instead of names",
+			"component", "plex", "error", err)
+		return make(map[int]string)
+	}
+
+	var resp plexAccountsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		slog.Debug("Failed to parse Plex accounts response",
+			"component", "plex", "error", err)
+		return make(map[int]string)
+	}
+
+	accounts := make(map[int]string, len(resp.MediaContainer.Account))
+	for _, a := range resp.MediaContainer.Account {
+		if a.Name != "" {
+			accounts[a.ID] = a.Name
+		}
+	}
+	return accounts
+}
+
+// fetchAllHistory fetches the complete play history from Plex in paginated chunks.
+// Uses GET /status/sessions/history/all which returns play events for ALL users
+// when called with an admin token. Pagination uses X-Plex-Container-Start and
+// X-Plex-Container-Size query parameters.
+//
+// On mid-pagination failure, returns accumulated entries with a nil error (partial
+// data is better than no data for large libraries). On total failure (first page
+// errors), returns nil entries with the error.
+func (p *PlexClient) fetchAllHistory() ([]plexHistoryEntry, error) {
+	var allEntries []plexHistoryEntry
+	start := 0
+
+	for {
+		endpoint := fmt.Sprintf(
+			"/status/sessions/history/all?X-Plex-Container-Start=%d&X-Plex-Container-Size=%d",
+			start, plexHistoryPageSize,
+		)
+		body, err := p.doRequest(endpoint)
+		if err != nil {
+			if len(allEntries) > 0 {
+				slog.Warn("Plex history fetch failed mid-pagination — returning partial results",
+					"component", "plex", "accumulated", len(allEntries), "error", err)
+				return allEntries, nil
+			}
+			return nil, fmt.Errorf("plex history: %w", err)
+		}
+
+		var resp plexHistoryResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			if len(allEntries) > 0 {
+				slog.Warn("Plex history parse failed mid-pagination — returning partial results",
+					"component", "plex", "accumulated", len(allEntries), "error", err)
+				return allEntries, nil
+			}
+			return nil, fmt.Errorf("plex history parse: %w", err)
+		}
+
+		allEntries = append(allEntries, resp.MediaContainer.Metadata...)
+
+		// Stop when all records have been fetched or the page was empty
+		if resp.MediaContainer.TotalSize > 0 && len(allEntries) >= resp.MediaContainer.TotalSize {
+			break
+		}
+		if len(resp.MediaContainer.Metadata) == 0 {
+			break
+		}
+		start += len(resp.MediaContainer.Metadata)
+	}
+
+	return allEntries, nil
+}
+
+// GetBulkWatchData returns a map of TMDb ID to watch data aggregated across ALL
+// Plex users. Uses /status/sessions/history/all (admin-only) as the primary source,
+// falling back to per-token viewCount from library metadata if the history endpoint
+// is unavailable (e.g., non-admin token or older Plex server).
+//
+// The history-based path provides correct multi-user play counts, per-user tracking
+// (WatchedByUsers), and accurate LastPlayed timestamps. The fallback path only returns
+// the token owner's watch data (the pre-fix behavior).
 func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
 	items, err := p.getMediaItems()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Plex items for watch data: %w", err)
 	}
 
+	// Build ratingKey → TMDb ID reverse map from cached library metadata.
+	// This translates Plex-native ratingKeys in history entries to TMDb IDs
+	// that the enrichment pipeline uses for matching.
+	ratingKeyToTMDb := make(map[string]int)
+	for _, item := range items {
+		if item.TMDbID > 0 && item.ExternalID != "" {
+			ratingKeyToTMDb[item.ExternalID] = item.TMDbID
+		}
+	}
+
+	// Primary path: fetch all-user history from /status/sessions/history/all
+	history, err := p.fetchAllHistory()
+	if err != nil {
+		slog.Warn("Plex history API unavailable — falling back to per-token viewCount",
+			"component", "plex", "error", err)
+		return p.getBulkWatchDataFallback(items)
+	}
+	if len(history) == 0 {
+		// Empty history is valid (new server, no plays yet) — don't fall back,
+		// return zero-count entries for all library items.
+		return p.buildEmptyWatchData(items), nil
+	}
+
+	// Fetch account ID → username mapping for WatchedByUsers
+	accounts := p.fetchAccounts()
+
+	// Aggregate history entries by effective ratingKey.
+	// Movies: use ratingKey directly.
+	// Episodes: use grandparentRatingKey (the show's key) to aggregate all
+	//           episode watches under the parent show.
+	type historyAgg struct {
+		playCount  int
+		lastPlayed int64 // Unix epoch of most recent play
+		accountIDs map[int]bool
+	}
+	aggByKey := make(map[string]*historyAgg)
+
+	for _, entry := range history {
+		var key string
+		switch MediaType(entry.Type) { //nolint:exhaustive // History only contains movie, episode, track types
+		case MediaTypeEpisode:
+			key = entry.GrandparentRatingKey
+			if key == "" {
+				key = entry.RatingKey // fallback for missing grandparent
+			}
+		default:
+			key = entry.RatingKey
+		}
+		if key == "" {
+			continue
+		}
+
+		agg, ok := aggByKey[key]
+		if !ok {
+			agg = &historyAgg{accountIDs: make(map[int]bool)}
+			aggByKey[key] = agg
+		}
+		agg.playCount++
+		agg.accountIDs[entry.AccountID] = true
+		if entry.ViewedAt > agg.lastPlayed {
+			agg.lastPlayed = entry.ViewedAt
+		}
+	}
+
+	// Map aggregated data to TMDb IDs
+	result := make(map[int]*WatchData)
+	for ratingKey, agg := range aggByKey {
+		tmdbID, ok := ratingKeyToTMDb[ratingKey]
+		if !ok || tmdbID == 0 {
+			continue
+		}
+
+		var lastPlayed *time.Time
+		if agg.lastPlayed > 0 {
+			t := time.Unix(agg.lastPlayed, 0)
+			lastPlayed = &t
+		}
+
+		// Resolve account IDs to usernames
+		users := make([]string, 0, len(agg.accountIDs))
+		for id := range agg.accountIDs {
+			if name, ok := accounts[id]; ok {
+				users = append(users, name)
+			} else {
+				users = append(users, fmt.Sprintf("account:%d", id))
+			}
+		}
+		sort.Strings(users)
+
+		data := &WatchData{
+			PlayCount:  agg.playCount,
+			LastPlayed: lastPlayed,
+			Users:      users,
+		}
+		// Keep entry with highest play count if duplicates (e.g., same TMDb ID
+		// mapped from multiple ratingKeys)
+		if existing, ok := result[tmdbID]; ok {
+			if data.PlayCount > existing.PlayCount {
+				result[tmdbID] = data
+			}
+		} else {
+			result[tmdbID] = data
+		}
+	}
+
+	// Include zero-count entries for library items with no history
+	for _, item := range items {
+		if item.TMDbID == 0 {
+			continue
+		}
+		if _, ok := result[item.TMDbID]; !ok {
+			result[item.TMDbID] = &WatchData{}
+		}
+	}
+
+	slog.Info("Plex multi-user watch data aggregated",
+		"component", "plex",
+		"historyEntries", len(history),
+		"uniqueItems", len(aggByKey),
+		"tmdbMatched", len(result))
+
+	return result, nil
+}
+
+// getBulkWatchDataFallback returns watch data using the per-token-user viewCount
+// from library metadata. Used when /status/sessions/history/all is unavailable
+// (e.g., non-admin token, older Plex server). This only returns the token owner's
+// play counts — not aggregated across all users.
+func (p *PlexClient) getBulkWatchDataFallback(items []MediaItem) (map[int]*WatchData, error) {
 	result := make(map[int]*WatchData)
 	for _, item := range items {
 		if item.TMDbID == 0 {
 			continue
 		}
-
 		data := &WatchData{
 			PlayCount:  item.PlayCount,
 			LastPlayed: item.LastPlayed,
@@ -340,6 +592,22 @@ func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
 		}
 	}
 	return result, nil
+}
+
+// buildEmptyWatchData returns zero-count WatchData entries for all library items
+// with TMDb IDs. Used when the history endpoint returns zero entries (new server,
+// no plays yet) to distinguish "checked and empty" from "didn't check".
+func (p *PlexClient) buildEmptyWatchData(items []MediaItem) map[int]*WatchData {
+	result := make(map[int]*WatchData)
+	for _, item := range items {
+		if item.TMDbID == 0 {
+			continue
+		}
+		if _, ok := result[item.TMDbID]; !ok {
+			result[item.TMDbID] = &WatchData{}
+		}
+	}
+	return result
 }
 
 // GetTMDbToRatingKeyMap builds a mapping from TMDb ID to Plex ratingKey by

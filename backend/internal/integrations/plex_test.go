@@ -1378,3 +1378,571 @@ func TestPlexExtractTMDbID(t *testing.T) {
 		})
 	}
 }
+
+// ─── fetchAllHistory tests ──────────────────────────────────────────────────
+
+const testPlexPathHistory = "/status/sessions/history/all"
+const testPlexPathAccounts = "/accounts"
+
+// plexHistoryJSON builds a JSON history response for testing. Entries are embedded
+// directly; totalSize controls the pagination totalSize field.
+func plexHistoryJSON(totalSize int, entries []plexHistoryEntry) string {
+	resp := plexHistoryResponse{}
+	resp.MediaContainer.Size = len(entries)
+	resp.MediaContainer.TotalSize = totalSize
+	resp.MediaContainer.Metadata = entries
+	b, _ := json.Marshal(resp)
+	return string(b)
+}
+
+func TestPlexClient_fetchAllHistory_SinglePage(t *testing.T) {
+	entries := []plexHistoryEntry{
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000000, AccountID: 1},
+		{RatingKey: "102", Type: "movie", ViewedAt: 1700001000, AccountID: 2},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == testPlexPathHistory {
+			_, _ = w.Write([]byte(plexHistoryJSON(2, entries)))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	if err != nil {
+		t.Fatalf("fetchAllHistory should succeed: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("Expected 2 entries, got %d", len(history))
+	}
+	if history[0].RatingKey != "101" {
+		t.Errorf("Expected ratingKey '101', got %q", history[0].RatingKey)
+	}
+	if history[1].AccountID != 2 {
+		t.Errorf("Expected accountID 2, got %d", history[1].AccountID)
+	}
+}
+
+func TestPlexClient_fetchAllHistory_MultiPage(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == testPlexPathHistory {
+			start := r.URL.Query().Get("X-Plex-Container-Start")
+			callCount++
+			if start == "" || start == "0" {
+				// First page: return 3 entries, totalSize=5
+				entries := []plexHistoryEntry{
+					{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 1},
+					{RatingKey: "102", Type: "movie", ViewedAt: 1700000002, AccountID: 1},
+					{RatingKey: "103", Type: "movie", ViewedAt: 1700000003, AccountID: 2},
+				}
+				_, _ = w.Write([]byte(plexHistoryJSON(5, entries)))
+			} else {
+				// Second page: return remaining 2 entries
+				entries := []plexHistoryEntry{
+					{RatingKey: "104", Type: "movie", ViewedAt: 1700000004, AccountID: 2},
+					{RatingKey: "105", Type: "movie", ViewedAt: 1700000005, AccountID: 3},
+				}
+				_, _ = w.Write([]byte(plexHistoryJSON(5, entries)))
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	if err != nil {
+		t.Fatalf("fetchAllHistory should succeed: %v", err)
+	}
+	if len(history) != 5 {
+		t.Fatalf("Expected 5 entries across 2 pages, got %d", len(history))
+	}
+	if callCount != 2 {
+		t.Errorf("Expected 2 API calls for pagination, got %d", callCount)
+	}
+	// Verify last entry is from second page
+	if history[4].RatingKey != "105" {
+		t.Errorf("Expected last ratingKey '105', got %q", history[4].RatingKey)
+	}
+}
+
+func TestPlexClient_fetchAllHistory_Empty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == testPlexPathHistory {
+			_, _ = w.Write([]byte(plexHistoryJSON(0, nil)))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	if err != nil {
+		t.Fatalf("fetchAllHistory should succeed with empty history: %v", err)
+	}
+	if len(history) != 0 {
+		t.Errorf("Expected 0 entries, got %d", len(history))
+	}
+}
+
+func TestPlexClient_fetchAllHistory_MidPaginationError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == testPlexPathHistory {
+			start := r.URL.Query().Get("X-Plex-Container-Start")
+			if start == "" || start == "0" {
+				// First page succeeds
+				entries := []plexHistoryEntry{
+					{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 1},
+					{RatingKey: "102", Type: "movie", ViewedAt: 1700000002, AccountID: 2},
+				}
+				_, _ = w.Write([]byte(plexHistoryJSON(10, entries)))
+			} else {
+				// Second page fails
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	// Should return partial results without error
+	if err != nil {
+		t.Fatalf("fetchAllHistory should return partial results on mid-pagination error: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("Expected 2 partial entries, got %d", len(history))
+	}
+}
+
+func TestPlexClient_fetchAllHistory_FirstPageError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	if err == nil {
+		t.Fatal("fetchAllHistory should return error when first page fails")
+	}
+	if len(history) != 0 {
+		t.Errorf("Expected 0 entries on first-page error, got %d", len(history))
+	}
+}
+
+func TestPlexClient_fetchAllHistory_EntryDeserialization(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == testPlexPathHistory {
+			entries := []plexHistoryEntry{
+				{
+					RatingKey:            "301",
+					ParentRatingKey:      "300",
+					GrandparentRatingKey: "200",
+					Type:                 "episode",
+					ViewedAt:             1712700000,
+					AccountID:            42,
+				},
+			}
+			_, _ = w.Write([]byte(plexHistoryJSON(1, entries)))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	history, err := client.fetchAllHistory()
+	if err != nil {
+		t.Fatalf("fetchAllHistory should succeed: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(history))
+	}
+
+	entry := history[0]
+	if entry.RatingKey != "301" {
+		t.Errorf("Expected ratingKey '301', got %q", entry.RatingKey)
+	}
+	if entry.ParentRatingKey != "300" {
+		t.Errorf("Expected parentRatingKey '300', got %q", entry.ParentRatingKey)
+	}
+	if entry.GrandparentRatingKey != "200" {
+		t.Errorf("Expected grandparentRatingKey '200', got %q", entry.GrandparentRatingKey)
+	}
+	if entry.Type != "episode" {
+		t.Errorf("Expected type 'episode', got %q", entry.Type)
+	}
+	if entry.ViewedAt != 1712700000 {
+		t.Errorf("Expected viewedAt 1712700000, got %d", entry.ViewedAt)
+	}
+	if entry.AccountID != 42 {
+		t.Errorf("Expected accountID 42, got %d", entry.AccountID)
+	}
+}
+
+// ─── GetBulkWatchData multi-user history tests ─────────────────────────────
+
+// plexAccountsJSON serializes accounts for the /accounts mock endpoint.
+func plexAccountsJSON(accounts []plexAccount) string {
+	resp := plexAccountsResponse{}
+	resp.MediaContainer.Account = accounts
+	b, _ := json.Marshal(resp)
+	return string(b)
+}
+
+// newPlexMultiUserMockServer creates an httptest.Server that serves all endpoints
+// needed for a full GetBulkWatchData cycle: library sections, library items,
+// session history, and accounts. Callers provide history entries and accounts.
+func newPlexMultiUserMockServer(
+	t *testing.T,
+	libraryType string,
+	libraryKey string,
+	metadata []plexMetadata,
+	history []plexHistoryEntry,
+	accounts []plexAccount,
+) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case testPlexPathSections:
+			resp := plexLibraryResponse{}
+			resp.MediaContainer.Directory = []struct {
+				Key   string `json:"key"`
+				Title string `json:"title"`
+				Type  string `json:"type"`
+			}{
+				{Key: libraryKey, Title: "Library", Type: libraryType},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case "/library/sections/" + libraryKey + "/all":
+			resp := plexMediaResponse{}
+			resp.MediaContainer.Metadata = metadata
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathHistory:
+			_, _ = w.Write([]byte(plexHistoryJSON(len(history), history)))
+		case testPlexPathAccounts:
+			_, _ = w.Write([]byte(plexAccountsJSON(accounts)))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func TestPlexClient_GetBulkWatchData_MultiUserAggregation(t *testing.T) {
+	// Library has one movie: Serenity (ratingKey=101, TMDb=16320)
+	metadata := []plexMetadata{
+		{
+			RatingKey: "101",
+			Title:     "Serenity",
+			Year:      2005,
+			Type:      "movie",
+			ViewCount: 1, // Admin's own view count (should be ignored)
+			GUIDs:     []plexGUID{{ID: "tmdb://16320"}},
+		},
+	}
+	// Three users' play events: user A watched 2x, user B 1x, user C 3x
+	history := []plexHistoryEntry{
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 1},
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000002, AccountID: 1},
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000003, AccountID: 2},
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000004, AccountID: 3},
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000005, AccountID: 3},
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000006, AccountID: 3},
+	}
+	accounts := []plexAccount{
+		{ID: 1, Name: "mal"},
+		{ID: 2, Name: "wash"},
+		{ID: 3, Name: "zoe"},
+	}
+
+	srv := newPlexMultiUserMockServer(t, "movie", "1", metadata, history, accounts)
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	watchMap, err := client.GetBulkWatchData()
+	if err != nil {
+		t.Fatalf("GetBulkWatchData should succeed: %v", err)
+	}
+
+	wd, ok := watchMap[16320]
+	if !ok {
+		t.Fatal("Expected TMDb ID 16320 in watch map")
+	}
+
+	// Total play count across all users: 2+1+3 = 6
+	if wd.PlayCount != 6 {
+		t.Errorf("Expected PlayCount 6 (aggregated across 3 users), got %d", wd.PlayCount)
+	}
+
+	// LastPlayed should be the most recent viewedAt
+	if wd.LastPlayed == nil {
+		t.Fatal("Expected LastPlayed to be set")
+	}
+	if wd.LastPlayed.Unix() != 1700000006 {
+		t.Errorf("Expected LastPlayed at 1700000006, got %d", wd.LastPlayed.Unix())
+	}
+
+	// Users should contain all 3 unique users, sorted alphabetically
+	if len(wd.Users) != 3 {
+		t.Fatalf("Expected 3 users, got %d: %v", len(wd.Users), wd.Users)
+	}
+	expectedUsers := []string{"mal", "wash", "zoe"}
+	for i, u := range wd.Users {
+		if u != expectedUsers[i] {
+			t.Errorf("Expected Users[%d]=%q, got %q", i, expectedUsers[i], u)
+		}
+	}
+}
+
+func TestPlexClient_GetBulkWatchData_EpisodeAggregation(t *testing.T) {
+	// Library has one show: Firefly (ratingKey=200, TMDb=1437)
+	metadata := []plexMetadata{
+		{
+			RatingKey: "200",
+			Title:     "Firefly",
+			Year:      2002,
+			Type:      "show",
+			GUIDs:     []plexGUID{{ID: "tmdb://1437"}},
+		},
+	}
+	// Episode watches should aggregate under grandparentRatingKey (the show)
+	history := []plexHistoryEntry{
+		{RatingKey: "301", ParentRatingKey: "210", GrandparentRatingKey: "200", Type: "episode", ViewedAt: 1700000001, AccountID: 1},
+		{RatingKey: "302", ParentRatingKey: "210", GrandparentRatingKey: "200", Type: "episode", ViewedAt: 1700000002, AccountID: 1},
+		{RatingKey: "303", ParentRatingKey: "220", GrandparentRatingKey: "200", Type: "episode", ViewedAt: 1700000003, AccountID: 2},
+	}
+	accounts := []plexAccount{
+		{ID: 1, Name: "mal"},
+		{ID: 2, Name: "wash"},
+	}
+
+	srv := newPlexMultiUserMockServer(t, "show", "2", metadata, history, accounts)
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	watchMap, err := client.GetBulkWatchData()
+	if err != nil {
+		t.Fatalf("GetBulkWatchData should succeed: %v", err)
+	}
+
+	wd, ok := watchMap[1437]
+	if !ok {
+		t.Fatal("Expected TMDb ID 1437 (Firefly) in watch map")
+	}
+
+	// Total episode plays: 3 (all under grandparent show ratingKey 200)
+	if wd.PlayCount != 3 {
+		t.Errorf("Expected PlayCount 3 (episodes aggregated under show), got %d", wd.PlayCount)
+	}
+
+	// Two unique users watched episodes
+	if len(wd.Users) != 2 {
+		t.Fatalf("Expected 2 users, got %d: %v", len(wd.Users), wd.Users)
+	}
+}
+
+func TestPlexClient_GetBulkWatchData_HistoryFallback(t *testing.T) {
+	// History endpoint fails, should fall back to per-token viewCount
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case testPlexPathSections:
+			resp := plexLibraryResponse{}
+			resp.MediaContainer.Directory = []struct {
+				Key   string `json:"key"`
+				Title string `json:"title"`
+				Type  string `json:"type"`
+			}{
+				{Key: "1", Title: "Movies", Type: "movie"},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathMoviesAll:
+			resp := plexMediaResponse{}
+			resp.MediaContainer.Metadata = []plexMetadata{
+				{
+					RatingKey:    "101",
+					Title:        "Serenity",
+					Year:         2005,
+					Type:         "movie",
+					ViewCount:    5,
+					LastViewedAt: 1700000000,
+					GUIDs:        []plexGUID{{ID: "tmdb://16320"}},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathHistory:
+			// History endpoint returns 500 — triggers fallback
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	watchMap, err := client.GetBulkWatchData()
+	if err != nil {
+		t.Fatalf("GetBulkWatchData should succeed via fallback: %v", err)
+	}
+
+	wd, ok := watchMap[16320]
+	if !ok {
+		t.Fatal("Expected TMDb ID 16320 in watch map (fallback)")
+	}
+
+	// Fallback uses viewCount from library metadata
+	if wd.PlayCount != 5 {
+		t.Errorf("Expected fallback PlayCount 5, got %d", wd.PlayCount)
+	}
+	if wd.LastPlayed == nil {
+		t.Fatal("Expected fallback LastPlayed to be set")
+	}
+	// Fallback does not populate Users
+	if len(wd.Users) != 0 {
+		t.Errorf("Expected no Users in fallback, got %v", wd.Users)
+	}
+}
+
+func TestPlexClient_GetBulkWatchData_AccountsFallback(t *testing.T) {
+	// Accounts endpoint fails, should use numeric account IDs ("account:N")
+	metadata := []plexMetadata{
+		{
+			RatingKey: "101",
+			Title:     "Serenity",
+			Year:      2005,
+			Type:      "movie",
+			GUIDs:     []plexGUID{{ID: "tmdb://16320"}},
+		},
+	}
+	history := []plexHistoryEntry{
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 42},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case testPlexPathSections:
+			resp := plexLibraryResponse{}
+			resp.MediaContainer.Directory = []struct {
+				Key   string `json:"key"`
+				Title string `json:"title"`
+				Type  string `json:"type"`
+			}{
+				{Key: "1", Title: "Movies", Type: "movie"},
+			}
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathMoviesAll:
+			resp := plexMediaResponse{}
+			resp.MediaContainer.Metadata = metadata
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("Failed to encode: %v", err)
+			}
+		case testPlexPathHistory:
+			_, _ = w.Write([]byte(plexHistoryJSON(len(history), history)))
+		case testPlexPathAccounts:
+			// Accounts endpoint returns 500
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	watchMap, err := client.GetBulkWatchData()
+	if err != nil {
+		t.Fatalf("GetBulkWatchData should succeed: %v", err)
+	}
+
+	wd, ok := watchMap[16320]
+	if !ok {
+		t.Fatal("Expected TMDb ID 16320 in watch map")
+	}
+	if wd.PlayCount != 1 {
+		t.Errorf("Expected PlayCount 1, got %d", wd.PlayCount)
+	}
+	// Without account names, should use "account:N" format
+	if len(wd.Users) != 1 || wd.Users[0] != "account:42" {
+		t.Errorf("Expected Users=[account:42], got %v", wd.Users)
+	}
+}
+
+func TestPlexClient_GetBulkWatchData_UnwatchedItemsIncluded(t *testing.T) {
+	// Library has 2 movies, but only 1 has history entries
+	metadata := []plexMetadata{
+		{
+			RatingKey: "101",
+			Title:     "Serenity",
+			Year:      2005,
+			Type:      "movie",
+			GUIDs:     []plexGUID{{ID: "tmdb://16320"}},
+		},
+		{
+			RatingKey: "102",
+			Title:     "Serenity 2",
+			Year:      2014,
+			Type:      "movie",
+			GUIDs:     []plexGUID{{ID: "tmdb://99999"}},
+		},
+	}
+	history := []plexHistoryEntry{
+		{RatingKey: "101", Type: "movie", ViewedAt: 1700000001, AccountID: 1},
+	}
+	accounts := []plexAccount{{ID: 1, Name: "mal"}}
+
+	srv := newPlexMultiUserMockServer(t, "movie", "1", metadata, history, accounts)
+	defer srv.Close()
+
+	client := NewPlexClient(srv.URL, "test-token")
+	watchMap, err := client.GetBulkWatchData()
+	if err != nil {
+		t.Fatalf("GetBulkWatchData should succeed: %v", err)
+	}
+
+	// Both items should be in the map
+	if len(watchMap) != 2 {
+		t.Fatalf("Expected 2 entries (watched + unwatched), got %d", len(watchMap))
+	}
+
+	// Watched item
+	watched, ok := watchMap[16320]
+	if !ok {
+		t.Fatal("Expected TMDb ID 16320 in watch map")
+	}
+	if watched.PlayCount != 1 {
+		t.Errorf("Expected PlayCount 1, got %d", watched.PlayCount)
+	}
+
+	// Unwatched item should have zero play count
+	unwatched, ok := watchMap[99999]
+	if !ok {
+		t.Fatal("Expected TMDb ID 99999 in watch map")
+	}
+	if unwatched.PlayCount != 0 {
+		t.Errorf("Expected PlayCount 0 for unwatched item, got %d", unwatched.PlayCount)
+	}
+}
