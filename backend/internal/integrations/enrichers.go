@@ -728,7 +728,7 @@ func (e *TracearrEnricher) Enrich(items []MediaItem) error {
 	for _, session := range history {
 		var key string
 		switch {
-		case session.MediaType == "episode" && session.ShowTitle != "":
+		case session.MediaType == string(MediaTypeEpisode) && session.ShowTitle != "":
 			key = strings.ToLower(strings.TrimSpace(session.ShowTitle))
 		case session.MediaTitle != "":
 			key = fmt.Sprintf("%s|%d", strings.ToLower(strings.TrimSpace(session.MediaTitle)), session.Year)
