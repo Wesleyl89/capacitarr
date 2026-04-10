@@ -1,3 +1,9 @@
+## [3.2.4] - 2026-04-10
+
+### 🐛 Bug Fixes
+
+- *(lint)* Use MediaTypeEpisode constant to satisfy goconst ([dac2b1b](https://github.com/Ghent/capacitarr/commit/dac2b1b6896e7253c8651cd056f1a09c2f4fe156))
+- *(ci)* Replace golangci-lint-action with Docker image to match Makefile ([5afd4a2](https://github.com/Ghent/capacitarr/commit/5afd4a2fe92bebd8a03128b48024ad787a14b089))
 ## [3.2.3] - 2026-04-10
 
 ### 🐛 Bug Fixes
