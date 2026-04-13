@@ -13,6 +13,11 @@ import {
 } from 'lucide-vue-next';
 import { formatBytes } from '~/utils/format';
 
+const props = defineProps<{
+  /** Effective execution mode derived from per-disk-group modes by the parent. */
+  effectiveMode?: string;
+}>();
+
 const { t } = useI18n();
 const { listItem } = useMotionPresets();
 const {
@@ -33,9 +38,12 @@ const hasContent = computed(
     engineIsDeletionActive.value || queuedItems.value.length > 0 || completedItems.value.length > 0,
 );
 
-/** Mode-specific empty state message key */
+/** Mode-specific empty state message key.
+ * Uses the per-disk-group effective mode prop when provided,
+ * falling back to the global default from useEngineControl(). */
 const emptyStateMessage = computed(() => {
-  switch (executionMode.value) {
+  const mode = props.effectiveMode || executionMode.value;
+  switch (mode) {
     case MODE_APPROVAL:
       return t('deletion.emptyInApproval');
     case MODE_DRY_RUN:

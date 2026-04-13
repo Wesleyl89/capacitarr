@@ -117,15 +117,15 @@
           </span>
           <UiBadge
             :variant="
-              engineExecutionMode === MODE_AUTO
+              effectiveMode === MODE_AUTO
                 ? 'destructive'
-                : engineExecutionMode === MODE_APPROVAL
+                : effectiveMode === MODE_APPROVAL
                   ? 'outline'
                   : 'secondary'
             "
             class="ml-auto"
           >
-            {{ engineModeLabel(engineExecutionMode) }}
+            {{ engineModeLabel(effectiveMode) }}
           </UiBadge>
           <span class="text-xs text-muted-foreground">
             {{ $t('dashboard.evaluated') }} {{ engineLastRunEvaluated?.toLocaleString() ?? 0 }} ·
@@ -260,11 +260,7 @@
           <!-- Would Free / Freed -->
           <div class="rounded-lg bg-muted px-3 py-2">
             <div class="text-[11px] text-muted-foreground mb-0.5">
-              {{
-                engineExecutionMode === MODE_AUTO
-                  ? $t('dashboard.freed')
-                  : $t('dashboard.wouldFree')
-              }}
+              {{ anyAutoMode ? $t('dashboard.freed') : $t('dashboard.wouldFree') }}
             </div>
             <div class="text-sm font-bold tabular-nums">
               {{ formatBytes(engineStats.lastRunFreedBytes ?? 0) }}
@@ -303,7 +299,7 @@
                   </span>
                 </span>
               </template>
-              <template v-else-if="engineExecutionMode === MODE_DRY_RUN">
+              <template v-else-if="allDryRun">
                 <span class="text-muted-foreground text-xs">{{
                   $t('dashboard.dryRunNoDelete')
                 }}</span>
@@ -329,7 +325,7 @@
     </UiCard>
 
     <!-- Deletion Queue (always visible) -->
-    <DeletionQueueCard />
+    <DeletionQueueCard :effective-mode="effectiveMode" />
 
     <!-- Snoozed Items (visible in all modes when snoozed items exist) -->
     <SnoozedItemsCard />
@@ -337,7 +333,7 @@
     <!-- Sunset Queue (visible when any disk group is in sunset mode or sunset items exist) -->
     <SunsetQueueCard :has-sunset-mode="diskGroups.some((g) => g.mode === 'sunset')" />
 
-    <!-- Approval Queue (only in approval mode) -->
+    <!-- Approval Queue (visible when any disk group is in approval mode or queue has items) -->
     <ApprovalQueueCard v-if="approvalQueueVisible" />
 
     <!-- Per-Disk-Group Sections -->
@@ -394,6 +390,7 @@ import {
   MODE_DRY_RUN,
   MODE_AUTO,
   MODE_APPROVAL,
+  MODE_SUNSET,
   EVENT_DELETION_SUCCESS,
   EVENT_DELETION_DRY_RUN,
   EVENT_DELETION_FAILED,
@@ -449,9 +446,13 @@ const {
 // SSE event stream — subscribe for real-time dashboard updates
 const { on: sseOn } = useEventStream();
 
-// Approval queue (shown when execution mode is "approval")
-const { isApprovalMode, fetchQueue: fetchApprovalQueue } = useApprovalQueue();
-const approvalQueueVisible = computed(() => isApprovalMode.value);
+// Approval queue — visible when any disk group is in approval mode, or when
+// the queue already contains items (e.g. user switched away from approval mode
+// while items were still queued).
+const { hasQueueItems, fetchQueue: fetchApprovalQueue } = useApprovalQueue();
+const approvalQueueVisible = computed(
+  () => diskGroups.value.some((g) => g.mode === 'approval') || hasQueueItems.value,
+);
 
 // Pull-to-refresh for touch devices
 const { isRefreshing, pullProgress, pullDistance } = usePullToRefresh(async () => {
@@ -471,6 +472,40 @@ const dateRangeOptions = [
 const dateRange = ref('24h');
 const diskGroups = ref<DiskGroup[]>([]);
 const allIntegrations = ref<IntegrationConfig[]>([]);
+
+// ---------------------------------------------------------------------------
+// Per-disk-group mode helpers
+// ---------------------------------------------------------------------------
+// Since v3.0, execution mode is per-disk-group. These computeds derive
+// dashboard-level indicators from the actual disk group modes instead of
+// the global defaultDiskGroupMode preference.
+
+/** Set of unique modes across all disk groups. */
+const activeModes = computed(() => new Set(diskGroups.value.map((g) => g.mode)));
+
+/**
+ * Effective mode for dashboard indicators — the "most aggressive" mode
+ * across all disk groups. Priority: auto > approval > sunset > dry-run.
+ * Falls back to engineExecutionMode (global default) when no disk groups exist.
+ */
+const effectiveMode = computed(() => {
+  const modes = activeModes.value;
+  if (modes.has(MODE_AUTO)) return MODE_AUTO;
+  if (modes.has(MODE_APPROVAL)) return MODE_APPROVAL;
+  if (modes.has(MODE_SUNSET)) return MODE_SUNSET;
+  if (modes.has(MODE_DRY_RUN)) return MODE_DRY_RUN;
+  return engineExecutionMode.value;
+});
+
+/** True only when ALL disk groups are in dry-run (or no groups exist and global default is dry-run). */
+const allDryRun = computed(() =>
+  diskGroups.value.length === 0
+    ? engineExecutionMode.value === MODE_DRY_RUN
+    : diskGroups.value.every((g) => g.mode === MODE_DRY_RUN),
+);
+
+/** True when any disk group is in auto mode (actual deletions can happen). */
+const anyAutoMode = computed(() => diskGroups.value.some((g) => g.mode === MODE_AUTO));
 const engineHistoryData = ref<
   Array<{
     timestamp: string;
@@ -897,17 +932,16 @@ async function fetchDashboardData(silent = false) {
       api('/api/v1/integrations'),
     ]);
     // Fetch engine stats via the shared composable (handles toast on completion).
-    // Must be awaited so workerStats is populated before fetchApprovalQueue()
-    // checks isApprovalMode — otherwise executionMode defaults to 'dry-run'
-    // and the approval queue guard clears the list on initial load.
     await engineFetchStats();
-    // Fetch approval queue (non-blocking, only runs in approval mode)
+    // Assign disk groups before fetching the approval queue so
+    // approvalQueueVisible (which checks diskGroups) is accurate.
+    diskGroups.value = groups as DiskGroup[];
+    allIntegrations.value = integrations as IntegrationConfig[];
+    // Fetch approval queue (non-blocking)
     fetchApprovalQueue();
     // Note: fetchEngineHistory() and fetchRecentActivity() are NOT called here.
     // They are fetched once on mount and updated via SSE events to avoid
     // replacing the data array (which causes ECharts to replay animations).
-    diskGroups.value = groups as DiskGroup[];
-    allIntegrations.value = integrations as IntegrationConfig[];
     lastUpdated.value = new Date();
   } catch (err) {
     console.warn('[Dashboard] fetchDashboardData failed:', err);
@@ -970,7 +1004,7 @@ const queuedSeries = computed(() =>
 const deletedSeries = computed(() =>
   prepareSeriesData(engineHistoryData.value, 'deleted', dateRange.value),
 );
-const isDryRunMode = computed(() => engineExecutionMode.value === MODE_DRY_RUN);
+const isDryRunMode = computed(() => allDryRun.value);
 
 // --- ECharts sparkline options ---
 

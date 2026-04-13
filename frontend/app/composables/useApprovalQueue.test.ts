@@ -287,14 +287,19 @@ describe('useApprovalQueue', () => {
       expect(q.snoozedItems.value[0]!.state).toBe('snoozed');
     });
 
-    it('clears queues when not in approval mode', async () => {
+    it('fetches queue items regardless of global execution mode', async () => {
       executionModeRef.value = MODE_DRY_RUN;
+      const items: ApprovalQueueItem[] = [
+        makeApprovalItem({ id: 1, mediaName: 'Serenity', status: 'pending' }),
+      ];
+      mockApiFetch.mockResolvedValueOnce(items);
 
       const q = useApprovalQueue();
       await q.fetchQueue();
 
-      expect(mockApiFetch).not.toHaveBeenCalled();
-      expect(q.pendingItems.value).toEqual([]);
+      // Should still fetch — per-disk-group mode may be approval even when global is dry-run
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/v1/approval-queue?limit=1000');
+      expect(q.pendingItems.value).toHaveLength(1);
     });
 
     it('handles API errors gracefully', async () => {
@@ -675,16 +680,70 @@ describe('useApprovalQueue', () => {
       }
     });
 
-    it('SSE handler does not fetchQueue when not in approval mode', () => {
+    it('SSE handler triggers fetchQueue regardless of global execution mode', async () => {
       executionModeRef.value = MODE_DRY_RUN;
+      mockApiFetch.mockResolvedValue([]);
 
       useApprovalQueue();
 
       const handler = sseHandlers.get(EVENT_ENGINE_COMPLETE);
       if (handler) {
         handler({});
-        expect(mockApiFetch).not.toHaveBeenCalled();
+        // Should still fetch — per-disk-group mode may be approval even when global is dry-run
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/v1/approval-queue?limit=1000');
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasQueueItems
+  // -------------------------------------------------------------------------
+  describe('hasQueueItems', () => {
+    it('is false when all queues are empty', () => {
+      const q = useApprovalQueue();
+      expect(q.hasQueueItems.value).toBe(false);
+    });
+
+    it('is true when pending items exist', async () => {
+      const items: ApprovalQueueItem[] = [
+        makeApprovalItem({ id: 1, mediaName: 'Serenity', status: 'pending' }),
+      ];
+      mockApiFetch.mockResolvedValueOnce(items);
+
+      const q = useApprovalQueue();
+      await q.fetchQueue();
+
+      expect(q.hasQueueItems.value).toBe(true);
+    });
+
+    it('is true when approved items exist', async () => {
+      const items: ApprovalQueueItem[] = [
+        makeApprovalItem({ id: 1, mediaName: 'Serenity', status: 'approved' }),
+      ];
+      mockApiFetch.mockResolvedValueOnce(items);
+
+      const q = useApprovalQueue();
+      await q.fetchQueue();
+
+      expect(q.hasQueueItems.value).toBe(true);
+    });
+
+    it('is true when snoozed items exist', async () => {
+      const futureDate = new Date(Date.now() + 86_400_000).toISOString();
+      const items: ApprovalQueueItem[] = [
+        makeApprovalItem({
+          id: 1,
+          mediaName: 'Serenity',
+          status: 'rejected',
+          snoozedUntil: futureDate,
+        }),
+      ];
+      mockApiFetch.mockResolvedValueOnce(items);
+
+      const q = useApprovalQueue();
+      await q.fetchQueue();
+
+      expect(q.hasQueueItems.value).toBe(true);
     });
   });
 
@@ -701,6 +760,7 @@ describe('useApprovalQueue', () => {
       expect(q).toHaveProperty('approvedItems');
       expect(q).toHaveProperty('loading');
       expect(q).toHaveProperty('isApprovalMode');
+      expect(q).toHaveProperty('hasQueueItems');
 
       // Actions
       expect(q).toHaveProperty('fetchQueue');

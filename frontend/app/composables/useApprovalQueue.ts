@@ -75,18 +75,23 @@ export function useApprovalQueue() {
 
   const isApprovalMode = computed(() => executionMode.value === MODE_APPROVAL);
 
+  /** True when any queue (pending, snoozed, approved) contains items. */
+  const hasQueueItems = computed(
+    () =>
+      pendingItems.value.length > 0 ||
+      snoozedItems.value.length > 0 ||
+      approvedItems.value.length > 0,
+  );
+
   /**
    * Fetch all approval queue items and group them for display.
    * The approval_queue table IS the source of truth — no preview cross-referencing.
+   *
+   * Always fetches regardless of the global defaultDiskGroupMode because
+   * execution mode is per-disk-group since v3.0. A disk group may be in
+   * approval mode even when the global default is dry-run.
    */
   async function fetchQueue() {
-    if (!isApprovalMode.value) {
-      pendingItems.value = [];
-      snoozedItems.value = [];
-      approvedItems.value = [];
-      return;
-    }
-
     try {
       // Fetch all approval queue items (all statuses)
       const allItems = (await api('/api/v1/approval-queue?limit=1000')) as ApprovalQueueItem[];
@@ -394,8 +399,7 @@ export function useApprovalQueue() {
     _approvalSseRegistered = true;
 
     const refreshOnEvent = () => {
-      // Only refresh if we're in approval mode
-      if (isApprovalMode.value) fetchQueue();
+      fetchQueue();
     };
 
     // Queue state changes that warrant a refresh
@@ -416,6 +420,7 @@ export function useApprovalQueue() {
     approvedItems: readonly(approvedItems),
     loading: readonly(loading),
     isApprovalMode,
+    hasQueueItems,
 
     // Actions
     fetchQueue,
