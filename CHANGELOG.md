@@ -1,3 +1,8 @@
+## [3.2.6] - 2026-04-13
+
+### 🐛 Bug Fixes
+
+- *(dashboard)* Render both queued and deleted sparkline series for mixed per-disk-group modes ([2d301e5](https://github.com/Ghent/capacitarr/commit/2d301e59c7347bc0bc4cd746968df076d1904d83))
 ## [3.2.5] - 2026-04-13
 
 ### 🐛 Bug Fixes
