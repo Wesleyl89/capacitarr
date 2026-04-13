@@ -133,7 +133,7 @@
           </span>
         </div>
 
-        <!-- Sparkline: candidates + deleted/would-delete per engine run -->
+        <!-- Sparkline: candidates + would-delete + deleted per engine run -->
         <div v-if="engineHistoryData.length > 0" class="mb-3">
           <div class="flex items-center gap-3 mb-1">
             <span class="text-[11px] text-muted-foreground/70">
@@ -143,12 +143,19 @@
               <span class="w-2 h-2 rounded-full bg-primary" />
               {{ $t('dashboard.candidates') }}
             </span>
-            <span class="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <span
-                class="w-2 h-2 rounded-full"
-                :class="isDryRunMode ? 'bg-amber-500' : 'bg-destructive'"
-              />
-              {{ isDryRunMode ? $t('dashboard.wouldDelete') : $t('dashboard.deleted') }}
+            <span
+              class="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+              :class="{ 'opacity-40': !hasQueuedData }"
+            >
+              <span class="w-2 h-2 rounded-full bg-amber-500" />
+              {{ $t('dashboard.wouldDelete') }}
+            </span>
+            <span
+              class="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+              :class="{ 'opacity-40': !hasDeletedData }"
+            >
+              <span class="w-2 h-2 rounded-full bg-destructive" />
+              {{ $t('dashboard.deleted') }}
             </span>
           </div>
           <ClientOnly>
@@ -832,15 +839,16 @@ const activityEventTypes = [
 const _activityHandlers = new Map<string, (data: unknown) => void>();
 
 // Handler: deletion_progress SSE event — patch last sparkline data point in real-time.
-// In dry-run mode, the sparkline shows the "queued" series (would-delete count),
-// so we patch that field. In auto/approval mode, it shows "deleted".
+// The deletion_progress event only fires during actual deletions (auto/approval
+// groups), so we always patch the "deleted" field. The "queued" count for dry-run
+// groups is finalized by UpdateRunStats() at engine run completion and arrives
+// via the engine_run_complete SSE event.
 function handleDeletionProgressSparkline(data: unknown) {
   const event = data as DeletionProgress;
   const history = engineHistoryData.value;
   const last = history.length > 0 ? history[history.length - 1] : undefined;
   if (last) {
-    const patchField = isDryRunMode.value ? 'queued' : 'deleted';
-    engineHistoryData.value = [...history.slice(0, -1), { ...last, [patchField]: event.succeeded }];
+    engineHistoryData.value = [...history.slice(0, -1), { ...last, deleted: event.succeeded }];
   }
 }
 
@@ -1004,19 +1012,17 @@ const queuedSeries = computed(() =>
 const deletedSeries = computed(() =>
   prepareSeriesData(engineHistoryData.value, 'deleted', dateRange.value),
 );
-const isDryRunMode = computed(() => allDryRun.value);
-
 // --- ECharts sparkline options ---
+
+// Helper computeds: whether each action series has non-zero data in the current range.
+// Used by the legend to dim labels when a series carries no data.
+const hasQueuedData = computed(() => queuedSeries.value.some((d) => d.y > 0));
+const hasDeletedData = computed(() => deletedSeries.value.some((d) => d.y > 0));
 
 const sparklineEChartsOption = computed(() => {
   const candidates = candidatesSeries.value;
-  const isDryRun = isDryRunMode.value;
-  const secondSeriesData = isDryRun ? queuedSeries.value : deletedSeries.value;
-  const ghostSeriesData = isDryRun ? deletedSeries.value : queuedSeries.value;
-  const secondName = isDryRun ? t('dashboard.wouldDelete') : t('dashboard.deleted');
-  const secondColor = isDryRun ? chart3Color.value : destructiveColor.value;
-  const ghostName = isDryRun ? t('dashboard.deleted') : t('dashboard.wouldDelete');
-  const ghostColor = isDryRun ? destructiveColor.value : chart3Color.value;
+  const qData = queuedSeries.value;
+  const dData = deletedSeries.value;
   const series: Array<Record<string, unknown>> = [];
 
   // Show symbols when data is sparse (≤ 3 points) so single points are visible
@@ -1039,48 +1045,53 @@ const sparklineEChartsOption = computed(() => {
     });
   }
 
-  // Active second series: Would Delete (dry-run) or Deleted (auto/approval)
-  if (secondSeriesData.length > 0) {
-    const lastPoint = secondSeriesData[secondSeriesData.length - 1];
+  // "Would Delete" series (amber) — always rendered from queued field.
+  // With per-disk-group modes, dry-run groups contribute to queued while
+  // auto/approval groups contribute to deleted. Both can be non-zero in
+  // the same engine run, so both series are always present.
+  if (qData.length > 0) {
     series.push({
-      name: secondName,
+      name: t('dashboard.wouldDelete'),
       type: 'line',
       smooth: true,
-      symbol: sparseSymbol(secondSeriesData.length),
-      symbolSize: sparseSymbolSize(secondSeriesData.length),
-      itemStyle: { color: secondColor },
-      lineStyle: glowLineStyle(secondColor),
-      areaStyle: gradientArea(secondColor),
+      symbol: sparseSymbol(qData.length),
+      symbolSize: sparseSymbolSize(qData.length),
+      itemStyle: { color: chart3Color.value },
+      lineStyle: glowLineStyle(chart3Color.value),
+      areaStyle: gradientArea(chart3Color.value),
       emphasis: emphasisConfig(),
-      data: secondSeriesData.map((d) => [d.x, d.y]),
-      // Animated pulse on rightmost point while engine is running
+      data: qData.map((d) => [d.x, d.y]),
+    });
+  }
+
+  // "Deleted" series (red) — always rendered from deleted field.
+  // Includes animated pulse on rightmost point while engine is running,
+  // since real-time deletion progress only applies to actual deletions.
+  if (dData.length > 0) {
+    const lastPoint = dData[dData.length - 1];
+    series.push({
+      name: t('dashboard.deleted'),
+      type: 'line',
+      smooth: true,
+      symbol: sparseSymbol(dData.length),
+      symbolSize: sparseSymbolSize(dData.length),
+      itemStyle: { color: destructiveColor.value },
+      lineStyle: glowLineStyle(destructiveColor.value),
+      areaStyle: gradientArea(destructiveColor.value),
+      emphasis: emphasisConfig(),
+      data: dData.map((d) => [d.x, d.y]),
       markPoint:
         engineIsRunning.value && lastPoint
           ? {
               symbol: 'circle',
               symbolSize: 8,
               data: [{ coord: [lastPoint.x, lastPoint.y] }],
-              itemStyle: { color: secondColor },
+              itemStyle: { color: destructiveColor.value },
               animation: true,
               animationDuration: 1200,
               animationEasingUpdate: 'sinusoidalInOut',
             }
           : undefined,
-    });
-  }
-
-  // Ghost series: inactive mode's data (faint dashed, no interaction)
-  if (ghostSeriesData.length > 0 && ghostSeriesData.some((d) => d.y > 0)) {
-    series.push({
-      name: ghostName + ' (historical)',
-      type: 'line',
-      smooth: true,
-      symbol: 'none',
-      lineStyle: { color: ghostColor, width: 1, type: 'dashed', opacity: 0.35 },
-      areaStyle: undefined,
-      emphasis: { disabled: true },
-      silent: true,
-      data: ghostSeriesData.map((d) => [d.x, d.y]),
     });
   }
 
@@ -1118,12 +1129,17 @@ const sparklineEChartsOption = computed(() => {
         if (!params.length) return '';
         const ts = new Date(params[0]!.value[0]).toLocaleString();
         let html = `<div style="font-weight:600">${ts}</div>`;
+        let pointHasQueued = false;
+        let pointHasDeleted = false;
         for (const p of params) {
-          // Skip ghost series in tooltip
-          if (p.seriesName.includes('(historical)')) continue;
+          if (p.value[1] === 0) continue; // skip zero-value series
           html += `<div>${p.marker} ${p.seriesName}: <b>${Math.round(p.value[1])}</b></div>`;
+          if (p.seriesName === t('dashboard.wouldDelete')) pointHasQueued = true;
+          if (p.seriesName === t('dashboard.deleted')) pointHasDeleted = true;
         }
-        if (isDryRun) {
+        if (pointHasQueued && pointHasDeleted) {
+          html += `<div style="opacity:0.6;font-size:11px;margin-top:2px">mixed modes</div>`;
+        } else if (pointHasQueued) {
           html += `<div style="opacity:0.6;font-size:11px;margin-top:2px">dry-run — no deletions</div>`;
         }
         return html;
