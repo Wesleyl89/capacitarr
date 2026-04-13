@@ -1,3 +1,8 @@
+## [3.2.5] - 2026-04-13
+
+### 🐛 Bug Fixes
+
+- *(dashboard)* Derive mode indicators from per-disk-group modes ([daacd5b](https://github.com/Ghent/capacitarr/commit/daacd5b262de562264bc884416db8b97aedd6cdb)) — reported by @dimitarmanov ([#22](https://github.com/Ghent/capacitarr/issues/22))
 ## [3.2.4] - 2026-04-10
 
 ### 🐛 Bug Fixes
