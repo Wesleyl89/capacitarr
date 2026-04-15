@@ -26,3 +26,6 @@ zap-out/
 .vscode/
 .idea/
 docker-compose.yml
+
+# Agent instructions (managed outside repo)
+AGENTS.md
