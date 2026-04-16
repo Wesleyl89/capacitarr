@@ -20,7 +20,14 @@ func NewReadarrClient(url, apiKey string) *ReadarrClient {
 	}
 }
 
-// readarrBook maps a Readarr book API response (relevant fields)
+// readarrBook maps a Readarr book API response (relevant fields).
+//
+// Note: Unlike Radarr (which includes movieFile inline), Readarr does NOT embed
+// bookFile in the /api/v1/book response. BookFile is only available via a separate
+// /api/v1/bookfile endpoint. Since books are individual items (not seasons) and
+// the gap between adding a book and it downloading is typically small, we use
+// book.added as the AddedAt date. The media server enrichment layer (Plex/Jellyfin/Emby)
+// can still override this with a more accurate date when available.
 type readarrBook struct {
 	ID       int    `json:"id"`
 	Title    string `json:"title"`
@@ -74,8 +81,7 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 
 		var addedAt *time.Time
 		if b.Added != "" {
-			t, err := time.Parse(time.RFC3339, b.Added)
-			if err == nil {
+			if t, err := time.Parse(time.RFC3339, b.Added); err == nil {
 				addedAt = &t
 			}
 		}

@@ -74,6 +74,7 @@ type embyItem struct {
 	Name        string            `json:"Name"`
 	SeriesID    string            `json:"SeriesId,omitempty"` // Parent series ID (Episode items only)
 	Type        string            `json:"Type"`               // "Movie", "Series", "Episode", "Audio"
+	DateCreated string            `json:"DateCreated"`        // When the item was added to the Emby library (RFC3339)
 	ProviderIDs map[string]string `json:"ProviderIds"`        // e.g. {"Tmdb": "12345", "Imdb": "tt1234567"}
 	Tags        []string          `json:"Tags"`               // User-defined tags on items (equivalent to Plex Labels)
 	UserData    struct {
@@ -131,7 +132,7 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 	// Pass 1: Fetch Movie and Series items.
 	for {
 		endpoint := fmt.Sprintf(
-			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=UserData,ProviderIds&StartIndex=%d&Limit=%d",
+			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=UserData,ProviderIds,DateCreated&StartIndex=%d&Limit=%d",
 			userID, startIndex, pageSize,
 		)
 		body, err := e.doRequest(endpoint)
@@ -164,6 +165,12 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 			if item.UserData.LastPlayedDate != "" {
 				if t, err := time.Parse(time.RFC3339, item.UserData.LastPlayedDate); err == nil {
 					data.LastPlayed = &t
+				}
+			}
+			// Bridge the media server's library date to WatchData for enrichment
+			if item.DateCreated != "" {
+				if t, err := time.Parse(time.RFC3339, item.DateCreated); err == nil {
+					data.AddedAt = &t
 				}
 			}
 			// Track which user watched this item

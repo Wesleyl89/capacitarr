@@ -97,6 +97,7 @@ func TestEmbyClient_GetBulkWatchDataForUser(t *testing.T) {
 			"Items": [
 				{
 					"Name": "Serenity",
+					"DateCreated": "2024-09-01T10:00:00Z",
 					"ProviderIds": {"Tmdb": "16320"},
 					"UserData": {
 						"PlayCount": 5,
@@ -115,6 +116,7 @@ func TestEmbyClient_GetBulkWatchDataForUser(t *testing.T) {
 				},
 				{
 					"Name": "Unwatched Movie",
+					"DateCreated": "2024-12-25T08:00:00Z",
 					"ProviderIds": {"Tmdb": "55555"},
 					"UserData": {
 						"PlayCount": 0,
@@ -152,6 +154,22 @@ func TestEmbyClient_GetBulkWatchDataForUser(t *testing.T) {
 	if len(movie.Users) != 1 || movie.Users[0] != "AdminUser" {
 		t.Errorf("Expected Users=[AdminUser], got %v", movie.Users)
 	}
+	// AddedAt should be populated from DateCreated
+	if movie.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set from DateCreated for Serenity")
+	}
+	if movie.AddedAt.Month() != 9 || movie.AddedAt.Day() != 1 {
+		t.Errorf("Expected AddedAt Sep 1, got %v", movie.AddedAt)
+	}
+
+	// Item without DateCreated
+	movie2, ok := data[99999]
+	if !ok {
+		t.Fatal("Expected TMDb ID 99999 in result")
+	}
+	if movie2.AddedAt != nil {
+		t.Error("Expected AddedAt to be nil for item without DateCreated")
+	}
 
 	// Check unwatched movie
 	unwatched, ok := data[55555]
@@ -163,6 +181,13 @@ func TestEmbyClient_GetBulkWatchDataForUser(t *testing.T) {
 	}
 	if unwatched.LastPlayed != nil {
 		t.Error("Expected nil LastPlayed for unwatched movie")
+	}
+	// Unwatched item with DateCreated should still have AddedAt
+	if unwatched.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set from DateCreated for unwatched movie")
+	}
+	if unwatched.AddedAt.Month() != 12 || unwatched.AddedAt.Day() != 25 {
+		t.Errorf("Expected AddedAt Dec 25, got %v", unwatched.AddedAt)
 	}
 }
 

@@ -126,6 +126,7 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 					Tags:             []int{2},
 					QualityProfileID: 1,
 					Added:            "2023-06-01T00:00:00Z",
+					MovieFile:        &radarrMovieFile{DateAdded: "2023-09-15T12:00:00Z"},
 					Ratings: struct {
 						IMDB struct {
 							Value float64 `json:"value"`
@@ -140,13 +141,14 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 					},
 				},
 				{
-					// Movie with TMDB rating only (IMDB = 0)
+					// Movie with TMDB rating only (IMDB = 0), no movieFile
 					ID:               2,
 					Title:            "Serenity 2",
 					TmdbID:           16321,
 					HasFile:          true,
 					SizeOnDisk:       5000000000,
 					OriginalLanguage: arrLanguage{ID: 2, Name: "Japanese"},
+					Added:            "2024-01-10T00:00:00Z",
 					Ratings: struct {
 						IMDB struct {
 							Value float64 `json:"value"`
@@ -187,7 +189,7 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 		t.Fatalf("Expected 2 items, got %d", len(items))
 	}
 
-	// First movie
+	// First movie — should use movieFile.dateAdded, NOT movie.added
 	movie := items[0]
 	if movie.Type != MediaTypeMovie {
 		t.Errorf("Expected MediaTypeMovie, got %v", movie.Type)
@@ -213,8 +215,15 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 	if movie.Language != "English" {
 		t.Errorf("Expected Language 'English', got %q", movie.Language)
 	}
+	// AddedAt should be movieFile.dateAdded (2023-09-15), NOT movie.added (2023-06-01)
+	if movie.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set for Serenity")
+	}
+	if movie.AddedAt.Month() != 9 || movie.AddedAt.Day() != 15 {
+		t.Errorf("Expected AddedAt from movieFile (Sep 15), got %v", movie.AddedAt)
+	}
 
-	// Second movie — TMDB fallback rating
+	// Second movie — no movieFile, should fall back to movie.added
 	tmdbOnly := items[1]
 	if tmdbOnly.Rating != 7.2 {
 		t.Errorf("Expected TMDB fallback rating 7.2, got %v", tmdbOnly.Rating)
@@ -224,6 +233,72 @@ func TestRadarrClient_GetMediaItems(t *testing.T) {
 	}
 	if tmdbOnly.Language != "Japanese" {
 		t.Errorf("Expected Language 'Japanese', got %q", tmdbOnly.Language)
+	}
+	// AddedAt should fall back to movie.added (2024-01-10)
+	if tmdbOnly.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set for Serenity 2 (fallback)")
+	}
+	if tmdbOnly.AddedAt.Month() != 1 || tmdbOnly.AddedAt.Day() != 10 {
+		t.Errorf("Expected AddedAt fallback (Jan 10), got %v", tmdbOnly.AddedAt)
+	}
+}
+
+func TestRadarrResolveAddedAt(t *testing.T) {
+	tests := []struct {
+		name      string
+		movieFile *radarrMovieFile
+		added     string
+		wantNil   bool
+		wantMonth int
+	}{
+		{
+			name:      "prefers movieFile.dateAdded over movie.added",
+			movieFile: &radarrMovieFile{DateAdded: "2024-04-01T12:00:00Z"},
+			added:     "2024-01-01T00:00:00Z",
+			wantMonth: 4,
+		},
+		{
+			name:      "falls back to movie.added when movieFile is nil",
+			movieFile: nil,
+			added:     "2024-01-01T00:00:00Z",
+			wantMonth: 1,
+		},
+		{
+			name:      "falls back to movie.added when movieFile.dateAdded is empty",
+			movieFile: &radarrMovieFile{DateAdded: ""},
+			added:     "2024-03-15T00:00:00Z",
+			wantMonth: 3,
+		},
+		{
+			name:      "falls back to movie.added when movieFile.dateAdded is unparseable",
+			movieFile: &radarrMovieFile{DateAdded: "not-a-date"},
+			added:     "2024-05-20T00:00:00Z",
+			wantMonth: 5,
+		},
+		{
+			name:      "returns nil when both are empty",
+			movieFile: nil,
+			added:     "",
+			wantNil:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := radarrResolveAddedAt(tc.movieFile, tc.added)
+			if tc.wantNil {
+				if result != nil {
+					t.Errorf("Expected nil, got %v", result)
+				}
+				return
+			}
+			if result == nil {
+				t.Fatal("Expected non-nil result")
+			}
+			if int(result.Month()) != tc.wantMonth {
+				t.Errorf("Expected month %d, got %d", tc.wantMonth, result.Month())
+			}
+		})
 	}
 }
 

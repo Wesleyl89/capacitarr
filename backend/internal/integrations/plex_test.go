@@ -460,6 +460,7 @@ func TestPlexClient_GetBulkWatchData_Movies(t *testing.T) {
 					Type:         "movie",
 					ViewCount:    5,
 					LastViewedAt: 1700000000,
+					AddedAt:      1680000000, // 2023-03-28T17:46:40Z
 					GUIDs:        []plexGUID{{ID: "tmdb://16320"}},
 				},
 				{
@@ -501,6 +502,10 @@ func TestPlexClient_GetBulkWatchData_Movies(t *testing.T) {
 	if movie1.LastPlayed == nil {
 		t.Error("Expected LastPlayed to be set for Serenity")
 	}
+	// AddedAt should be bridged from Plex library metadata
+	if movie1.AddedAt == nil {
+		t.Error("Expected AddedAt to be set for Serenity (from Plex addedAt)")
+	}
 
 	// Unwatched movie should still be in map with PlayCount=0
 	movie2, ok := watchMap[99999]
@@ -512,6 +517,10 @@ func TestPlexClient_GetBulkWatchData_Movies(t *testing.T) {
 	}
 	if movie2.LastPlayed != nil {
 		t.Error("Expected LastPlayed to be nil for Serenity 2")
+	}
+	// No addedAt in metadata → AddedAt should be nil
+	if movie2.AddedAt != nil {
+		t.Error("Expected AddedAt to be nil for Serenity 2 (no addedAt in metadata)")
 	}
 }
 

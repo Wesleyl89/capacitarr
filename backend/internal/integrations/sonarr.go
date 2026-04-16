@@ -60,6 +60,85 @@ type sonarrSeason struct {
 	} `json:"statistics"`
 }
 
+// sonarrEpisodeFile maps the relevant fields from Sonarr's /api/v3/episodefile endpoint.
+// The dateAdded field represents when the episode file was actually imported/downloaded.
+type sonarrEpisodeFile struct {
+	ID           int    `json:"id"`
+	SeasonNumber int    `json:"seasonNumber"`
+	DateAdded    string `json:"dateAdded"`
+}
+
+// sonarrFetchEpisodeFileDates fetches episode files for a series and returns
+// a map of seasonNumber → max(dateAdded) for that season. This gives accurate
+// per-season "time in library" dates based on when files were actually imported,
+// rather than when the show was added to Sonarr.
+func sonarrFetchEpisodeFileDates(doRequest func(string) ([]byte, error), seriesID int) map[int]time.Time {
+	endpoint := fmt.Sprintf("/api/v3/episodefile?seriesId=%d", seriesID)
+	body, err := doRequest(endpoint)
+	if err != nil {
+		return nil // Non-fatal: fall back to show-level added date
+	}
+
+	var files []sonarrEpisodeFile
+	if err := json.Unmarshal(body, &files); err != nil {
+		return nil
+	}
+
+	// Build map: seasonNumber → latest dateAdded in that season
+	seasonDates := make(map[int]time.Time)
+	for _, f := range files {
+		if f.DateAdded == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, f.DateAdded)
+		if err != nil {
+			continue
+		}
+		if existing, ok := seasonDates[f.SeasonNumber]; !ok || t.After(existing) {
+			seasonDates[f.SeasonNumber] = t
+		}
+	}
+	return seasonDates
+}
+
+// sonarrResolveAddedAt determines the best "added" timestamp for a season or show.
+// It prefers the file-level date (from episodefile API) over the show-level added date.
+func sonarrResolveAddedAt(seasonDates map[int]time.Time, seasonNumber int, showAdded string) *time.Time {
+	// Prefer file-level date for the specific season
+	if seasonDates != nil {
+		if t, ok := seasonDates[seasonNumber]; ok {
+			return &t
+		}
+	}
+	// Fall back to show-level added date
+	if showAdded != "" {
+		if t, err := time.Parse(time.RFC3339, showAdded); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
+// sonarrResolveShowAddedAt determines the best "added" timestamp for a show-level item.
+// It uses the latest file date across all seasons, falling back to show.added.
+func sonarrResolveShowAddedAt(seasonDates map[int]time.Time, showAdded string) *time.Time {
+	if len(seasonDates) > 0 {
+		var latest time.Time
+		for _, t := range seasonDates {
+			if t.After(latest) {
+				latest = t
+			}
+		}
+		return &latest
+	}
+	if showAdded != "" {
+		if t, err := time.Parse(time.RFC3339, showAdded); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
 // GetMediaItems fetches all series and seasons from Sonarr with quality and tag metadata.
 func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 	// Fetch quality profiles
@@ -93,12 +172,10 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 
 		tagNames := arrResolveTagNames(show.Tags, tagMap)
 
-		var addedAt *time.Time
-		if show.Added != "" {
-			if t, err := time.Parse(time.RFC3339, show.Added); err == nil {
-				addedAt = &t
-			}
-		}
+		// Fetch per-season file dates for accurate "time in library" calculation.
+		// This uses episodefile.dateAdded (actual file import time) instead of
+		// series.added (entry creation time). Falls back gracefully on failure.
+		seasonDates := sonarrFetchEpisodeFileDates(s.doRequest, show.ID)
 
 		posterURL := arrExtractPosterURL(show.Images, s.URL)
 
@@ -107,6 +184,8 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			if season.SeasonNumber == 0 || season.Statistics.SizeOnDisk == 0 {
 				continue // Skip specials and empty seasons
 			}
+
+			addedAt := sonarrResolveAddedAt(seasonDates, season.SeasonNumber, show.Added)
 
 			items = append(items, MediaItem{
 				ExternalID:     fmt.Sprintf("%d-s%d", show.ID, season.SeasonNumber),
@@ -132,6 +211,8 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 		}
 
 		// Also emit the show-level item for "all or nothing" strategy
+		showAddedAt := sonarrResolveShowAddedAt(seasonDates, show.Added)
+
 		items = append(items, MediaItem{
 			ExternalID:     strconv.Itoa(show.ID),
 			Type:           MediaTypeShow,
@@ -149,7 +230,7 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 			Monitored:      show.Monitored,
 			Language:       show.OriginalLanguage.Name,
 			Tags:           tagNames,
-			AddedAt:        addedAt,
+			AddedAt:        showAddedAt,
 		})
 	}
 

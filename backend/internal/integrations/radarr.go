@@ -56,14 +56,41 @@ type radarrMovie struct {
 	Tags             []int             `json:"tags"`
 	QualityProfileID int               `json:"qualityProfileId"`
 	Added            string            `json:"added"`
+	MovieFile        *radarrMovieFile  `json:"movieFile,omitempty"` // Inline file metadata (dateAdded = actual import time)
 	Images           []arrImage        `json:"images"`
 	Collection       *radarrCollection `json:"collection,omitempty"` // TMDb collection (e.g., "Sonic the Hedgehog Collection")
+}
+
+// radarrMovieFile maps the inline movieFile object from the Radarr movie API response.
+// The dateAdded field represents when the file was actually imported/downloaded,
+// which is more accurate than movie.added for "time in library" calculations.
+type radarrMovieFile struct {
+	DateAdded string `json:"dateAdded"`
 }
 
 // radarrCollection maps the Radarr API collection object.
 type radarrCollection struct {
 	Name   string `json:"name"`
 	TmdbID int    `json:"tmdbId"`
+}
+
+// radarrResolveAddedAt determines the best available "added" timestamp for a movie.
+// It prefers movieFile.dateAdded (actual file import time) over movie.added (entry creation time).
+// Falls back to movie.added if movieFile is nil or its dateAdded is empty/unparseable.
+func radarrResolveAddedAt(movieFile *radarrMovieFile, added string) *time.Time {
+	// Prefer file-level dateAdded — this is when the file was actually imported
+	if movieFile != nil && movieFile.DateAdded != "" {
+		if t, err := time.Parse(time.RFC3339, movieFile.DateAdded); err == nil {
+			return &t
+		}
+	}
+	// Fall back to entry-level added date
+	if added != "" {
+		if t, err := time.Parse(time.RFC3339, added); err == nil {
+			return &t
+		}
+	}
+	return nil
 }
 
 // getCachedMovies returns the raw Radarr movie list, caching it for the lifetime
@@ -123,12 +150,7 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 
 		tagNames := arrResolveTagNames(m.Tags, tagMap)
 
-		var addedAt *time.Time
-		if m.Added != "" {
-			if t, err := time.Parse(time.RFC3339, m.Added); err == nil {
-				addedAt = &t
-			}
-		}
+		addedAt := radarrResolveAddedAt(m.MovieFile, m.Added)
 
 		// Extract collection name if present
 		var collections []string
@@ -219,12 +241,7 @@ func (r *RadarrClient) ResolveCollectionMembers(item MediaItem) ([]MediaItem, er
 		}
 		tagNames := arrResolveTagNames(m.Tags, tagMap)
 
-		var addedAt *time.Time
-		if m.Added != "" {
-			if t, err := time.Parse(time.RFC3339, m.Added); err == nil {
-				addedAt = &t
-			}
-		}
+		addedAt := radarrResolveAddedAt(m.MovieFile, m.Added)
 
 		members = append(members, MediaItem{
 			ExternalID:        strconv.Itoa(m.ID),

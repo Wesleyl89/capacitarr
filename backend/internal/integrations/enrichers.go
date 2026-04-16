@@ -86,6 +86,16 @@ func (e *BulkWatchEnricher) Enrich(items []MediaItem) error {
 				}
 				matched++
 			}
+			// Bridge media server library date to item's AddedAt.
+			// The media server date is the most accurate "file on disk" signal
+			// because it comes from the library scanner detecting the file.
+			// Override the *arr date if the media server date is more recent
+			// (i.e., closer to when the file actually appeared).
+			if wd.AddedAt != nil {
+				if item.AddedAt == nil || wd.AddedAt.After(*item.AddedAt) {
+					item.AddedAt = wd.AddedAt
+				}
+			}
 		}
 	}
 	logEnrichmentResult(e.name, len(items), len(watchMap), matched)

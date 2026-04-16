@@ -161,6 +161,7 @@ func TestJellyfinClient_GetBulkWatchDataForUser(t *testing.T) {
 						"Id":"item-1",
 						"Name":"Serenity",
 						"Type":"Movie",
+						"DateCreated":"2024-01-10T12:00:00Z",
 						"ProviderIds":{"Tmdb":"16320"},
 						"UserData":{
 							"PlayCount":3,
@@ -183,6 +184,7 @@ func TestJellyfinClient_GetBulkWatchDataForUser(t *testing.T) {
 						"Id":"item-3",
 						"Name":"New Movie",
 						"Type":"Movie",
+						"DateCreated":"2024-03-05T09:00:00Z",
 						"ProviderIds":{"Tmdb":"55555"},
 						"UserData":{
 							"PlayCount":0,
@@ -224,6 +226,22 @@ func TestJellyfinClient_GetBulkWatchDataForUser(t *testing.T) {
 	if len(movie.Users) != 1 || movie.Users[0] != "admin" {
 		t.Errorf("Expected Users=[admin], got %v", movie.Users)
 	}
+	// AddedAt should be populated from DateCreated
+	if movie.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set from DateCreated")
+	}
+	if movie.AddedAt.Month() != 1 || movie.AddedAt.Day() != 10 {
+		t.Errorf("Expected AddedAt Jan 10, got %v", movie.AddedAt)
+	}
+
+	// Item without DateCreated
+	movie2, ok := data[99999]
+	if !ok {
+		t.Fatal("Expected TMDb ID 99999 key in data map")
+	}
+	if movie2.AddedAt != nil {
+		t.Error("Expected AddedAt to be nil for item without DateCreated")
+	}
 
 	// Unwatched item
 	newMovie, ok := data[55555]
@@ -239,6 +257,13 @@ func TestJellyfinClient_GetBulkWatchDataForUser(t *testing.T) {
 	// Unwatched items should not track the user
 	if len(newMovie.Users) != 0 {
 		t.Errorf("Expected no Users for unwatched item, got %v", newMovie.Users)
+	}
+	// Unwatched item with DateCreated should still have AddedAt
+	if newMovie.AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set from DateCreated for unwatched item")
+	}
+	if newMovie.AddedAt.Month() != 3 || newMovie.AddedAt.Day() != 5 {
+		t.Errorf("Expected AddedAt Mar 5, got %v", newMovie.AddedAt)
 	}
 }
 

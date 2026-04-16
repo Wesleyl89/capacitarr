@@ -88,7 +88,8 @@ type WatchDataProvider interface {
 type WatchData struct {
 	PlayCount  int
 	LastPlayed *time.Time
-	Users      []string // Users who watched this item
+	Users      []string   // Users who watched this item
+	AddedAt    *time.Time // When the media was added to the library (from media server)
 }
 
 // RequestProvider is implemented by integrations that track media requests.

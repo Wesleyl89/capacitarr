@@ -444,13 +444,18 @@ func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
 		return nil, fmt.Errorf("failed to fetch Plex items for watch data: %w", err)
 	}
 
-	// Build ratingKey → TMDb ID reverse map from cached library metadata.
-	// This translates Plex-native ratingKeys in history entries to TMDb IDs
-	// that the enrichment pipeline uses for matching.
+	// Build ratingKey → TMDb ID reverse map and TMDb ID → AddedAt map
+	// from cached library metadata. The ratingKey map translates Plex-native
+	// ratingKeys in history entries to TMDb IDs for matching. The AddedAt map
+	// bridges the media server's library date to WatchData for the enrichment pipeline.
 	ratingKeyToTMDb := make(map[string]int)
+	tmdbAddedAt := make(map[int]*time.Time)
 	for _, item := range items {
 		if item.TMDbID > 0 && item.ExternalID != "" {
 			ratingKeyToTMDb[item.ExternalID] = item.TMDbID
+		}
+		if item.TMDbID > 0 && item.AddedAt != nil {
+			tmdbAddedAt[item.TMDbID] = item.AddedAt
 		}
 	}
 
@@ -537,6 +542,7 @@ func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
 			PlayCount:  agg.playCount,
 			LastPlayed: lastPlayed,
 			Users:      users,
+			AddedAt:    tmdbAddedAt[tmdbID],
 		}
 		// Keep entry with highest play count if duplicates (e.g., same TMDb ID
 		// mapped from multiple ratingKeys)
@@ -555,7 +561,7 @@ func (p *PlexClient) GetBulkWatchData() (map[int]*WatchData, error) {
 			continue
 		}
 		if _, ok := result[item.TMDbID]; !ok {
-			result[item.TMDbID] = &WatchData{}
+			result[item.TMDbID] = &WatchData{AddedAt: item.AddedAt}
 		}
 	}
 
@@ -581,6 +587,7 @@ func (p *PlexClient) getBulkWatchDataFallback(items []MediaItem) (map[int]*Watch
 		data := &WatchData{
 			PlayCount:  item.PlayCount,
 			LastPlayed: item.LastPlayed,
+			AddedAt:    item.AddedAt,
 		}
 		// Keep the entry with the highest play count if duplicates
 		if existing, ok := result[item.TMDbID]; ok {
@@ -604,7 +611,7 @@ func (p *PlexClient) buildEmptyWatchData(items []MediaItem) map[int]*WatchData {
 			continue
 		}
 		if _, ok := result[item.TMDbID]; !ok {
-			result[item.TMDbID] = &WatchData{}
+			result[item.TMDbID] = &WatchData{AddedAt: item.AddedAt}
 		}
 	}
 	return result

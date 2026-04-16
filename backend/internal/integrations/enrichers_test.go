@@ -617,3 +617,236 @@ func TestTracearrEnricher_EmptyHistory(t *testing.T) {
 		t.Errorf("Expected PlayCount 0 (no history), got %d", items[0].PlayCount)
 	}
 }
+
+// ─── Mock WatchDataProvider ─────────────────────────────────────────────────
+
+type mockWatchDataProvider struct {
+	data map[int]*WatchData
+	err  error
+}
+
+func (m *mockWatchDataProvider) GetBulkWatchData() (map[int]*WatchData, error) {
+	return m.data, m.err
+}
+
+// ─── BulkWatchEnricher tests ────────────────────────────────────────────────
+
+func TestBulkWatchEnricher_EnrichesWatchData(t *testing.T) {
+	lastPlayed := time.Date(2026, 3, 15, 20, 30, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 3, LastPlayed: &lastPlayed, Users: []string{"mal", "wash"}},
+			1437:  {PlayCount: 7, LastPlayed: &lastPlayed, Users: []string{"kaylee"}},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 16320},
+		{Title: "Firefly", TMDbID: 1437, Type: MediaTypeShow},
+		{Title: "Unrelated", TMDbID: 999},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	// Item 0: Serenity — should have watch data
+	if items[0].PlayCount != 3 {
+		t.Errorf("Expected PlayCount 3 for Serenity, got %d", items[0].PlayCount)
+	}
+	if items[0].LastPlayed == nil || !items[0].LastPlayed.Equal(lastPlayed) {
+		t.Errorf("Expected LastPlayed %v for Serenity, got %v", lastPlayed, items[0].LastPlayed)
+	}
+	if len(items[0].WatchedByUsers) != 2 {
+		t.Errorf("Expected 2 users for Serenity, got %d", len(items[0].WatchedByUsers))
+	}
+
+	// Item 1: Firefly — should have watch data
+	if items[1].PlayCount != 7 {
+		t.Errorf("Expected PlayCount 7 for Firefly, got %d", items[1].PlayCount)
+	}
+	if len(items[1].WatchedByUsers) != 1 || items[1].WatchedByUsers[0] != "kaylee" {
+		t.Errorf("Expected [kaylee] for Firefly, got %v", items[1].WatchedByUsers)
+	}
+
+	// Item 2: unmatched — should be untouched
+	if items[2].PlayCount != 0 {
+		t.Errorf("Expected PlayCount 0 for unmatched item, got %d", items[2].PlayCount)
+	}
+}
+
+func TestBulkWatchEnricher_SkipsItemsWithExistingPlayCount(t *testing.T) {
+	lastPlayed := time.Date(2026, 3, 15, 20, 30, 0, 0, time.UTC)
+	addedAt := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 5, LastPlayed: &lastPlayed, Users: []string{"wash"}, AddedAt: &addedAt},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	existingLastPlayed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	items := []MediaItem{
+		{
+			Title:          "Serenity",
+			TMDbID:         16320,
+			PlayCount:      10,
+			LastPlayed:     &existingLastPlayed,
+			WatchedByUsers: []string{"mal"},
+		},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	// Watch data should NOT be overwritten (PlayCount != 0)
+	if items[0].PlayCount != 10 {
+		t.Errorf("Expected PlayCount 10 (preserved), got %d", items[0].PlayCount)
+	}
+	if !items[0].LastPlayed.Equal(existingLastPlayed) {
+		t.Errorf("Expected LastPlayed preserved at %v, got %v", existingLastPlayed, *items[0].LastPlayed)
+	}
+	if len(items[0].WatchedByUsers) != 1 || items[0].WatchedByUsers[0] != "mal" {
+		t.Errorf("Expected WatchedByUsers [mal] preserved, got %v", items[0].WatchedByUsers)
+	}
+
+	// AddedAt should still be bridged even when PlayCount != 0
+	if items[0].AddedAt == nil || !items[0].AddedAt.Equal(addedAt) {
+		t.Errorf("Expected AddedAt bridged to %v, got %v", addedAt, items[0].AddedAt)
+	}
+}
+
+func TestBulkWatchEnricher_BridgesAddedAt_NilToSet(t *testing.T) {
+	addedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 1, AddedAt: &addedAt},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 16320, AddedAt: nil},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	if items[0].AddedAt == nil {
+		t.Fatal("Expected AddedAt to be set from watch data, got nil")
+	}
+	if !items[0].AddedAt.Equal(addedAt) {
+		t.Errorf("Expected AddedAt %v, got %v", addedAt, *items[0].AddedAt)
+	}
+}
+
+func TestBulkWatchEnricher_BridgesAddedAt_OlderToNewer(t *testing.T) {
+	itemAddedAt := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	wdAddedAt := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 1, AddedAt: &wdAddedAt},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 16320, AddedAt: &itemAddedAt},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	// wd.AddedAt (Jun) is after item.AddedAt (Jan) → item should be updated
+	if items[0].AddedAt == nil || !items[0].AddedAt.Equal(wdAddedAt) {
+		t.Errorf("Expected AddedAt updated to %v, got %v", wdAddedAt, items[0].AddedAt)
+	}
+}
+
+func TestBulkWatchEnricher_PreservesAddedAt_WhenArrDateIsNewer(t *testing.T) {
+	itemAddedAt := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	wdAddedAt := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 1, AddedAt: &wdAddedAt},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 16320, AddedAt: &itemAddedAt},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	// item.AddedAt (Jun) is after wd.AddedAt (Jan) → item should stay Jun
+	if items[0].AddedAt == nil || !items[0].AddedAt.Equal(itemAddedAt) {
+		t.Errorf("Expected AddedAt preserved at %v, got %v", itemAddedAt, items[0].AddedAt)
+	}
+}
+
+func TestBulkWatchEnricher_NilWatchDataAddedAt(t *testing.T) {
+	itemAddedAt := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 2, AddedAt: nil},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 16320, AddedAt: &itemAddedAt},
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	// wd.AddedAt is nil → item.AddedAt should remain unchanged
+	if items[0].AddedAt == nil || !items[0].AddedAt.Equal(itemAddedAt) {
+		t.Errorf("Expected AddedAt unchanged at %v, got %v", itemAddedAt, items[0].AddedAt)
+	}
+}
+
+func TestBulkWatchEnricher_SkipsItemsWithoutTMDbID(t *testing.T) {
+	provider := &mockWatchDataProvider{
+		data: map[int]*WatchData{
+			16320: {PlayCount: 5, Users: []string{"mal"}},
+		},
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{
+		{Title: "Serenity", TMDbID: 0}, // No TMDb ID
+	}
+
+	if err := enricher.Enrich(items); err != nil {
+		t.Fatalf("Enrich failed: %v", err)
+	}
+
+	if items[0].PlayCount != 0 {
+		t.Errorf("Expected PlayCount 0 for item without TMDb ID, got %d", items[0].PlayCount)
+	}
+	if len(items[0].WatchedByUsers) != 0 {
+		t.Errorf("Expected no users for item without TMDb ID, got %v", items[0].WatchedByUsers)
+	}
+}
+
+func TestBulkWatchEnricher_PropagatesProviderError(t *testing.T) {
+	provider := &mockWatchDataProvider{
+		err: errConnectionFailed,
+	}
+	enricher := NewBulkWatchEnricher("test", 20, provider)
+
+	items := []MediaItem{{Title: "Serenity", TMDbID: 16320}}
+
+	if err := enricher.Enrich(items); err == nil {
+		t.Fatal("Expected error from provider, got nil")
+	}
+}

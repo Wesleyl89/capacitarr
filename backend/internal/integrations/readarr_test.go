@@ -183,8 +183,12 @@ func TestReadarrClient_GetMediaItems(t *testing.T) {
 	if !book1.Monitored {
 		t.Error("Expected Serenity to be monitored")
 	}
+	// AddedAt uses book.added (Readarr doesn't embed bookFile inline)
 	if book1.AddedAt == nil {
-		t.Error("Expected non-nil AddedAt for Serenity")
+		t.Fatal("Expected non-nil AddedAt for Serenity")
+	}
+	if book1.AddedAt.Month() != 3 || book1.AddedAt.Day() != 1 {
+		t.Errorf("Expected AddedAt from book.added (Mar 1), got %v", book1.AddedAt)
 	}
 	if book1.QualityProfile != "eBook" {
 		t.Errorf("Expected quality profile 'eBook', got %q", book1.QualityProfile)
