@@ -1,3 +1,10 @@
+## [3.2.7] - 2026-04-16
+
+### 🐛 Bug Fixes
+
+- *(library)* Resolve Firefox table view rendering and scrollbar issues ([314a045](https://github.com/Ghent/capacitarr/commit/314a045868ddcb1bd1e1997cdc35fe8416ca1be3))
+- *(library)* Use file-level dates for time-in-library accuracy ([603cee5](https://github.com/Ghent/capacitarr/commit/603cee5c218840c68c7845f0f2ce68bd1c0e97e8))
+- *(ci)* Add --ignore-registry-errors to pnpm audit for npm 410 ([7c90917](https://github.com/Ghent/capacitarr/commit/7c909173031e99ca91f7093240af4b3498d85885))
 ## [3.2.6] - 2026-04-13
 
 ### 🐛 Bug Fixes
