@@ -1254,8 +1254,17 @@ table tr {
 
 .library-scroll {
   scrollbar-gutter: stable;
+  /* Standard scrollbar styling (Firefox + future browsers).
+     Chrome/Edge use the ::-webkit-scrollbar rules below instead. */
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.7 0.005 285 / 0.5) oklch(from var(--color-muted) l c h / 0.25);
 }
 
+.dark .library-scroll {
+  scrollbar-color: oklch(0.4 0.005 285 / 0.6) oklch(from var(--color-muted) l c h / 0.3);
+}
+
+/* Chromium / WebKit custom scrollbar (ignored by Firefox) */
 .library-scroll::-webkit-scrollbar {
   width: 14px;
 }
@@ -1287,6 +1296,16 @@ table tr {
 
 .dark .library-scroll::-webkit-scrollbar-thumb:hover {
   background-color: oklch(0.5 0.005 285 / 0.75);
+}
+
+/* Firefox: UiTable wraps every <table> in <div class="overflow-auto">.
+   Inside .library-scroll this nested overflow context causes Firefox to
+   collapse clientHeight to 0, breaking the virtualizer. Neutralize it
+   so .library-scroll remains the only scroll container. */
+@supports (-moz-appearance: none) {
+  .library-scroll [data-slot='table-container'] {
+    overflow: visible;
+  }
 }
 
 /* ========================================
