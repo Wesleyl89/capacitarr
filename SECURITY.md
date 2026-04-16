@@ -87,7 +87,7 @@ Every push and pull request is scanned by 7 static security tools. **All are blo
 |------|------|-----------------|--------|-----------|
 | **gosec** | SAST (Go) | SQL injection, hardcoded credentials, weak crypto, insecure TLS, SSRF | `lint:go` (via golangci-lint) | ✅ Yes |
 | **govulncheck** | SCA (Go) | Known vulnerabilities in Go dependencies (call-graph analysis) | `security:govulncheck` | ✅ Yes |
-| **pnpm audit** | SCA (Node.js) | Known vulnerabilities in npm/pnpm dependencies | `security:pnpm-audit` | ✅ Yes |
+| **pnpm audit** | SCA (Node.js) | Known vulnerabilities in npm/pnpm dependencies | `security:pnpm-audit` | ✅ Yes (see [Temporary Workarounds](#temporary-workarounds--pnpm-audit-registry-410)) |
 | **Trivy (FS)** | SCA (multi-lang) | Filesystem scan for Go module + Node.js dependency CVEs (HIGH/CRITICAL) | `security:trivy` | ✅ Yes |
 | **Trivy (image)** | Container scan | Alpine OS packages + binary CVEs in the Docker image | `security:trivy-image` | ✅ Yes |
 | **Gitleaks** | Secret scanning | Accidentally committed API keys, passwords, tokens in git history | `security:gitleaks` | ✅ Yes |
@@ -202,6 +202,16 @@ Run locally: `make build && make security:zap`
 The full test-by-test breakdown with rule IDs is in [`docs/security/zap-baseline-20260406.md`](docs/security/zap-baseline-20260406.md). Previous baselines: [2026-03-24](docs/security/zap-baseline-20260324.md), [2026-03-23](docs/security/zap-baseline-20260323.md), [2026-03-16](docs/security/zap-baseline-20260316.md), [2026-03-10](docs/security/zap-baseline-20260310.md).
 
 **Testing cadence:** Run DAST scanning (`make security:zap`) before each release, after significant code changes affecting HTTP handlers or authentication, and periodically as part of routine security hygiene. The baseline should be updated in this document after each scan.
+
+### Temporary Workarounds — pnpm audit Registry 410
+
+As of 2026-04-15, the npm registry retired both legacy audit endpoints (`/-/npm/v1/security/audits` and `/-/npm/v1/security/audits/quick`), returning HTTP 410 Gone. This breaks `pnpm audit` on all pnpm 10.x versions and 11.0.0-rc.0. The upstream fix is tracked in [pnpm/pnpm#11265](https://github.com/pnpm/pnpm/issues/11265).
+
+**Workaround applied:** The `--ignore-registry-errors` flag has been added to `pnpm audit` in both the Makefile (`security:ci` target) and `.github/workflows/ci.yml` (`security-pnpm-audit` job). This prevents the 410 response from failing the CI pipeline.
+
+**Impact on security posture:** Minimal. The `--ignore-registry-errors` flag means `pnpm audit` will pass even if the registry is unreachable, but **Trivy filesystem scanning** (`security:trivy`) independently scans all Node.js dependencies for HIGH/CRITICAL CVEs using the same vulnerability databases. The `pnpm.overrides` policy (see below) continues to enforce patched dependency versions at install time.
+
+**When to remove:** Once pnpm ships a release that uses the new bulk advisory endpoint (`/-/npm/v1/security/advisories/bulk`), remove the `--ignore-registry-errors` flag from the Makefile and CI workflow, and delete this section.
 
 ### Dependency Override Policy (`pnpm.overrides`)
 

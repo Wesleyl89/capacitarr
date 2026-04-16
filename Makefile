@@ -91,11 +91,14 @@ security\:ci:
 			go install golang.org/x/vuln/cmd/govulncheck@latest && \
 			cd /app && govulncheck ./..."
 	@echo "→ [security:pnpm-audit] (Docker: node:24-alpine)..."
+	# --ignore-registry-errors: npm retired legacy audit endpoints (410 Gone)
+	# pnpm <=10.x still uses the old endpoints. Trivy provides equivalent CVE coverage.
+	# Remove flag when pnpm ships bulk advisory endpoint support (pnpm/pnpm#11265).
 	docker run --rm --pull missing -e CI=true -v $(CURDIR)/frontend:/app -v /app/node_modules $(NODE_CACHE_VOLS) -w /app \
 		node:24-alpine sh -c "\
 			npm install -g pnpm@10.32.1 --silent && \
 			pnpm install --frozen-lockfile && \
-			pnpm audit"
+			pnpm audit --ignore-registry-errors"
 	@echo "→ [security:trivy] Filesystem vulnerability scan (Docker: ghcr.io/aquasecurity/trivy:0.69.3)..."
 	docker run --rm --pull missing -v $(CURDIR)/backend:/src ghcr.io/aquasecurity/trivy:0.69.3 \
 		fs --exit-code 1 --severity HIGH,CRITICAL --scanners vuln /src

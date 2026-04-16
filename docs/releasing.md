@@ -133,7 +133,7 @@ These jobs are defined in `.github/workflows/ci.yml`. Lint and test jobs run in 
 | `test-frontend` | test | pnpm + Vitest | Frontend unit tests |
 | `build-docker` | build | `docker/setup-buildx-action` | Multi-arch Docker smoke test (no push) |
 | `security-govulncheck` | security | `govulncheck` | Go vulnerability check |
-| `security-pnpm-audit` | security | `pnpm audit` | npm dependency audit |
+| `security-pnpm-audit` | security | `pnpm audit --ignore-registry-errors` | npm dependency audit (see `SECURITY.md` for registry 410 workaround) |
 | `security-trivy` | security | `aquasecurity/trivy-action@v0.35.0` (Trivy v0.69.3) | Filesystem CVE scan (backend + frontend) |
 | `security-trivy-image` | security | `aquasecurity/trivy-action@v0.35.0` (Trivy v0.69.3) | Docker image CVE scan |
 | `security-gitleaks` | security | `gitleaks/gitleaks-action` | Git secrets detection |
