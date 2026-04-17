@@ -116,7 +116,9 @@ func (l *LidarrClient) GetMediaItems() ([]MediaItem, error) {
 // GetLanguages is overridden above (Lidarr has no language endpoint).
 
 // DeleteMediaItem removes an artist and its files from disk via the Lidarr API.
-func (l *LidarrClient) DeleteMediaItem(item MediaItem) error {
-	endpoint := fmt.Sprintf("/api/v1/artist/%s?deleteFiles=true", item.ExternalID)
+// When opts.AddImportExclusion is true, the artist is added to Lidarr's import
+// list exclusion to prevent automatic re-addition by import lists.
+func (l *LidarrClient) DeleteMediaItem(item MediaItem, opts DeleteOptions) error {
+	endpoint := fmt.Sprintf("/api/v1/artist/%s?deleteFiles=true&addImportListExclusion=%t", item.ExternalID, opts.AddImportExclusion)
 	return arrSimpleDelete(l.URL, l.APIKey, endpoint)
 }

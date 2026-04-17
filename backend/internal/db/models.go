@@ -64,6 +64,7 @@ type IntegrationConfig struct {
 	LastError           string     `json:"lastError,omitempty"`
 	CollectionDeletion  bool       `gorm:"default:false" json:"collectionDeletion"`       // When enabled, deleting one collection member deletes all
 	ShowLevelOnly       bool       `gorm:"default:false" json:"showLevelOnly"`            // Sonarr only: evaluate entire shows instead of individual seasons
+	AddImportExclusion  bool       `gorm:"default:true" json:"addImportExclusion"`        // *arr only: add to import exclusion list on delete (prevents re-add by import lists)
 	ConsecutiveFailures int        `gorm:"default:0;not null" json:"consecutiveFailures"` // Incremented on connection test failure, reset on success
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`

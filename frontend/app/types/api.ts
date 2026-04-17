@@ -18,6 +18,7 @@ export interface IntegrationConfig {
   showLevelOnly: boolean;
   showLevelOnlyOverride: boolean;
   showLevelOnlyOverrideReason: string;
+  addImportExclusion: boolean;
   mediaSizeBytes: number;
   mediaCount: number;
   lastSync?: string | null;
@@ -393,6 +394,7 @@ export interface IntegrationExport {
   enabled: boolean;
   collectionDeletion?: boolean;
   showLevelOnly?: boolean;
+  addImportExclusion?: boolean;
 }
 
 export interface DiskGroupExport {

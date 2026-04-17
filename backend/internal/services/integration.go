@@ -544,6 +544,7 @@ type IntegrationUpdate struct {
 	Enabled            *bool  `json:"enabled"`
 	CollectionDeletion *bool  `json:"collectionDeletion"`
 	ShowLevelOnly      *bool  `json:"showLevelOnly"`
+	AddImportExclusion *bool  `json:"addImportExclusion"`
 }
 
 // PartialUpdate merges the provided fields into the existing integration config
@@ -572,6 +573,9 @@ func (s *IntegrationService) PartialUpdate(id uint, update IntegrationUpdate) (*
 	}
 	if update.ShowLevelOnly != nil {
 		existing.ShowLevelOnly = *update.ShowLevelOnly
+	}
+	if update.AddImportExclusion != nil {
+		existing.AddImportExclusion = *update.AddImportExclusion
 	}
 
 	// Config changed → clear stale sync status

@@ -1534,3 +1534,81 @@ func TestBackupService_IntegrationExport_ShowLevelOnlyRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupService_IntegrationExport_AddImportExclusionRoundTrip(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewBackupService(database, bus)
+	svc.SetDiskGroupService(NewDiskGroupService(database, bus))
+
+	// Create integrations with AddImportExclusion toggled differently.
+	// GORM skips false booleans on Create() when the DB has DEFAULT 1,
+	// so we create first and then explicitly set the false value.
+	database.Create(&db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://sonarr:8989",
+		APIKey: "key-1", Enabled: true, AddImportExclusion: true,
+	})
+	radarrCfg := db.IntegrationConfig{
+		Type: "radarr", Name: "Serenity Radarr", URL: "http://radarr:7878",
+		APIKey: "key-2", Enabled: true,
+	}
+	database.Create(&radarrCfg)
+	database.Model(&radarrCfg).Update("add_import_exclusion", false)
+
+	// Export
+	sections := ExportSections{Integrations: true}
+	envelope, err := svc.Export(sections, "v1.0.0-test")
+	if err != nil {
+		t.Fatalf("Export returned error: %v", err)
+	}
+
+	if len(envelope.Integrations) != 2 {
+		t.Fatalf("expected 2 integrations exported, got %d", len(envelope.Integrations))
+	}
+
+	// Verify exported fields
+	for _, ie := range envelope.Integrations {
+		switch ie.Name {
+		case "Firefly Sonarr":
+			if !ie.AddImportExclusion {
+				t.Error("expected AddImportExclusion=true for Firefly Sonarr export")
+			}
+		case "Serenity Radarr":
+			if ie.AddImportExclusion {
+				t.Error("expected AddImportExclusion=false for Serenity Radarr export")
+			}
+		}
+	}
+
+	// Import into a fresh DB to verify round-trip
+	freshDB := setupTestDB(t)
+	freshBus := newTestBus(t)
+	freshSvc := NewBackupService(freshDB, freshBus)
+	freshSvc.SetDiskGroupService(NewDiskGroupService(freshDB, freshBus))
+
+	importSections := ImportSections{Integrations: true}
+	_, importErr := freshSvc.Import(*envelope, importSections)
+	if importErr != nil {
+		t.Fatalf("Import returned error: %v", importErr)
+	}
+
+	// Verify imported fields
+	var imported []db.IntegrationConfig
+	freshDB.Find(&imported)
+	if len(imported) != 2 {
+		t.Fatalf("expected 2 integrations imported, got %d", len(imported))
+	}
+
+	for _, ic := range imported {
+		switch ic.Name {
+		case "Firefly Sonarr":
+			if !ic.AddImportExclusion {
+				t.Error("expected AddImportExclusion=true after import for Firefly Sonarr")
+			}
+		case "Serenity Radarr":
+			if ic.AddImportExclusion {
+				t.Error("expected AddImportExclusion=false after import for Serenity Radarr")
+			}
+		}
+	}
+}

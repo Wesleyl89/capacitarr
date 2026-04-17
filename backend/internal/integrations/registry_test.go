@@ -10,14 +10,14 @@ import (
 // mockFullClient implements all capability interfaces (like Sonarr/Radarr).
 type mockFullClient struct{}
 
-func (m *mockFullClient) TestConnection() error                    { return nil }
-func (m *mockFullClient) GetMediaItems() ([]MediaItem, error)      { return nil, nil }
-func (m *mockFullClient) GetDiskSpace() ([]DiskSpace, error)       { return nil, nil }
-func (m *mockFullClient) GetRootFolders() ([]string, error)        { return nil, nil }
-func (m *mockFullClient) DeleteMediaItem(_ MediaItem) error        { return nil }
-func (m *mockFullClient) GetQualityProfiles() ([]NameValue, error) { return nil, nil }
-func (m *mockFullClient) GetTags() ([]NameValue, error)            { return nil, nil }
-func (m *mockFullClient) GetLanguages() ([]NameValue, error)       { return nil, nil }
+func (m *mockFullClient) TestConnection() error                              { return nil }
+func (m *mockFullClient) GetMediaItems() ([]MediaItem, error)                { return nil, nil }
+func (m *mockFullClient) GetDiskSpace() ([]DiskSpace, error)                 { return nil, nil }
+func (m *mockFullClient) GetRootFolders() ([]string, error)                  { return nil, nil }
+func (m *mockFullClient) DeleteMediaItem(_ MediaItem, _ DeleteOptions) error { return nil }
+func (m *mockFullClient) GetQualityProfiles() ([]NameValue, error)           { return nil, nil }
+func (m *mockFullClient) GetTags() ([]NameValue, error)                      { return nil, nil }
+func (m *mockFullClient) GetLanguages() ([]NameValue, error)                 { return nil, nil }
 
 // mockWatchClient implements Connectable + WatchDataProvider + WatchlistProvider (like Plex).
 type mockWatchClient struct{}

@@ -240,12 +240,16 @@ func (s *SonarrClient) GetMediaItems() ([]MediaItem, error) {
 // GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
 // DeleteMediaItem removes a series or season and its files from disk via the Sonarr API.
-func (s *SonarrClient) DeleteMediaItem(item MediaItem) error {
+// When opts.AddImportExclusion is true and the item is a show (not a season),
+// the series is added to Sonarr's import list exclusion to prevent automatic
+// re-addition by import lists. Season-level deletes use the bulk episode file
+// endpoint which does not support import exclusion.
+func (s *SonarrClient) DeleteMediaItem(item MediaItem, opts DeleteOptions) error {
 	var endpoint string
 	switch item.Type { //nolint:exhaustive // Sonarr only handles shows and seasons
 	case MediaTypeShow:
 		// Delete the entire series and its files
-		endpoint = fmt.Sprintf("/api/v3/series/%s?deleteFiles=true", item.ExternalID)
+		endpoint = fmt.Sprintf("/api/v3/series/%s?deleteFiles=true&addImportListExclusion=%t", item.ExternalID, opts.AddImportExclusion)
 	case MediaTypeSeason:
 		// ExternalID for season is formatted as "seriesId-seasonNum" (e.g., "12-s1")
 		parts := strings.Split(item.ExternalID, "-s")

@@ -20,19 +20,20 @@ import (
 
 // DeleteJob describes a media item to be deleted.
 type DeleteJob struct {
-	Client            integrations.MediaDeleter
-	Item              integrations.MediaItem
-	Score             float64
-	Factors           []engine.ScoreFactor
-	Trigger           string // "engine", "user", "approval"
-	RunStatsID        uint   // Engine run stats row to increment Deleted counter
-	DiskGroupID       *uint  // Disk group that triggered this deletion (nil for user-initiated deletes)
-	ForceDryRun       bool   // When true, skip actual deletion even if DeletionsEnabled=true
-	UpsertAudit       bool   // When true, use AuditLog.UpsertDryRun() (idempotent poller dry-runs); when false, use AuditLog.Create() (append-only)
-	ApprovalEntryID   uint   // Non-zero if this job originated from an approval queue item
-	SunsetQueueItemID uint   // Non-zero if this job originated from a sunset queue item; cleaned up after successful deletion
-	CollectionGroup   string // Non-empty if this job is part of a collection deletion (e.g., "Sonic the Hedgehog Collection")
-	EnqueuedMode      string // Execution mode when this job was enqueued (defense-in-depth: processJob cancels if mode changed)
+	Client             integrations.MediaDeleter
+	Item               integrations.MediaItem
+	Score              float64
+	Factors            []engine.ScoreFactor
+	Trigger            string // "engine", "user", "approval"
+	RunStatsID         uint   // Engine run stats row to increment Deleted counter
+	DiskGroupID        *uint  // Disk group that triggered this deletion (nil for user-initiated deletes)
+	ForceDryRun        bool   // When true, skip actual deletion even if DeletionsEnabled=true
+	UpsertAudit        bool   // When true, use AuditLog.UpsertDryRun() (idempotent poller dry-runs); when false, use AuditLog.Create() (append-only)
+	ApprovalEntryID    uint   // Non-zero if this job originated from an approval queue item
+	SunsetQueueItemID  uint   // Non-zero if this job originated from a sunset queue item; cleaned up after successful deletion
+	CollectionGroup    string // Non-empty if this job is part of a collection deletion (e.g., "Sonic the Hedgehog Collection")
+	EnqueuedMode       string // Execution mode when this job was enqueued (defense-in-depth: processJob cancels if mode changed)
+	AddImportExclusion bool   // When true, tell the *arr server to add the item to its import exclusion list on delete
 }
 
 // DeleteJobSummary is a serialisable snapshot of a queued deletion job,
@@ -709,7 +710,9 @@ func (s *DeletionService) executeDeletion(job DeleteJob, factorsJSON []byte) {
 		s.publishProgress()
 		return
 	}
-	if err := job.Client.DeleteMediaItem(job.Item); err != nil {
+	if err := job.Client.DeleteMediaItem(job.Item, integrations.DeleteOptions{
+		AddImportExclusion: job.AddImportExclusion,
+	}); err != nil {
 		slog.Error("Deletion failed", "component", "services", "item", job.Item.Title, "error", err)
 		s.failed.Add(1)
 		s.batchFailed.Add(1)

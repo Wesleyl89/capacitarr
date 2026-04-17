@@ -131,7 +131,11 @@
 
         <!-- Inline feature toggles (issue #9) -->
         <div
-          v-if="integration.type === 'sonarr' || collectionDeletionTypes.has(integration.type)"
+          v-if="
+            integration.type === 'sonarr' ||
+            collectionDeletionTypes.has(integration.type) ||
+            importExclusionTypes.has(integration.type)
+          "
           class="pt-2 space-y-2 border-t border-border mt-2"
         >
           <!-- Show-Level Evaluation (Sonarr only) -->
@@ -173,6 +177,22 @@
               :model-value="integration.collectionDeletion"
               @update:model-value="
                 (val: boolean) => requestCollectionDeletionToggle(integration, val, 'card')
+              "
+            />
+          </div>
+          <!-- Import Exclusion (*arr types only) -->
+          <div
+            v-if="importExclusionTypes.has(integration.type)"
+            class="flex items-center justify-between gap-2"
+          >
+            <div class="flex items-center gap-1.5">
+              <ShieldBanIcon class="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span class="text-xs">Import Exclusion on Delete</span>
+            </div>
+            <UiSwitch
+              :model-value="integration.addImportExclusion"
+              @update:model-value="
+                (val: boolean) => toggleCardSetting(integration, 'addImportExclusion', val)
               "
             />
           </div>
@@ -358,6 +378,27 @@
           </NuxtLink>
         </div>
 
+        <!-- Import Exclusion toggle (*arr types only) -->
+        <div v-if="importExclusionTypes.has(formState.type)" class="space-y-2 pt-1">
+          <UiSeparator />
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <ShieldBanIcon class="w-4 h-4 text-amber-500 shrink-0" />
+                <UiLabel class="cursor-pointer">Import Exclusion on Delete</UiLabel>
+              </div>
+              <p class="text-xs text-muted-foreground mt-1">
+                When Capacitarr deletes media, add it to the import exclusion list to prevent import
+                lists from automatically re-adding it.
+              </p>
+            </div>
+            <UiSwitch
+              :model-value="formState.addImportExclusion"
+              @update:model-value="(val: boolean) => (formState.addImportExclusion = val)"
+            />
+          </div>
+        </div>
+
         <UiAlert v-if="formError" variant="destructive">
           <UiAlertDescription>{{ formError }}</UiAlertDescription>
         </UiAlert>
@@ -430,6 +471,7 @@ import {
   LayersIcon,
   TvIcon,
   InfoIcon,
+  ShieldBanIcon,
 } from 'lucide-vue-next';
 import type { IntegrationConfig, ConnectionTestResult, ApiError } from '~/types/api';
 import { PlexOAuth } from '~/utils/plexOAuth';
@@ -460,10 +502,14 @@ const formState = reactive({
   apiKey: '',
   collectionDeletion: false,
   showLevelOnly: false,
+  addImportExclusion: true,
 });
 
 /** Integration types that support collection deletion */
 const collectionDeletionTypes = new Set(['radarr', 'plex', 'jellyfin', 'emby']);
+
+/** Integration types that support import exclusion (*arr media managers only) */
+const importExclusionTypes = new Set(['sonarr', 'radarr', 'lidarr', 'readarr']);
 
 /** Description text for the collection deletion toggle per integration type */
 const collectionDeletionDescriptions: Record<string, string> = {
@@ -498,10 +544,10 @@ async function toggleEnabled(integration: IntegrationConfig, enabled: boolean) {
   }
 }
 
-// ─── Card-level feature toggle (showLevelOnly, collectionDeletion) ───────────
+// ─── Card-level feature toggle (showLevelOnly, collectionDeletion, addImportExclusion) ─
 async function toggleCardSetting(
   integration: IntegrationConfig,
-  key: 'showLevelOnly' | 'collectionDeletion',
+  key: 'showLevelOnly' | 'collectionDeletion' | 'addImportExclusion',
   value: boolean,
 ) {
   const previous = integration[key];
@@ -627,6 +673,7 @@ function openAddModal() {
     apiKey: '',
     collectionDeletion: false,
     showLevelOnly: false,
+    addImportExclusion: true,
   });
   formError.value = '';
   showModal.value = true;
@@ -645,6 +692,7 @@ function openEditModal(integration: IntegrationConfig) {
     apiKey: integration.apiKey,
     collectionDeletion: integration.collectionDeletion ?? false,
     showLevelOnly: integration.showLevelOnly ?? false,
+    addImportExclusion: integration.addImportExclusion ?? true,
   });
   formError.value = '';
   showModal.value = true;

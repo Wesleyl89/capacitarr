@@ -99,7 +99,7 @@ func (m *mockIntegration) GetMediaItems() ([]integrations.MediaItem, error) {
 	return nil, nil
 }
 
-func (m *mockIntegration) DeleteMediaItem(_ integrations.MediaItem) error {
+func (m *mockIntegration) DeleteMediaItem(_ integrations.MediaItem, _ integrations.DeleteOptions) error {
 	return m.deleteErr
 }
 

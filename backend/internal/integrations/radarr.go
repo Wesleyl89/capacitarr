@@ -184,8 +184,10 @@ func (r *RadarrClient) GetMediaItems() ([]MediaItem, error) {
 // GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
 // DeleteMediaItem removes a movie and its files from disk via the Radarr API.
-func (r *RadarrClient) DeleteMediaItem(item MediaItem) error {
-	endpoint := fmt.Sprintf("/api/v3/movie/%s?deleteFiles=true", item.ExternalID)
+// When opts.AddImportExclusion is true, the movie is added to Radarr's import
+// exclusion list to prevent automatic re-addition by import lists.
+func (r *RadarrClient) DeleteMediaItem(item MediaItem, opts DeleteOptions) error {
+	endpoint := fmt.Sprintf("/api/v3/movie/%s?deleteFiles=true&addImportExclusion=%t", item.ExternalID, opts.AddImportExclusion)
 	return arrSimpleDelete(r.URL, r.APIKey, endpoint)
 }
 

@@ -71,9 +71,21 @@ type DiskReporter interface {
 	GetRootFolders() ([]string, error)
 }
 
+// DeleteOptions carries per-call configuration for media deletion.
+// Passed explicitly to DeleteMediaItem so the interface contract is clear
+// about what behaviour is configurable.
+type DeleteOptions struct {
+	// AddImportExclusion tells the *arr server to add the deleted item to
+	// the import exclusion list, preventing automatic re-addition by import
+	// lists. The query parameter name varies by *arr app:
+	//   Radarr/Readarr: addImportExclusion
+	//   Sonarr/Lidarr:  addImportListExclusion
+	AddImportExclusion bool
+}
+
 // MediaDeleter is implemented by integrations that can delete media items.
 type MediaDeleter interface {
-	DeleteMediaItem(item MediaItem) error
+	DeleteMediaItem(item MediaItem, opts DeleteOptions) error
 }
 
 // WatchDataProvider is implemented by integrations that can supply bulk watch data.

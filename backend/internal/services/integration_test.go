@@ -1036,3 +1036,124 @@ func TestIntegrationService_IsShowLevelOnlyEffective_NonSonarr(t *testing.T) {
 		t.Error("expected false for non-Sonarr integration regardless of disk group mode")
 	}
 }
+
+func TestIntegrationService_AddImportExclusion_CreateAndUpdate(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Create with AddImportExclusion enabled (default)
+	created, err := svc.Create(db.IntegrationConfig{
+		Type: "radarr", Name: "Serenity Radarr", URL: "http://localhost:7878",
+		APIKey: "key1", Enabled: true, AddImportExclusion: true,
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !created.AddImportExclusion {
+		t.Error("expected AddImportExclusion=true after create")
+	}
+
+	// GetByID should preserve the field
+	fetched, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if !fetched.AddImportExclusion {
+		t.Error("expected AddImportExclusion=true from GetByID")
+	}
+
+	// Update to disable AddImportExclusion
+	updated, err := svc.Update(created.ID, db.IntegrationConfig{
+		Type: "radarr", Name: "Serenity Radarr", URL: "http://localhost:7878",
+		APIKey: "key1", Enabled: true, AddImportExclusion: false,
+	})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if updated.AddImportExclusion {
+		t.Error("expected AddImportExclusion=false after update")
+	}
+
+	// Verify via GetByID
+	fetched2, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if fetched2.AddImportExclusion {
+		t.Error("expected AddImportExclusion=false from GetByID after update")
+	}
+}
+
+func TestIntegrationService_PartialUpdate_AddImportExclusion(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	original := db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: "http://localhost:8989", APIKey: "key1",
+		Enabled: true, AddImportExclusion: true,
+	}
+	database.Create(&original)
+
+	// Disable via partial update
+	falseVal := false
+	result, err := svc.PartialUpdate(original.ID, IntegrationUpdate{
+		AddImportExclusion: &falseVal,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	if result.AddImportExclusion {
+		t.Error("expected AddImportExclusion=false after partial update")
+	}
+
+	// Re-enable via partial update
+	trueVal := true
+	result, err = svc.PartialUpdate(original.ID, IntegrationUpdate{
+		AddImportExclusion: &trueVal,
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	if !result.AddImportExclusion {
+		t.Error("expected AddImportExclusion=true after re-enable")
+	}
+
+	// Nil pointer should not change the value
+	_, err = svc.PartialUpdate(original.ID, IntegrationUpdate{
+		Name: "Firefly Sonarr Renamed",
+	})
+	if err != nil {
+		t.Fatalf("PartialUpdate returned error: %v", err)
+	}
+	var reloaded db.IntegrationConfig
+	database.First(&reloaded, original.ID)
+	if !reloaded.AddImportExclusion {
+		t.Error("expected AddImportExclusion to remain true when not in update")
+	}
+}
+
+func TestIntegrationService_AddImportExclusion_DefaultTrue(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+
+	// Create without explicitly setting AddImportExclusion — GORM default:true
+	// should apply. Note: Go zero-value for bool is false, so we need to verify
+	// the GORM default takes effect for DB-level inserts.
+	created, err := svc.Create(db.IntegrationConfig{
+		Type: "lidarr", Name: "Firefly Lidarr", URL: "http://localhost:8686",
+		APIKey: "key1", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	// Reload from DB to verify GORM default
+	var reloaded db.IntegrationConfig
+	database.First(&reloaded, created.ID)
+	if !reloaded.AddImportExclusion {
+		t.Error("expected AddImportExclusion to default to true for new integrations")
+	}
+}

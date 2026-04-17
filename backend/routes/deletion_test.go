@@ -333,4 +333,6 @@ func (s *stubIntegration) TestConnection() error                            { re
 func (s *stubIntegration) GetDiskSpace() ([]integrations.DiskSpace, error)  { return nil, nil }
 func (s *stubIntegration) GetRootFolders() ([]string, error)                { return nil, nil }
 func (s *stubIntegration) GetMediaItems() ([]integrations.MediaItem, error) { return nil, nil }
-func (s *stubIntegration) DeleteMediaItem(_ integrations.MediaItem) error   { return nil }
+func (s *stubIntegration) DeleteMediaItem(_ integrations.MediaItem, _ integrations.DeleteOptions) error {
+	return nil
+}

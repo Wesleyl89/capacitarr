@@ -550,15 +550,16 @@ func (s *ApprovalService) ExecuteApproval(entryID uint, deps ExecuteApprovalDeps
 
 	// 8. Queue for background deletion
 	if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
-		Client:          client,
-		Item:            item,
-		Score:           approved.Score,
-		Factors:         factors,
-		Trigger:         db.TriggerApproval,
-		RunStatsID:      runStatsID,
-		ForceDryRun:     forceDryRun,
-		ApprovalEntryID: approved.ID,
-		EnqueuedMode:    enqueuedMode,
+		Client:             client,
+		Item:               item,
+		Score:              approved.Score,
+		Factors:            factors,
+		Trigger:            db.TriggerApproval,
+		RunStatsID:         runStatsID,
+		ForceDryRun:        forceDryRun,
+		ApprovalEntryID:    approved.ID,
+		EnqueuedMode:       enqueuedMode,
+		AddImportExclusion: integration.AddImportExclusion,
 	}); queueErr != nil {
 		return approved, fmt.Errorf("failed to queue deletion: %w", queueErr)
 	}
@@ -720,14 +721,15 @@ func (s *ApprovalService) ManualDelete(items []ManualDeleteItem, mode string, de
 		}
 
 		if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
-			Client:       client,
-			Item:         mediaItem,
-			Score:        item.Score,
-			Factors:      factors,
-			Trigger:      db.TriggerUser,
-			RunStatsID:   runStatsID,
-			ForceDryRun:  forceDryRun,
-			EnqueuedMode: mode,
+			Client:             client,
+			Item:               mediaItem,
+			Score:              item.Score,
+			Factors:            factors,
+			Trigger:            db.TriggerUser,
+			RunStatsID:         runStatsID,
+			ForceDryRun:        forceDryRun,
+			EnqueuedMode:       mode,
+			AddImportExclusion: integration.AddImportExclusion,
 		}); queueErr != nil {
 			slog.Warn("Deletion queue full for manual delete", "component", "services",
 				"media", item.MediaName, "error", queueErr)

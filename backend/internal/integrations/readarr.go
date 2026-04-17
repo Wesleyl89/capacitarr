@@ -127,8 +127,10 @@ func (r *ReadarrClient) GetMediaItems() ([]MediaItem, error) {
 
 // GetQualityProfiles, GetTags, GetLanguages are provided by arrBaseClient.
 
-// DeleteMediaItem removes a book from Readarr and optionally deletes files
-func (r *ReadarrClient) DeleteMediaItem(item MediaItem) error {
-	endpoint := fmt.Sprintf("/api/v1/book/%s?deleteFiles=true&addImportExclusion=false", item.ExternalID)
+// DeleteMediaItem removes a book from Readarr and deletes its files.
+// When opts.AddImportExclusion is true, the book is added to Readarr's import
+// exclusion list to prevent automatic re-addition by import lists.
+func (r *ReadarrClient) DeleteMediaItem(item MediaItem, opts DeleteOptions) error {
+	endpoint := fmt.Sprintf("/api/v1/book/%s?deleteFiles=true&addImportExclusion=%t", item.ExternalID, opts.AddImportExclusion)
 	return arrSimpleDelete(r.URL, r.APIKey, endpoint)
 }

@@ -39,6 +39,7 @@ type SunsetDeps struct {
 	Deletion      *DeletionService
 	Engine        *EngineService
 	Settings      SettingsReader
+	Integration   *IntegrationService   // Used to look up per-integration settings (e.g., AddImportExclusion)
 	Preview       PreviewScoreReader    // Optional: provides current scores for rescore comparisons
 	PosterOverlay *PosterOverlayService // Optional: if set, posters are restored on cancel/expire/escalate
 	Mapping       *MappingService       // Persistent TMDb→NativeID mapping; replaces ephemeral BuildMappingMaps()
@@ -759,6 +760,14 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 		}
 	}
 
+	// Look up integration config for AddImportExclusion setting
+	addImportExclusion := true // safe default
+	if deps.Integration != nil {
+		if cfg, cfgErr := deps.Integration.GetByID(item.IntegrationID); cfgErr == nil {
+			addImportExclusion = cfg.AddImportExclusion
+		}
+	}
+
 	if queueErr := deps.Deletion.QueueDeletion(DeleteJob{
 		Client: deleter,
 		Item: integrations.MediaItem{
@@ -767,13 +776,14 @@ func (s *SunsetService) processExpiredItem(item db.SunsetQueueItem, prefs db.Pre
 			SizeBytes:  item.SizeBytes,
 			ExternalID: item.ExternalID,
 		},
-		DiskGroupID:       &item.DiskGroupID,
-		Trigger:           db.TriggerEngine,
-		Factors:           factors,
-		CollectionGroup:   item.CollectionGroup,
-		EnqueuedMode:      db.ModeSunset,
-		SunsetQueueItemID: item.ID,
-		Score:             item.Score,
+		DiskGroupID:        &item.DiskGroupID,
+		Trigger:            db.TriggerEngine,
+		Factors:            factors,
+		CollectionGroup:    item.CollectionGroup,
+		EnqueuedMode:       db.ModeSunset,
+		SunsetQueueItemID:  item.ID,
+		Score:              item.Score,
+		AddImportExclusion: addImportExclusion,
 	}); queueErr != nil {
 		slog.Error("Failed to queue sunset item for deletion (will retry next cycle)",
 			"component", "services", "mediaName", item.MediaName, "error", queueErr)

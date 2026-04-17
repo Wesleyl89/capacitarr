@@ -137,6 +137,7 @@ type IntegrationExport struct {
 	Enabled            bool   `json:"enabled"`
 	CollectionDeletion bool   `json:"collectionDeletion"`
 	ShowLevelOnly      bool   `json:"showLevelOnly"`
+	AddImportExclusion bool   `json:"addImportExclusion"`
 }
 
 // DiskGroupExport contains configuration-only disk group fields.
@@ -303,6 +304,7 @@ func (s *BackupService) Export(sections ExportSections, appVersion string) (*Set
 				Enabled:            ic.Enabled,
 				CollectionDeletion: ic.CollectionDeletion,
 				ShowLevelOnly:      ic.ShowLevelOnly,
+				AddImportExclusion: ic.AddImportExclusion,
 			})
 		}
 		envelope.Integrations = exported
@@ -745,6 +747,7 @@ func (s *BackupService) importIntegrations(tx *gorm.DB, integrations []Integrati
 			existing.Enabled = ie.Enabled
 			existing.CollectionDeletion = ie.CollectionDeletion
 			existing.ShowLevelOnly = ie.ShowLevelOnly
+			existing.AddImportExclusion = ie.AddImportExclusion
 			if dbErr := tx.Save(&existing).Error; dbErr != nil {
 				return count, 0, fmt.Errorf("failed to update integration %q: %w", ie.Name, dbErr)
 			}
@@ -761,6 +764,7 @@ func (s *BackupService) importIntegrations(tx *gorm.DB, integrations []Integrati
 			Enabled:            true, // GORM default:true workaround — disable below
 			CollectionDeletion: ie.CollectionDeletion,
 			ShowLevelOnly:      ie.ShowLevelOnly,
+			AddImportExclusion: ie.AddImportExclusion,
 		}
 		if dbErr := tx.Create(&ic).Error; dbErr != nil {
 			return count, 0, fmt.Errorf("failed to create integration %q: %w", ie.Name, dbErr)
@@ -768,6 +772,13 @@ func (s *BackupService) importIntegrations(tx *gorm.DB, integrations []Integrati
 		// Force disable new imports with placeholder credentials
 		if dbErr := tx.Model(&ic).Update("enabled", false).Error; dbErr != nil {
 			return count, 0, fmt.Errorf("failed to disable placeholder integration %q: %w", ie.Name, dbErr)
+		}
+		// GORM skips false booleans on Create() when the DB default is true.
+		// Explicitly set add_import_exclusion=false when the import says so.
+		if !ie.AddImportExclusion {
+			if dbErr := tx.Model(&ic).Update("add_import_exclusion", false).Error; dbErr != nil {
+				return count, 0, fmt.Errorf("failed to set add_import_exclusion for %q: %w", ie.Name, dbErr)
+			}
 		}
 		count++
 	}

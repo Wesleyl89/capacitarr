@@ -394,17 +394,24 @@ func (p *Poller) dispatchByMode(ectx *evaluationContext, pi processItem, pending
 			return 0, 0
 		}
 
+		// Look up integration config for AddImportExclusion setting
+		addImportExclusion := true // safe default
+		if sourceCfg := p.getIntegrationConfig(ectx, pi.item.IntegrationID); sourceCfg != nil {
+			addImportExclusion = sourceCfg.AddImportExclusion
+		}
+
 		diskGroupID := ectx.group.ID
 		if err := p.reg.Deletion.QueueDeletion(services.DeleteJob{
-			Client:          deleter,
-			Item:            pi.item,
-			Score:           pi.score,
-			Factors:         pi.factors,
-			Trigger:         db.TriggerEngine,
-			RunStatsID:      ectx.runStatsID,
-			DiskGroupID:     &diskGroupID,
-			CollectionGroup: pi.collectionGroup,
-			EnqueuedMode:    db.ModeAuto,
+			Client:             deleter,
+			Item:               pi.item,
+			Score:              pi.score,
+			Factors:            pi.factors,
+			Trigger:            db.TriggerEngine,
+			RunStatsID:         ectx.runStatsID,
+			DiskGroupID:        &diskGroupID,
+			CollectionGroup:    pi.collectionGroup,
+			EnqueuedMode:       db.ModeAuto,
+			AddImportExclusion: addImportExclusion,
 		}); err != nil {
 			slog.Warn("Deletion queue full, skipping item", "component", "poller", "item", pi.item.Title)
 			return 0, 0
@@ -592,6 +599,7 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 		Deletion:      p.reg.Deletion,
 		Engine:        p.reg.Engine,
 		Settings:      p.reg.Settings,
+		Integration:   p.reg.Integration,
 		Preview:       p.reg.Preview,
 		PosterOverlay: p.reg.PosterOverlay,
 		Mapping:       p.reg.Mapping,
