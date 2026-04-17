@@ -1,3 +1,8 @@
+## [3.3.0] - 2026-04-17
+
+### 🚀 Features
+
+- *(integrations)* Add per-integration import exclusion setting ([43c653f](https://github.com/Ghent/capacitarr/commit/43c653f2fce5ab47e641aa079a29a1a41eccd2a8))
 ## [3.2.7] - 2026-04-16
 
 ### 🐛 Bug Fixes
