@@ -1,3 +1,8 @@
+## [3.3.1] - 2026-04-19
+
+### 🐛 Bug Fixes
+
+- *(sunset)* Use sunset threshold for byte budget calculation ([5a99db7](https://github.com/Ghent/capacitarr/commit/5a99db7349d57b3f4cf005137e5a6f0935c60313))
 ## [3.3.0] - 2026-04-17
 
 ### 🚀 Features
