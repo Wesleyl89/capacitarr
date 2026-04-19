@@ -1,3 +1,8 @@
+## [3.3.2] - 2026-04-19
+
+### 🐛 Bug Fixes
+
+- *(emby)* Use dedicated TagService endpoints for label management ([fc8a46a](https://github.com/Ghent/capacitarr/commit/fc8a46a31851d19760ed831ffd06c955415dfd29))
 ## [3.3.1] - 2026-04-19
 
 ### 🐛 Bug Fixes
