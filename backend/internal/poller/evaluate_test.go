@@ -708,3 +708,203 @@ func TestEvaluateAndCleanDisk_IsSnoozed_DryRunMode(t *testing.T) {
 		t.Errorf("expected 0 deletions queued (snoozed item skipped in dry-run mode), got %d", result)
 	}
 }
+
+// TestEvaluateSunsetMode_QueuesBetweenSunsetAndTarget verifies that sunset mode
+// correctly queues items when disk usage is between sunsetPct and targetPct.
+// This is the primary operating range of sunset mode. Prior to the fix, the byte
+// budget calculation referenced targetPct instead of sunsetPct, producing a
+// negative budget that caused zero items to be queued.
+func TestEvaluateSunsetMode_QueuesBetweenSunsetAndTarget(t *testing.T) {
+	database, reg := setupEvaluateTestDB(t)
+	p := New(reg)
+
+	integrationID := uint(1)
+
+	// sunsetPct=60, targetPct=75, thresholdPct=85
+	// Disk at 65% — above sunset, below target
+	sunsetPct := 60.0
+	group := db.DiskGroup{
+		MountPath:    "/data",
+		TotalBytes:   100_000_000_000, // 100 GB
+		UsedBytes:    65_000_000_000,  // 65 GB = 65%
+		ThresholdPct: 85.0,
+		TargetPct:    75.0,
+		SunsetPct:    &sunsetPct,
+		Mode:         db.ModeSunset,
+	}
+	if err := database.Create(&group).Error; err != nil {
+		t.Fatalf("Failed to create disk group: %v", err)
+	}
+
+	// Create media items on the correct mount path. Total ~30 GB so there
+	// are enough candidates for a 5% (~5 GB) byte budget.
+	items := []integrations.MediaItem{
+		{
+			ExternalID: "movie-1", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Serenity",
+			SizeBytes: 10_000_000_000, Path: "/data/movies/Serenity", Rating: 3.0,
+		},
+		{
+			ExternalID: "movie-2", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Firefly The Movie",
+			SizeBytes: 10_000_000_000, Path: "/data/movies/Firefly The Movie", Rating: 4.0,
+		},
+		{
+			ExternalID: "movie-3", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Leaf on the Wind",
+			SizeBytes: 10_000_000_000, Path: "/data/movies/Leaf on the Wind", Rating: 5.0,
+		},
+	}
+
+	prefs := db.PreferenceSet{
+		DefaultDiskGroupMode: db.ModeSunset,
+		SunsetDays:           30,
+	}
+	weights := map[string]int{
+		"watch_history":   5,
+		"file_size":       5,
+		"rating":          5,
+		"last_watched":    5,
+		"time_in_library": 5,
+		"series_status":   5,
+	}
+
+	p.evaluateDiskGroup(NewRunAccumulator(), group, items, nil, 0, prefs, weights, nil, &engine.EvaluationContext{ActiveIntegrationTypes: map[integrations.IntegrationType]bool{}})
+
+	// Verify items were queued to the sunset queue
+	var count int64
+	database.Model(&db.SunsetQueueItem{}).Where("disk_group_id = ?", group.ID).Count(&count)
+	if count == 0 {
+		t.Error("expected sunset queue items to be created when disk is between sunsetPct and targetPct, got 0")
+	}
+}
+
+// TestEvaluateSunsetMode_QueuesBetweenTargetAndCritical verifies that sunset
+// mode correctly queues items when disk usage is between targetPct and
+// thresholdPct (critical). The byte budget should be based on currentPct minus
+// sunsetPct (20% at 80% usage with sunsetPct=60), not currentPct minus
+// targetPct (5%).
+func TestEvaluateSunsetMode_QueuesBetweenTargetAndCritical(t *testing.T) {
+	database, reg := setupEvaluateTestDB(t)
+	p := New(reg)
+
+	integrationID := uint(1)
+
+	// sunsetPct=60, targetPct=75, thresholdPct=85
+	// Disk at 80% — above target, below critical
+	sunsetPct := 60.0
+	group := db.DiskGroup{
+		MountPath:    "/data",
+		TotalBytes:   100_000_000_000, // 100 GB
+		UsedBytes:    80_000_000_000,  // 80 GB = 80%
+		ThresholdPct: 85.0,
+		TargetPct:    75.0,
+		SunsetPct:    &sunsetPct,
+		Mode:         db.ModeSunset,
+	}
+	if err := database.Create(&group).Error; err != nil {
+		t.Fatalf("Failed to create disk group: %v", err)
+	}
+
+	// Create enough media items to cover a 20% budget (~20 GB).
+	// With 3 items at 8 GB each (24 GB total), all should be queued.
+	items := []integrations.MediaItem{
+		{
+			ExternalID: "movie-1", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Serenity",
+			SizeBytes: 8_000_000_000, Path: "/data/movies/Serenity", Rating: 3.0,
+		},
+		{
+			ExternalID: "movie-2", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Firefly The Movie",
+			SizeBytes: 8_000_000_000, Path: "/data/movies/Firefly The Movie", Rating: 4.0,
+		},
+		{
+			ExternalID: "movie-3", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Leaf on the Wind",
+			SizeBytes: 8_000_000_000, Path: "/data/movies/Leaf on the Wind", Rating: 5.0,
+		},
+	}
+
+	prefs := db.PreferenceSet{
+		DefaultDiskGroupMode: db.ModeSunset,
+		SunsetDays:           30,
+	}
+	weights := map[string]int{
+		"watch_history":   5,
+		"file_size":       5,
+		"rating":          5,
+		"last_watched":    5,
+		"time_in_library": 5,
+		"series_status":   5,
+	}
+
+	p.evaluateDiskGroup(NewRunAccumulator(), group, items, nil, 0, prefs, weights, nil, &engine.EvaluationContext{ActiveIntegrationTypes: map[integrations.IntegrationType]bool{}})
+
+	// All 3 items should be queued: budget is 20 GB (80%-60%), items total 24 GB.
+	// CandidatesForDeletion stops after accumulating >= budget, so at minimum
+	// 2 items (16 GB) should be selected, likely all 3 (reaching 24 GB >= 20 GB).
+	var count int64
+	database.Model(&db.SunsetQueueItem{}).Where("disk_group_id = ?", group.ID).Count(&count)
+	if count == 0 {
+		t.Error("expected sunset queue items to be created when disk is between targetPct and thresholdPct, got 0")
+	}
+	if count < 2 {
+		t.Errorf("expected at least 2 sunset queue items for 20%% byte budget, got %d", count)
+	}
+}
+
+// TestEvaluateSunsetMode_BelowSunsetThreshold_NoQueue verifies that sunset
+// mode does NOT queue any items when disk usage is below sunsetPct.
+func TestEvaluateSunsetMode_BelowSunsetThreshold_NoQueue(t *testing.T) {
+	database, reg := setupEvaluateTestDB(t)
+	p := New(reg)
+
+	integrationID := uint(1)
+
+	// sunsetPct=60, targetPct=75, thresholdPct=85
+	// Disk at 55% — below sunset threshold
+	sunsetPct := 60.0
+	group := db.DiskGroup{
+		MountPath:    "/data",
+		TotalBytes:   100_000_000_000, // 100 GB
+		UsedBytes:    55_000_000_000,  // 55 GB = 55%
+		ThresholdPct: 85.0,
+		TargetPct:    75.0,
+		SunsetPct:    &sunsetPct,
+		Mode:         db.ModeSunset,
+	}
+	if err := database.Create(&group).Error; err != nil {
+		t.Fatalf("Failed to create disk group: %v", err)
+	}
+
+	items := []integrations.MediaItem{
+		{
+			ExternalID: "movie-1", IntegrationID: integrationID,
+			Type: integrations.MediaTypeMovie, Title: "Serenity",
+			SizeBytes: 10_000_000_000, Path: "/data/movies/Serenity", Rating: 3.0,
+		},
+	}
+
+	prefs := db.PreferenceSet{
+		DefaultDiskGroupMode: db.ModeSunset,
+		SunsetDays:           30,
+	}
+	weights := map[string]int{
+		"watch_history":   5,
+		"file_size":       5,
+		"rating":          5,
+		"last_watched":    5,
+		"time_in_library": 5,
+		"series_status":   5,
+	}
+
+	p.evaluateDiskGroup(NewRunAccumulator(), group, items, nil, 0, prefs, weights, nil, &engine.EvaluationContext{ActiveIntegrationTypes: map[integrations.IntegrationType]bool{}})
+
+	// No items should be queued — disk is below sunset threshold
+	var count int64
+	database.Model(&db.SunsetQueueItem{}).Where("disk_group_id = ?", group.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 sunset queue items when below sunset threshold, got %d", count)
+	}
+}

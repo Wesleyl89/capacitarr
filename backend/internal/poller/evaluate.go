@@ -626,8 +626,8 @@ func (p *Poller) evaluateSunsetMode(acc *RunAccumulator, group db.DiskGroup, all
 		groupAcc.Evaluated += int64(evalResult.TotalCount)
 		groupAcc.Protected += int64(len(evalResult.Protected))
 
-		// Calculate how much to sunset (based on currentPct → targetPct range)
-		targetBytesToFree := int64((currentPct - group.TargetPct) / 100.0 * float64(effectiveTotal))
+		// Calculate how much to sunset (based on currentPct → sunsetPct range)
+		targetBytesToFree := int64((currentPct - sunsetPct) / 100.0 * float64(effectiveTotal))
 		if targetBytesToFree > 0 {
 			candidates := evalResult.CandidatesForDeletion(targetBytesToFree)
 
