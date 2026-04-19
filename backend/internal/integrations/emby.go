@@ -686,77 +686,50 @@ func (e *EmbyClient) GetLabelNames() ([]string, error) {
 	return names, nil
 }
 
-// AddLabel adds a tag to an Emby item. Fetches the current item,
-// appends the tag if not already present, and POSTs the updated item back.
+// embyTagPayload is the request body for Emby's dedicated tag endpoints
+// (POST /Items/{Id}/Tags/Add and POST /Items/{Id}/Tags/Delete).
+// Tags are NameIdPair objects; only Name is required for add/remove operations.
+type embyTagPayload struct {
+	Tags []embyNameIDPair `json:"Tags"`
+}
+
+// embyNameIDPair represents Emby's NameIdPair type used in the TagService API.
+type embyNameIDPair struct {
+	Name string `json:"Name"`
+	ID   string `json:"Id,omitempty"`
+}
+
+// AddLabel adds a tag to an Emby item using the dedicated TagService endpoint.
+// Uses POST /Items/{Id}/Tags/Add which properly updates Emby's internal TagItems
+// storage. This is idempotent — Emby ignores duplicate tag names.
 func (e *EmbyClient) AddLabel(itemID string, label string) error {
-	item, err := e.getItemByID(itemID)
+	payload := embyTagPayload{
+		Tags: []embyNameIDPair{{Name: label}},
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("fetch item %s: %w", itemID, err)
+		return fmt.Errorf("marshal tag payload: %w", err)
 	}
 
-	for _, tag := range item.Tags {
-		if tag == label {
-			return nil
-		}
-	}
-
-	item.Tags = append(item.Tags, label)
-	return e.updateItem(itemID, item)
+	fullURL := e.URL + "/Items/" + itemID + "/Tags/Add"
+	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", e.APIKey)
 }
 
-// RemoveLabel removes a tag from an Emby item. Fetches the current item,
-// removes the tag if present, and POSTs the updated item back.
+// RemoveLabel removes a tag from an Emby item using the dedicated TagService endpoint.
+// Uses POST /Items/{Id}/Tags/Delete which properly updates Emby's internal TagItems
+// storage. The previous read-modify-write approach on the generic item update endpoint
+// (POST /Items/{Id}) only modified the Tags string array but not the authoritative
+// TagItems field, causing tags to persist after removal.
 func (e *EmbyClient) RemoveLabel(itemID string, label string) error {
-	item, err := e.getItemByID(itemID)
+	payload := embyTagPayload{
+		Tags: []embyNameIDPair{{Name: label}},
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("fetch item %s: %w", itemID, err)
+		return fmt.Errorf("marshal tag payload: %w", err)
 	}
 
-	filtered := make([]string, 0, len(item.Tags))
-	found := false
-	for _, tag := range item.Tags {
-		if tag == label {
-			found = true
-			continue
-		}
-		filtered = append(filtered, tag)
-	}
-	if !found {
-		return nil
-	}
-
-	item.Tags = filtered
-	return e.updateItem(itemID, item)
-}
-
-// getItemByID fetches a single Emby item by ID with Tags and ProviderIds fields.
-func (e *EmbyClient) getItemByID(itemID string) (*embyItem, error) {
-	adminID, err := e.GetAdminUserID()
-	if err != nil {
-		return nil, fmt.Errorf("get admin user: %w", err)
-	}
-
-	endpoint := fmt.Sprintf("/Users/%s/Items/%s?Fields=Tags,ProviderIds", adminID, itemID)
-	data, err := e.doRequest(endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	var item embyItem
-	if err := json.Unmarshal(data, &item); err != nil {
-		return nil, fmt.Errorf("parse item response: %w", err)
-	}
-	return &item, nil
-}
-
-// updateItem POSTs the modified item back to Emby.
-func (e *EmbyClient) updateItem(itemID string, item *embyItem) error {
-	body, err := json.Marshal(item)
-	if err != nil {
-		return fmt.Errorf("marshal item: %w", err)
-	}
-
-	fullURL := e.URL + "/Items/" + itemID
+	fullURL := e.URL + "/Items/" + itemID + "/Tags/Delete"
 	return DoAPIRequestWithBody("POST", fullURL, body, "X-Emby-Token", e.APIKey)
 }
 

@@ -837,6 +837,11 @@ func (s *IntegrationService) UpdateMediaStats(id uint, sizeBytes int64, count in
 	return nil
 }
 
+// syncStatusError is the status string for sync results that failed.
+// Extracted as a constant to satisfy goconst when the same string literal
+// ("error") also exists as eventKindError in the notifications subsystem.
+const syncStatusError = "error"
+
 // SyncResult holds the outcome of syncing a single integration.
 type SyncResult struct {
 	ID         uint                     `json:"id"`
@@ -872,7 +877,7 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 
 		rawClient := integrations.CreateClient(cfg.Type, cfg.URL, cfg.APIKey)
 		if rawClient == nil {
-			result.Status = "error"
+			result.Status = syncStatusError
 			result.Error = "Unknown integration type"
 			results = append(results, result)
 			continue
@@ -881,13 +886,13 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 		// Test connection via Connectable interface
 		conn, ok := rawClient.(integrations.Connectable)
 		if !ok {
-			result.Status = "error"
+			result.Status = syncStatusError
 			result.Error = "Integration does not support connection testing"
 			results = append(results, result)
 			continue
 		}
 		if connErr := conn.TestConnection(); connErr != nil {
-			result.Status = "error"
+			result.Status = syncStatusError
 			result.Error = connErr.Error()
 			if s.healthReporter != nil {
 				s.healthReporter.ReportFailure(cfg.ID, connErr)

@@ -109,21 +109,15 @@ func TestJellyfinRemoveLabel(t *testing.T) {
 	}
 }
 
-// TestEmbyAddLabel verifies the Emby read-modify-write label flow.
+// TestEmbyAddLabel verifies Emby label addition via the dedicated TagService endpoint.
 func TestEmbyAddLabel(t *testing.T) {
 	var postedBody []byte
+	var lastPath string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == "GET" && r.URL.Path == "/Users":
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"Id": "admin-id", "Name": "admin", "Policy": map[string]interface{}{"IsAdministrator": true}},
-			})
-		case r.Method == "GET" && r.URL.Path == "/Users/admin-id/Items/item-456":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"Id": "item-456", "Name": "Serenity", "Type": "Movie", "Tags": []string{"existing"},
-			})
-		case r.Method == "POST" && r.URL.Path == "/Items/item-456":
+		case r.Method == "POST" && r.URL.Path == "/Items/item-456/Tags/Add":
+			lastPath = r.URL.Path
 			postedBody, _ = io.ReadAll(r.Body)
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -137,31 +131,28 @@ func TestEmbyAddLabel(t *testing.T) {
 		t.Fatalf("AddLabel failed: %v", err)
 	}
 
-	var posted map[string]interface{}
-	if err := json.Unmarshal(postedBody, &posted); err != nil {
+	if lastPath != "/Items/item-456/Tags/Add" {
+		t.Fatalf("Expected POST to /Items/item-456/Tags/Add, got %s", lastPath)
+	}
+
+	var payload embyTagPayload
+	if err := json.Unmarshal(postedBody, &payload); err != nil {
 		t.Fatalf("Failed to parse posted body: %v", err)
 	}
-	tags, ok := posted["Tags"].([]interface{})
-	if !ok || len(tags) != 2 {
-		t.Fatalf("Expected 2 tags, got %v", posted["Tags"])
+	if len(payload.Tags) != 1 || payload.Tags[0].Name != "capacitarr-sunset" {
+		t.Errorf("Expected [{Name: capacitarr-sunset}], got %+v", payload.Tags)
 	}
 }
 
-// TestEmbyRemoveLabel verifies Emby label removal.
+// TestEmbyRemoveLabel verifies Emby label removal via the dedicated TagService endpoint.
 func TestEmbyRemoveLabel(t *testing.T) {
 	var postedBody []byte
+	var lastPath string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == "GET" && r.URL.Path == "/Users":
-			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
-				{"Id": "admin-id", "Name": "admin", "Policy": map[string]interface{}{"IsAdministrator": true}},
-			})
-		case r.Method == "GET" && r.URL.Path == "/Users/admin-id/Items/item-456":
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"Id": "item-456", "Name": "Serenity", "Tags": []string{"existing", "capacitarr-sunset"},
-			})
-		case r.Method == "POST" && r.URL.Path == "/Items/item-456":
+		case r.Method == "POST" && r.URL.Path == "/Items/item-456/Tags/Delete":
+			lastPath = r.URL.Path
 			postedBody, _ = io.ReadAll(r.Body)
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -175,13 +166,16 @@ func TestEmbyRemoveLabel(t *testing.T) {
 		t.Fatalf("RemoveLabel failed: %v", err)
 	}
 
-	var posted map[string]interface{}
-	if err := json.Unmarshal(postedBody, &posted); err != nil {
+	if lastPath != "/Items/item-456/Tags/Delete" {
+		t.Fatalf("Expected POST to /Items/item-456/Tags/Delete, got %s", lastPath)
+	}
+
+	var payload embyTagPayload
+	if err := json.Unmarshal(postedBody, &payload); err != nil {
 		t.Fatalf("Failed to parse posted body: %v", err)
 	}
-	tags := posted["Tags"].([]interface{})
-	if len(tags) != 1 || tags[0] != "existing" {
-		t.Errorf("Expected [existing], got %v", tags)
+	if len(payload.Tags) != 1 || payload.Tags[0].Name != "capacitarr-sunset" {
+		t.Errorf("Expected [{Name: capacitarr-sunset}], got %+v", payload.Tags)
 	}
 }
 
