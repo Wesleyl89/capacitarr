@@ -163,7 +163,7 @@ func RegisterIntegrationRoutes(g *echo.Group, reg *services.Registry) {
 
 	// Integration health / recovery status
 	g.GET("/integrations/health", func(c echo.Context) error {
-		entries := reg.Recovery.HealthStatus()
+		entries := reg.Health.HealthStatus()
 		return c.JSON(http.StatusOK, entries)
 	})
 

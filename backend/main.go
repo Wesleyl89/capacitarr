@@ -303,8 +303,8 @@ func main() {
 	slog.Info("Event bus started (partial)", "component", "main", "subscribers", "sse_broadcaster")
 
 	// ─── Integration Factories ────────────────────────────────────────────
-	// Register factories early so they're available for both the startup
-	// self-test (which calls CreateClient directly) and the poller's
+	// Register factories early so they're available for the health service's
+	// checkIntegration (which calls CreateClient directly) and the poller's
 	// BuildIntegrationRegistry. RegisterAllFactories is idempotent.
 	integrations.RegisterAllFactories()
 
@@ -371,46 +371,10 @@ func main() {
 	pollerInstance.Start()
 	cronScheduler := jobs.Start(reg)
 
-	// Start integration recovery monitor — probes failing integrations with
-	// exponential backoff between poll cycles to detect recovery quickly.
-	reg.Recovery.Start()
-
-	// Non-blocking startup self-test — check connectivity to all enabled integrations
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("Panic recovered in startup self-test goroutine",
-					"component", "main", "panic", r)
-			}
-		}()
-		configs, err := reg.Integration.ListEnabled()
-		if err != nil {
-			slog.Error("Startup self-test: failed to list integrations", "component", "main", "error", err)
-			return
-		}
-		if len(configs) == 0 {
-			slog.Info("Startup self-test: no integrations configured", "component", "main")
-			return
-		}
-		for _, cfg := range configs {
-			result := reg.Integration.TestConnection(cfg.Type, cfg.URL, cfg.APIKey, nil)
-			if result.Success {
-				slog.Info("Startup self-test: connection OK",
-					"component", "main",
-					"integration", cfg.Name,
-					"type", cfg.Type,
-				)
-			} else {
-				slog.Error("Startup self-test: connection failed",
-					"component", "main",
-					"integration", cfg.Name,
-					"type", cfg.Type,
-					"error", result.Error,
-				)
-			}
-		}
-		slog.Info("Startup self-test complete", "component", "main", "integrations", len(configs))
-	}()
+	// Start integration health monitor — probes all integrations with independent
+	// scheduling (2min for healthy, linear backoff up to 60s for failing).
+	// Replaces both the old RecoveryService and the startup self-test.
+	reg.Health.Start()
 
 	// Initialize Echo instance
 	e := echo.New()
@@ -533,7 +497,7 @@ func main() {
 		// Stop background jobs
 		pollerInstance.Stop()
 		cronScheduler.Stop()
-		reg.Recovery.Stop()
+		reg.Health.Stop()
 		reg.Integration.CloseCache()
 
 		// Stop services

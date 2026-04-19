@@ -214,7 +214,10 @@ func TestIntegrationService_Delete_KeepsDiskGroupsWhenOthersExist(t *testing.T) 
 	}
 }
 
-func TestIntegrationService_PublishTestSuccess(t *testing.T) {
+// TestIntegrationService_TestConnection_NoNotificationEvents verifies that the
+// manual UI test button does NOT publish IntegrationTestFailedEvent or modify
+// DB health state. The user is looking at the result in the UI.
+func TestIntegrationService_TestConnection_NoNotificationEvents(t *testing.T) {
 	database := setupTestDB(t)
 	bus := newTestBus(t)
 	svc := NewIntegrationService(database, bus)
@@ -222,35 +225,26 @@ func TestIntegrationService_PublishTestSuccess(t *testing.T) {
 	ch := bus.Subscribe()
 	defer bus.Unsubscribe(ch)
 
-	svc.PublishTestSuccess("sonarr", "My Sonarr", "http://localhost:8989")
-
-	select {
-	case evt := <-ch:
-		if evt.EventType() != "integration_test" {
-			t.Errorf("expected event type 'integration_test', got %q", evt.EventType())
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for integration_test event")
+	// Test with an unreachable URL — should NOT publish any events
+	result := svc.TestConnection("sonarr", "http://192.0.2.1:9999", "fake-key", nil)
+	if result.Success {
+		t.Fatal("expected failure for unreachable URL")
 	}
-}
 
-func TestIntegrationService_PublishTestFailure(t *testing.T) {
-	database := setupTestDB(t)
-	bus := newTestBus(t)
-	svc := NewIntegrationService(database, bus)
-
-	ch := bus.Subscribe()
-	defer bus.Unsubscribe(ch)
-
-	svc.PublishTestFailure("sonarr", "My Sonarr", "http://localhost:8989", "connection refused")
-
-	select {
-	case evt := <-ch:
-		if evt.EventType() != "integration_test_failed" {
-			t.Errorf("expected event type 'integration_test_failed', got %q", evt.EventType())
+	// Drain channel — no notification events should be present
+	timeout := time.After(100 * time.Millisecond)
+	for {
+		select {
+		case evt := <-ch:
+			if evt.EventType() == "integration_test_failed" {
+				t.Error("manual TestConnection MUST NOT publish integration_test_failed events")
+			}
+			if evt.EventType() == "integration_test" {
+				t.Error("manual TestConnection MUST NOT publish integration_test events")
+			}
+		case <-timeout:
+			return // good — no notification events
 		}
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for integration_test_failed event")
 	}
 }
 
@@ -489,6 +483,60 @@ func TestIntegrationService_SyncAll_TestsEnrichmentTypes(t *testing.T) {
 		if r.Status != "error" {
 			t.Errorf("expected error status for %s (mock 401), got %q", r.Type, r.Status)
 		}
+	}
+}
+
+func TestIntegrationService_SyncAll_ReportsHealthOnConnectionFailure(t *testing.T) {
+	database := setupTestDB(t)
+	bus := newTestBus(t)
+	svc := NewIntegrationService(database, bus)
+	healthSvc := NewIntegrationHealthService(svc, bus)
+
+	// Wire health reporter so SyncAll reports failures
+	svc.SetHealthReporter(healthSvc)
+
+	// Use a mock server that returns 401 so the connection test fails fast
+	mockSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer mockSrv.Close()
+
+	database.Create(&db.IntegrationConfig{
+		Type: "sonarr", Name: "Firefly Sonarr", URL: mockSrv.URL, APIKey: "key1", Enabled: true,
+	})
+
+	// Seed health service so it tracks the integration
+	healthSvc.seed()
+
+	// Integration starts healthy
+	if !healthSvc.IsHealthy(1) {
+		t.Fatal("expected integration to start healthy")
+	}
+
+	// SyncAll detects connection failure and reports to health service
+	results, err := svc.SyncAll()
+	if err != nil {
+		t.Fatalf("SyncAll returned error: %v", err)
+	}
+	if len(results) != 1 || results[0].Status != "error" {
+		t.Fatalf("expected 1 error result, got %d results with status %q", len(results), results[0].Status)
+	}
+
+	// Health service should now mark the integration as unhealthy
+	if healthSvc.IsHealthy(1) {
+		t.Error("expected integration to be unhealthy after SyncAll connection failure")
+	}
+
+	// ConsecutiveFailures should have been incremented
+	svc2 := healthSvc
+	svc2.mu.Lock()
+	state := svc2.states[1]
+	svc2.mu.Unlock()
+	if state == nil {
+		t.Fatal("expected health state for integration 1")
+	}
+	if state.ConsecutiveFailures != 1 {
+		t.Errorf("expected 1 consecutive failure, got %d", state.ConsecutiveFailures)
 	}
 }
 

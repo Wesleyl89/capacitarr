@@ -18,16 +18,7 @@ type fetchResult struct {
 	mountIntegrations map[string][]uint // mount path → integration IDs that reported it
 	registry          *integrations.IntegrationRegistry
 	pipeline          *integrations.EnrichmentPipeline
-	brokenTypes       []string // integration types that failed connection testing
-	anyDiskSuccess    bool     // true if at least one disk reporter returned data without error
-}
-
-// connTestResult holds the outcome of a single connection test goroutine.
-type connTestResult struct {
-	id       uint
-	err      error
-	intType  string    // populated only on failure (for brokenTypes)
-	testTime time.Time // when the test completed successfully
+	anyDiskSuccess    bool // true if at least one disk reporter returned data without error
 }
 
 // mediaFetchResult holds the outcome of a single media source fetch goroutine.
@@ -48,15 +39,19 @@ type diskFetchResult struct {
 }
 
 // fetchAllIntegrations builds an IntegrationRegistry, fetches media items from
-// all MediaSources, fetches disk space from all DiskReporters, and constructs
-// the enrichment pipeline from discovered capabilities.
+// healthy MediaSources, fetches disk space from healthy DiskReporters, and
+// constructs the enrichment pipeline from discovered capabilities.
 //
-// Connection tests, media fetches, and disk fetches are parallelized within each
-// section using goroutines. This reduces wall-clock cycle time when multiple
-// integrations are configured (e.g., Sonarr + Radarr fetch simultaneously).
-// Results are merged sequentially after all goroutines complete to preserve
-// deterministic logging and avoid concurrent map writes.
-func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResult {
+// The poller does NOT perform connection testing — that responsibility belongs
+// to IntegrationHealthService. Instead, the poller consults the health service
+// to determine which integrations are healthy and only fetches from those.
+// Data fetch failures/successes are reported back to the health service via
+// ReportFailure/ReportSuccess so health state stays current between ticks.
+//
+// Media fetches and disk fetches are parallelized within each section using
+// goroutines. Results are merged sequentially after all goroutines complete
+// to preserve deterministic logging and avoid concurrent map writes.
+func fetchAllIntegrations(integrationSvc *services.IntegrationService, healthSvc *services.IntegrationHealthService) fetchResult {
 	result := fetchResult{
 		rootFolders:       make(map[string]bool),
 		diskMap:           make(map[string]integrations.DiskSpace),
@@ -71,80 +66,24 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 	}
 	result.registry = registry
 
-	// ── Parallel connection tests ───────────────────────────────────────
-	// Test all connectable integrations concurrently. Each goroutine tests
-	// one integration and records the result. DB updates happen sequentially
-	// after all tests complete.
-	connectors := registry.Connectors()
-	connResults := make([]connTestResult, 0, len(connectors))
-	var connMu sync.Mutex
-	var connWg sync.WaitGroup
-
-	for id, conn := range connectors {
-		connWg.Add(1)
-		go func(id uint, conn integrations.Connectable) {
-			defer connWg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("Panic recovered in connection test goroutine",
-						"component", "poller", "integrationID", id, "panic", r)
-					connMu.Lock()
-					connResults = append(connResults, connTestResult{
-						id:  id,
-						err: fmt.Errorf("panic in connection test: %v", r),
-					})
-					connMu.Unlock()
-				}
-			}()
-			cr := connTestResult{id: id, testTime: time.Now()}
-			if connErr := conn.TestConnection(); connErr != nil {
-				cr.err = connErr
-				if cfg, cfgErr := integrationSvc.GetByID(id); cfgErr == nil {
-					cr.intType = cfg.Type
-				}
-			}
-			connMu.Lock()
-			connResults = append(connResults, cr)
-			connMu.Unlock()
-		}(id, conn)
-	}
-	connWg.Wait()
-
-	// Process connection results sequentially for deterministic logging + DB updates
-	brokenSet := make(map[string]bool)
-	for _, cr := range connResults {
-		if cr.err != nil {
-			slog.Error("Integration connection failed", "component", "poller",
-				"integrationID", cr.id, "error", cr.err)
-			if syncErr := integrationSvc.UpdateSyncStatus(cr.id, nil, cr.err.Error()); syncErr != nil {
-				slog.Warn("Failed to update sync status after connection failure",
-					"component", "poller", "integrationID", cr.id, "error", syncErr)
-			}
-			if cr.intType != "" {
-				brokenSet[cr.intType] = true
-			}
-			continue
-		}
-		integrationSvc.PublishRecoveryIfNeeded(cr.id)
-		if syncErr := integrationSvc.UpdateSyncStatus(cr.id, &cr.testTime, ""); syncErr != nil {
-			slog.Warn("Failed to update sync status after successful connection",
-				"component", "poller", "integrationID", cr.id, "error", syncErr)
-		}
-	}
-	for t := range brokenSet {
-		result.brokenTypes = append(result.brokenTypes, t)
-	}
+	// Get healthy integration IDs from the health service
+	healthyIDs := healthSvc.HealthyIDs()
 
 	// ── Parallel media fetches ──────────────────────────────────────────
-	// Fetch media items from all MediaSources concurrently. Each goroutine
-	// fetches from one integration. Post-processing (normalization, stats
-	// updates, ShowLevelOnly filtering) runs sequentially after all fetches.
+	// Fetch media items from healthy MediaSources concurrently. Unhealthy
+	// integrations are skipped. Fetch failures are reported to the health
+	// service; successes confirm the integration is reachable.
 	mediaSources := registry.MediaSources()
 	mediaResults := make([]mediaFetchResult, 0, len(mediaSources))
 	var mediaMu sync.Mutex
 	var mediaWg sync.WaitGroup
 
 	for id, source := range mediaSources {
+		if !healthyIDs[id] {
+			slog.Debug("Skipping unhealthy integration for media fetch",
+				"component", "poller", "integrationID", id)
+			continue
+		}
 		mediaWg.Add(1)
 		go func(id uint, source integrations.MediaSource) {
 			defer mediaWg.Done()
@@ -180,8 +119,10 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 		if mr.err != nil {
 			slog.Error("Media items fetch failed", "component", "poller",
 				"integrationID", mr.id, "error", mr.err)
+			healthSvc.ReportFailure(mr.id, mr.err)
 			continue
 		}
+		healthSvc.ReportSuccess(mr.id)
 		items := mr.items
 		for i := range items {
 			items[i].IntegrationID = mr.id
@@ -254,13 +195,18 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 	}
 
 	// ── Parallel disk fetches ───────────────────────────────────────────
-	// Fetch root folders and disk space from all DiskReporters concurrently.
+	// Fetch root folders and disk space from healthy DiskReporters concurrently.
 	diskReporters := registry.DiskReporters()
 	diskResults := make([]diskFetchResult, 0, len(diskReporters))
 	var diskMu sync.Mutex
 	var diskWg sync.WaitGroup
 
 	for id, reporter := range diskReporters {
+		if !healthyIDs[id] {
+			slog.Debug("Skipping unhealthy integration for disk fetch",
+				"component", "poller", "integrationID", id)
+			continue
+		}
 		diskWg.Add(1)
 		go func(id uint, reporter integrations.DiskReporter) {
 			defer diskWg.Done()
@@ -298,6 +244,7 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 		if dr.folderErr != nil {
 			slog.Error("Root folder fetch failed", "component", "poller",
 				"integrationID", dr.id, "error", dr.folderErr)
+			healthSvc.ReportFailure(dr.id, dr.folderErr)
 		}
 		for _, f := range dr.folders {
 			normalized := normalizePath(f)
@@ -309,7 +256,13 @@ func fetchAllIntegrations(integrationSvc *services.IntegrationService) fetchResu
 		if dr.diskErr != nil {
 			slog.Error("Disk space fetch failed", "component", "poller",
 				"integrationID", dr.id, "error", dr.diskErr)
+			healthSvc.ReportFailure(dr.id, dr.diskErr)
 			continue
+		}
+
+		// Both folder and disk fetches succeeded for this integration
+		if dr.folderErr == nil {
+			healthSvc.ReportSuccess(dr.id)
 		}
 
 		result.anyDiskSuccess = true

@@ -86,15 +86,23 @@ type DiskGroupManager interface {
 	SunsetLinkedIntegrationIDs() (map[uint]bool, error)
 }
 
+// HealthReporter is the interface consumed by IntegrationService.SyncAll to
+// report connection test results to the health monitor. Defined as an interface
+// to avoid import cycles (IntegrationHealthService depends on IntegrationService).
+type HealthReporter interface {
+	ReportFailure(id uint, err error)
+	ReportSuccess(id uint)
+}
+
 // IntegrationService manages integration CRUD, connection testing, and
 // external API lookups (rule values, quality profiles, tags, languages).
 // It also owns the RuleValueCache for caching external API responses.
 type IntegrationService struct {
-	db              *gorm.DB
-	bus             *events.EventBus
-	diskGroups      DiskGroupManager
-	recoveryTracker RecoveryTracker
-	ruleValueCache  *cache.TTLCache
+	db             *gorm.DB
+	bus            *events.EventBus
+	diskGroups     DiskGroupManager
+	healthReporter HealthReporter
+	ruleValueCache *cache.TTLCache
 }
 
 // Wired returns true when all lazily-injected dependencies are non-nil.
@@ -109,10 +117,10 @@ func (s *IntegrationService) SetDiskGroupService(dg DiskGroupManager) {
 	s.diskGroups = dg
 }
 
-// SetRecoveryTracker wires the RecoveryTracker so UpdateSyncStatus can notify
-// the recovery monitor of state changes. Called by Registry after construction.
-func (s *IntegrationService) SetRecoveryTracker(rt RecoveryTracker) {
-	s.recoveryTracker = rt
+// SetHealthReporter wires the HealthReporter so SyncAll can report connection
+// results to the health service. Called by Registry after construction.
+func (s *IntegrationService) SetHealthReporter(hr HealthReporter) {
+	s.healthReporter = hr
 }
 
 // NewIntegrationService creates a new IntegrationService with an embedded rule value cache.
@@ -257,20 +265,12 @@ type TestConnectionResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// testClient runs a connection test, publishes success/failure events, and returns the result.
-// This helper eliminates repetition across enrichment-only and standard integration types.
-func (s *IntegrationService) testClient(intType, url string, testFn func() error) TestConnectionResult {
-	if err := testFn(); err != nil {
-		s.PublishTestFailure(intType, intType, url, err.Error())
-		return TestConnectionResult{Success: false, Error: err.Error()}
-	}
-	s.PublishTestSuccess(intType, intType, url)
-	return TestConnectionResult{Success: true, Message: "Connection successful"}
-}
-
 // TestConnection tests connectivity to an integration given a type, URL, and API key.
 // If apiKey is empty or masked and integrationID is provided, the stored key is used.
-// On success/failure, the appropriate event is published to the event bus.
+//
+// This is a pure diagnostic — it does NOT publish events, send notifications,
+// or mutate health/sync state. The user is staring at the result in the UI.
+// Health state tracking is the responsibility of IntegrationHealthService.
 func (s *IntegrationService) TestConnection(intType, url, apiKey string, integrationID *int) TestConnectionResult {
 	// Resolve masked or empty API keys to the stored value
 	if (apiKey == "" || db.IsMaskedKey(apiKey)) && integrationID != nil && *integrationID > 0 {
@@ -291,44 +291,16 @@ func (s *IntegrationService) TestConnection(intType, url, apiKey string, integra
 		return TestConnectionResult{Success: false, Error: "Integration type does not support connection testing"}
 	}
 
-	result := s.testClient(intType, url, conn.TestConnection)
+	if err := conn.TestConnection(); err != nil {
+		return TestConnectionResult{Success: false, Error: err.Error()}
+	}
 
-	// When testing an existing integration, update its sync status and cache
+	// On success, invalidate cached rule values so fresh data is fetched
 	if integrationID != nil && *integrationID > 0 {
-		id := uint(*integrationID)
-		if result.Success {
-			s.PublishRecoveryIfNeeded(id)
-			now := time.Now()
-			if syncErr := s.UpdateSyncStatus(id, &now, ""); syncErr != nil {
-				slog.Warn("Failed to update sync status after successful test",
-					"component", "services", "integrationID", id, "error", syncErr)
-			}
-			s.InvalidateRuleValueCache(*integrationID)
-		} else {
-			if syncErr := s.UpdateSyncStatus(id, nil, result.Error); syncErr != nil {
-				slog.Warn("Failed to update sync status after failed test",
-					"component", "services", "integrationID", id, "error", syncErr)
-			}
-		}
+		s.InvalidateRuleValueCache(*integrationID)
 	}
 
-	return result
-}
-
-// PublishRecoveryIfNeeded checks if an integration was previously in an error
-// state and publishes an IntegrationRecoveredEvent if so. Call this before
-// clearing the error via UpdateSyncStatus.
-func (s *IntegrationService) PublishRecoveryIfNeeded(id uint) {
-	existing, err := s.GetByID(id)
-	if err != nil || existing.LastError == "" {
-		return
-	}
-	s.bus.Publish(events.IntegrationRecoveredEvent{
-		IntegrationID:   id,
-		IntegrationType: existing.Type,
-		Name:            existing.Name,
-		URL:             existing.URL,
-	})
+	return TestConnectionResult{Success: true, Message: "Connection successful"}
 }
 
 // FetchRuleValues retrieves autocomplete values for a given rule field action
@@ -636,25 +608,6 @@ func (s *IntegrationService) Delete(id uint) error {
 	return nil
 }
 
-// PublishTestSuccess publishes a successful connection test event.
-func (s *IntegrationService) PublishTestSuccess(intType, name, url string) {
-	s.bus.Publish(events.IntegrationTestEvent{
-		IntegrationType: intType,
-		Name:            name,
-		URL:             url,
-	})
-}
-
-// PublishTestFailure publishes a failed connection test event.
-func (s *IntegrationService) PublishTestFailure(intType, name, url, errMsg string) {
-	s.bus.Publish(events.IntegrationTestFailedEvent{
-		IntegrationType: intType,
-		Name:            name,
-		URL:             url,
-		Error:           errMsg,
-	})
-}
-
 // List returns all integration configs ordered by created_at ascending.
 func (s *IntegrationService) List() ([]db.IntegrationConfig, error) {
 	var configs []db.IntegrationConfig
@@ -818,11 +771,10 @@ func (s *IntegrationService) BuildIntegrationRegistry() (*integrations.Integrati
 	return registry, nil
 }
 
-// UpdateSyncStatus updates the sync status fields on an integration config and
-// notifies the recovery tracker. On failure (lastError non-empty), the
-// consecutive failure counter is incremented and the recovery tracker is told
-// to start probing. On success, the counter is reset and the tracker is told
-// to stop probing.
+// UpdateSyncStatus updates the sync status fields on an integration config.
+// On failure (lastError non-empty), the consecutive failure counter is
+// incremented. On success, the counter is reset. This is a pure DB update
+// method — health state tracking is owned by IntegrationHealthService.
 func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, lastError string) error {
 	if lastError != "" {
 		// Failure path: increment consecutive_failures
@@ -836,14 +788,6 @@ func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, last
 		}
 		if result.RowsAffected == 0 {
 			return ErrNotFound
-		}
-
-		// Notify recovery tracker to start probing this integration
-		if s.recoveryTracker != nil {
-			cfg, err := s.GetByID(id)
-			if err == nil {
-				s.recoveryTracker.TrackFailure(id, cfg.Type, cfg.Name, cfg.URL, cfg.APIKey, lastError)
-			}
 		}
 		return nil
 	}
@@ -860,17 +804,12 @@ func (s *IntegrationService) UpdateSyncStatus(id uint, lastSync *time.Time, last
 	if result.RowsAffected == 0 {
 		return ErrNotFound
 	}
-
-	// Notify recovery tracker to stop probing this integration
-	if s.recoveryTracker != nil {
-		s.recoveryTracker.TrackRecovery(id)
-	}
 	return nil
 }
 
-// UpdateSyncStatusDirect updates sync status fields without notifying the
-// recovery tracker. Used by RecoveryService to write recovery results
-// without creating a circular notification loop.
+// UpdateSyncStatusDirect updates sync status fields with explicit values.
+// Used by IntegrationHealthService to write health state directly without
+// the auto-increment behavior of UpdateSyncStatus.
 func (s *IntegrationService) UpdateSyncStatusDirect(id uint, lastSync *time.Time, lastError string, consecutiveFailures int) error {
 	result := s.db.Model(&db.IntegrationConfig{}).Where("id = ?", id).Updates(map[string]any{
 		"last_sync":            lastSync,
@@ -950,8 +889,14 @@ func (s *IntegrationService) SyncAll() ([]SyncResult, error) {
 		if connErr := conn.TestConnection(); connErr != nil {
 			result.Status = "error"
 			result.Error = connErr.Error()
+			if s.healthReporter != nil {
+				s.healthReporter.ReportFailure(cfg.ID, connErr)
+			}
 			results = append(results, result)
 			continue
+		}
+		if s.healthReporter != nil {
+			s.healthReporter.ReportSuccess(cfg.ID)
 		}
 
 		// Get disk space if integration is a DiskReporter

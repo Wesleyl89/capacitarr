@@ -277,8 +277,10 @@ func (p *Poller) prepareContext() (*pollContext, bool) {
 		return nil, false
 	}
 
-	// Fetch media items, disk space, and build registry+pipeline from all integrations.
-	fetched := fetchAllIntegrations(p.reg.Integration)
+	// Fetch media items, disk space, and build registry+pipeline from healthy integrations.
+	// The health service determines which integrations are reachable; the poller
+	// reports data-fetch failures/successes back to keep health state current.
+	fetched := fetchAllIntegrations(p.reg.Integration, p.reg.Health)
 
 	// Enrich items using the pluggable enrichment pipeline
 	var enrichStats integrations.EnrichmentStats
@@ -304,7 +306,7 @@ func (p *Poller) prepareContext() (*pollContext, bool) {
 	for i, cfg := range configs {
 		configTypes[i] = cfg.Type
 	}
-	evalCtx := engine.NewEvaluationContext(configTypes, fetched.brokenTypes)
+	evalCtx := engine.NewEvaluationContext(configTypes, p.reg.Health.UnhealthyTypes())
 	if len(enrichStats.FailedCapabilities) > 0 {
 		failedCaps := make(map[string]bool, len(enrichStats.FailedCapabilities))
 		for _, cap := range enrichStats.FailedCapabilities {

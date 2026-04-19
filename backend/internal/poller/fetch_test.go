@@ -21,7 +21,7 @@ func TestFetchAllIntegrations_EmptyConfigs(t *testing.T) {
 	// Ensure factories are registered before fetch
 	integrations.RegisterAllFactories()
 
-	result := fetchAllIntegrations(reg.Integration)
+	result := fetchAllIntegrations(reg.Integration, reg.Health)
 
 	if len(result.allItems) != 0 {
 		t.Errorf("expected 0 items, got %d", len(result.allItems))
@@ -57,7 +57,7 @@ func TestFetchAllIntegrations_UnknownType(t *testing.T) {
 		Type: "unknown_type", Name: "Firefly Tracker", URL: "http://localhost:9999", APIKey: "test-key", Enabled: true,
 	})
 
-	result := fetchAllIntegrations(reg.Integration)
+	result := fetchAllIntegrations(reg.Integration, reg.Health)
 
 	// Unknown type has no factory, so it won't appear in any registry map.
 	if len(result.allItems) != 0 {
@@ -76,7 +76,7 @@ func TestFetchAllIntegrations_RegistryAndPipeline(t *testing.T) {
 	// Ensure factories are registered before fetch
 	integrations.RegisterAllFactories()
 
-	result := fetchAllIntegrations(reg.Integration)
+	result := fetchAllIntegrations(reg.Integration, reg.Health)
 
 	if result.registry == nil {
 		t.Fatal("expected non-nil IntegrationRegistry")

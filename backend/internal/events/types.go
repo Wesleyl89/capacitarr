@@ -263,21 +263,6 @@ func (e IntegrationRemovedEvent) EventMessage() string {
 	return fmt.Sprintf("Integration removed: %s (%s)", e.Name, e.IntegrationType)
 }
 
-// IntegrationTestEvent is published on a successful integration connection test.
-type IntegrationTestEvent struct {
-	IntegrationType string `json:"integrationType"`
-	Name            string `json:"name"`
-	URL             string `json:"url"`
-}
-
-// EventType implements Event.
-func (e IntegrationTestEvent) EventType() string { return "integration_test" }
-
-// EventMessage implements Event.
-func (e IntegrationTestEvent) EventMessage() string {
-	return fmt.Sprintf("Connection test succeeded: %s (%s)", e.Name, e.IntegrationType)
-}
-
 // IntegrationTestFailedEvent is published on a failed integration connection test.
 type IntegrationTestFailedEvent struct {
 	IntegrationType string `json:"integrationType"`
@@ -311,9 +296,9 @@ func (e IntegrationRecoveredEvent) EventMessage() string {
 	return fmt.Sprintf("Integration recovered: %s (%s)", e.Name, e.IntegrationType)
 }
 
-// IntegrationRecoveryAttemptEvent is published when the RecoveryService probes
-// a failing integration. Fires on both success and failure so the frontend can
-// show real-time recovery progress.
+// IntegrationRecoveryAttemptEvent is published when the IntegrationHealthService
+// probes a failing integration. Fires on both success and failure so the frontend
+// can show real-time recovery progress.
 type IntegrationRecoveryAttemptEvent struct {
 	IntegrationID    uint   `json:"integrationId"`
 	IntegrationType  string `json:"integrationType"`
