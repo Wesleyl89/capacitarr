@@ -132,7 +132,7 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 	// Pass 1: Fetch Movie and Series items.
 	for {
 		endpoint := fmt.Sprintf(
-			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=UserData,ProviderIds,DateCreated&StartIndex=%d&Limit=%d",
+			"/Users/%s/Items?IncludeItemTypes=Movie,Series&Recursive=true&Fields=UserData,UserDataPlayCount,UserDataLastPlayedDate,ProviderIds,DateCreated&StartIndex=%d&Limit=%d",
 			userID, startIndex, pageSize,
 		)
 		body, err := e.doRequest(endpoint)
@@ -202,7 +202,7 @@ func (e *EmbyClient) GetBulkWatchDataForUser(userID, userName string) (map[int]*
 		startIndex = 0
 		for {
 			endpoint := fmt.Sprintf(
-				"/Users/%s/Items?IncludeItemTypes=Episode&IsPlayed=true&Recursive=true&Fields=UserData&StartIndex=%d&Limit=%d",
+				"/Users/%s/Items?IncludeItemTypes=Episode&IsPlayed=true&Recursive=true&Fields=UserData,UserDataPlayCount,UserDataLastPlayedDate&StartIndex=%d&Limit=%d",
 				userID, startIndex, pageSize,
 			)
 			body, err := e.doRequest(endpoint)
