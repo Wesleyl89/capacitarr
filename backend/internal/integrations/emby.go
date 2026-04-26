@@ -2,6 +2,7 @@
 package integrations
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -748,7 +749,8 @@ func (e *EmbyClient) GetPosterImage(itemID string) ([]byte, string, error) {
 // and requires the X-Emby-Token auth header alongside it.
 func (e *EmbyClient) UploadPosterImage(itemID string, imageData []byte, contentType string) error {
 	fullURL := e.URL + "/Items/" + itemID + "/Images/Primary"
-	return DoAPIRequestWithHeaders("POST", fullURL, imageData, map[string]string{
+	encoded := []byte(base64.StdEncoding.EncodeToString(imageData))
+	return DoAPIRequestWithHeaders("POST", fullURL, encoded, map[string]string{
 		"Content-Type": contentType,
 		"X-Emby-Token": e.APIKey,
 	})
