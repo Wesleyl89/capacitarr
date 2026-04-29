@@ -221,7 +221,8 @@ func composeBanner(original []byte, text string, topColor, bottomColor color.NRG
 
 	// ── Draw text with drop shadow ───────────────────────────────────────
 	textX := startX + iconSize + iconGap
-	textY := bannerTop + (bannerH+textHeight)/2
+	bannerMidY := bannerTop + bannerH/2
+	textY := bannerMidY + (metrics.Ascent - metrics.Descent).Ceil()/2
 
 	// Shadow: 1px offset, semi-transparent black
 	shadowOff := max(1, int(math.Round(fontSize*0.04)))
