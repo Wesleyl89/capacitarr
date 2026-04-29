@@ -187,7 +187,6 @@ func composeBanner(original []byte, text string, topColor, bottomColor color.NRG
 
 	metrics := face.Metrics()
 	textWidth := font.MeasureString(face, text).Ceil()
-	textHeight := (metrics.Ascent + metrics.Descent).Ceil()
 
 	// ── Layout: [icon gap text] centered in banner ───────────────────────
 	iconSize := int(math.Round(float64(bannerH) * iconSizeFrac))
