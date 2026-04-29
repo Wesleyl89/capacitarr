@@ -136,6 +136,7 @@ func composeBanner(original []byte, text string, topColor, bottomColor color.NRG
 		bannerH = 24
 	}
 	bannerTop := bounds.Min.Y
+	bannerMid := bannerTop + bannerH/2
 	bannerBottom := bannerTop + bannerH
 	padding := int(math.Round(float64(w) * bannerPaddingFrac))
 
@@ -187,6 +188,7 @@ func composeBanner(original []byte, text string, topColor, bottomColor color.NRG
 
 	metrics := face.Metrics()
 	textWidth := font.MeasureString(face, text).Ceil()
+	textHeight := (metrics.Ascent - metrics.Descent).Ceil()/2
 
 	// ── Layout: [icon gap text] centered in banner ───────────────────────
 	iconSize := int(math.Round(float64(bannerH) * iconSizeFrac))
@@ -220,8 +222,7 @@ func composeBanner(original []byte, text string, topColor, bottomColor color.NRG
 
 	// ── Draw text with drop shadow ───────────────────────────────────────
 	textX := startX + iconSize + iconGap
-	bannerMidY := bannerTop + bannerH/2
-	textY := bannerMidY + (metrics.Ascent - metrics.Descent).Ceil()/2
+	textY := bannerMid + textHeight
 
 	// Shadow: 1px offset, semi-transparent black
 	shadowOff := max(1, int(math.Round(fontSize*0.04)))
